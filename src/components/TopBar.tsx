@@ -40,13 +40,13 @@ export default function TopBar({ mode, onModeChange, sampleData }: Props) {
           ))}
         </nav>
 
-        <div className="hidden min-w-[110px] justify-end sm:flex">
+        <div className="hidden justify-end sm:flex">
           {sampleData && (
             <span
-              title="No backend configured. Set VITE_API_URL to use real data."
+              title="Illustrative fixtures only. VITE_USE_MOCK=true was explicitly enabled."
               className="rounded-[6px] border border-line bg-surface-2 px-2 py-1 font-mono text-xs text-ink-2"
             >
-              sample data
+              illustrative demo
             </span>
           )}
         </div>

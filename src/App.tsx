@@ -24,6 +24,7 @@ type Status =
 function initialFromUrl(): { mode: Mode; status: Status } {
   const q = new URLSearchParams(window.location.search);
   const mode: Mode = q.get("mode") === "contribute" ? "contribute" : "search";
+  if (!usingMockApi) return { mode, status: { kind: "idle" } };
   switch (q.get("state")) {
     case "results":
       return { mode, status: { kind: "done", result: SAMPLE_RESULT } };
@@ -48,6 +49,7 @@ export default function App() {
   const [status, setStatus] = useState<Status>(initial.status);
   const abortRef = useRef<AbortController | null>(null);
   const lastRequest = useRef<SearchRequest | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const run = useCallback(async (req: SearchRequest) => {
     abortRef.current?.abort();
@@ -77,7 +79,8 @@ export default function App() {
   const resultsRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (status.kind !== "done" || window.matchMedia("(min-width: 1024px)").matches) return;
-    resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    resultsRef.current?.scrollIntoView({ behavior: reducedMotion ? "instant" : "smooth", block: "start" });
   }, [status.kind]);
 
   const cancel = useCallback(() => {
@@ -90,9 +93,10 @@ export default function App() {
       <TopBar mode={mode} onModeChange={setMode} sampleData={usingMockApi} />
 
       <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        {usingMockApi && <p className="mb-6 rounded-control border border-line bg-surface-2 p-3 text-sm text-ink-2"><strong className="text-ink">Illustrative demo.</strong> Studies and findings are fictional. Searches and uploads do not contact a service or save data.</p>}
         {mode === "search" ? (
           <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(320px,380px)_1fr] lg:gap-14">
-            <div className="lg:sticky lg:top-24">
+            <div>
               <IdeaComposer busy={status.kind === "searching"} onSubmit={run} onCancel={cancel} />
             </div>
 
@@ -105,7 +109,7 @@ export default function App() {
                   onRetry={lastRequest.current ? () => run(lastRequest.current!) : undefined}
                 />
               )}
-              {status.kind === "done" && <ResultsView result={status.result} />}
+              {status.kind === "done" && <ResultsView key={status.result.queryId} result={status.result} />}
             </section>
           </div>
         ) : (

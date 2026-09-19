@@ -1,0 +1,19 @@
+{
+  "verified_at": "2026-09-19",
+  "source": "https://openalex.s3.amazonaws.com/data/parquet/works/updated_date=2016-06-24/part_0000.parquet",
+  "downloaded_bytes": 3628657,
+  "manifest": "https://openalex.s3.amazonaws.com/data/parquet/works/manifest.json",
+  "manifest_part_count_at_inspection": 2446,
+  "projected_schema": {
+    "id": "VARCHAR",
+    "title": "VARCHAR",
+    "abstract_inverted_index": "VARCHAR (JSON-encoded inverted index)",
+    "ids": "MAP(VARCHAR, VARCHAR)",
+    "topics": "STRUCT[]",
+    "type": "VARCHAR",
+    "publication_year": "INTEGER",
+    "referenced_works": "VARCHAR[]",
+    "is_retracted": "BOOLEAN"
+  },
+  "scope": "One actual 3.6 MB Parquet part inspected; not a claim of full-snapshot ingestion."
+}

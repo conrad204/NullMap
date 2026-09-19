@@ -7,8 +7,8 @@ export default function EmptyState() {
       <div>
         <h2 className="text-sm font-medium text-ink-2">What comes back</h2>
         <p className="mt-2 max-w-[58ch] leading-relaxed text-ink-2">
-          Every prior attempt we find is sorted into one of five outcomes. The count in each
-          bucket, plus an estimate of whether the idea is still worth your time, appears here.
+          Matching studies are grouped by the strength of their results. Counts cover the
+          indexed match set; source evidence and study-planning estimates appear below them.
         </p>
       </div>
 
@@ -31,8 +31,8 @@ export default function EmptyState() {
       </ul>
 
       <p className="max-w-[58ch] text-sm leading-relaxed text-ink-3">
-        Sources: OpenAlex, arXiv, PubMed, OSF preregistrations and ClinicalTrials.gov, weighted
-        toward low-citation work that a normal search buries.
+        Sources: OpenAlex literature and ClinicalTrials.gov registry records. Coverage depends
+        on the indexed corpus. Missing or unreported evidence does not establish a null effect.
       </p>
     </div>
   );

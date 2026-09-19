@@ -1,0 +1,22 @@
+[
+  {"name":"zero_effect", "analysis":{"paramValue":"0", "ciLowerLimit":"-0.1", "ciUpperLimit":"0.1"}, "expected":{"estimate":0.0,"ci_low":-0.1,"ci_high":0.1}},
+  {"name":"missing_not_zero", "analysis":{"paramValue":null,"ciLowerLimit":null,"ciUpperLimit":null}, "expected":{"estimate":null,"ci_low":null,"ci_high":null}},
+  {"name":"p_less_than", "analysis":{"pValue":"<0.001"}, "expected":{"p_value":0.001,"p_value_operator":"<"}},
+  {"name":"p_greater_equal", "analysis":{"pValue":"≥ 0.05"}, "expected":{"p_value":0.05,"p_value_operator":">="}},
+  {"name":"scientific_notation", "analysis":{"pValue":"1e-5","paramValue":"-2.5e-1"}, "expected":{"p_value":0.00001,"estimate":-0.25}},
+  {"name":"zero_p_is_preserved", "analysis":{"pValue":"0"}, "expected":{"p_value":0.0,"p_value_operator":"="}},
+  {"name":"invalid_p_rejected", "analysis":{"pValue":"1.2"}, "expected":{"p_value":null,"p_value_operator":null}},
+  {"name":"hazard_ratio", "analysis":{"paramType":"Hazard Ratio (HR)","paramValue":"0.96"}, "expected":{"effect_type":"HR","estimate":0.96}},
+  {"name":"odds_ratio", "analysis":{"paramType":"Odds Ratio"}, "expected":{"effect_type":"OR"}},
+  {"name":"relative_risk", "analysis":{"paramType":"Relative Risk"}, "expected":{"effect_type":"RR"}},
+  {"name":"standardized_difference", "analysis":{"paramType":"Standardized Mean Difference"}, "expected":{"effect_type":"SMD"}},
+  {"name":"unknown_effect_scale", "analysis":{"paramType":"Chi-Squared","paramValue":"3.1"}, "expected":{"effect_type":null,"estimate":3.1}},
+  {"name":"ninety_percent_ci", "analysis":{"ciPctValue":"90"}, "expected":{"ci_level":0.9}},
+  {"name":"one_sided_ci", "analysis":{"ciNumSides":"ONE_SIDED","ciUpperLimit":null}, "expected":{"ci_sides":"ONE_SIDED","ci_high":null}},
+  {"name":"no_confidence_level", "analysis":{"ciPctValue":null}, "expected":{"ci_level":null}},
+  {"name":"nonfinite_numbers", "analysis":{"paramValue":"NaN","ciLowerLimit":"-Inf","ciUpperLimit":"Inf"}, "expected":{"estimate":null,"ci_low":null,"ci_high":null}},
+  {"name":"zero_enrollment", "enrollment":{"count":0,"type":"ACTUAL"}, "no_denominators":true, "expected":{"n":0,"enrollment_actual":0,"enrollment_planned":null}},
+  {"name":"planned_enrollment", "enrollment":{"count":120,"type":"ESTIMATED"}, "no_denominators":true, "expected":{"n":null,"enrollment_actual":null,"enrollment_planned":120}},
+  {"name":"terminated_no_results", "status":{"overallStatus":"TERMINATED","whyStopped":"Recruitment shortfall"}, "no_results":true, "expected":{"has_results":false,"overall_status":"TERMINATED","why_stopped":"Recruitment shortfall","estimate":null}},
+  {"name":"month_date_precision", "status":{"primaryCompletionDateStruct":{"date":"2024-02"}}, "expected":{"primary_completion_date":"2024-02-29"}}
+]

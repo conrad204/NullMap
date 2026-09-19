@@ -1,0 +1,5722 @@
+{
+  "protocolSection": {
+    "identificationModule": {
+      "nctId": "NCT01169259",
+      "orgStudyIdInfo": {
+        "id": "2009P-001217"
+      },
+      "secondaryIdInfos": [
+        {
+          "id": "U01CA138962",
+          "type": "NIH",
+          "link": "https://reporter.nih.gov/quickSearch/U01CA138962"
+        },
+        {
+          "id": "R01CA138962",
+          "type": "NIH",
+          "link": "https://reporter.nih.gov/quickSearch/R01CA138962"
+        }
+      ],
+      "organization": {
+        "fullName": "Brigham and Women's Hospital",
+        "class": "OTHER"
+      },
+      "briefTitle": "Vitamin D and Omega-3 Trial (VITAL)",
+      "officialTitle": "Vitamin D and Omega-3 Trial (VITAL)",
+      "acronym": "VITAL"
+    },
+    "statusModule": {
+      "statusVerifiedDate": "2026-07",
+      "overallStatus": "ACTIVE_NOT_RECRUITING",
+      "expandedAccessInfo": {
+        "hasExpandedAccess": false
+      },
+      "startDateStruct": {
+        "date": "2010-07",
+        "type": "ACTUAL"
+      },
+      "primaryCompletionDateStruct": {
+        "date": "2018-11-10",
+        "type": "ACTUAL"
+      },
+      "completionDateStruct": {
+        "date": "2026-10",
+        "type": "ESTIMATED"
+      },
+      "studyFirstSubmitDate": "2010-01-13",
+      "studyFirstSubmitQcDate": "2010-07-22",
+      "studyFirstPostDateStruct": {
+        "date": "2010-07-26",
+        "type": "ESTIMATED"
+      },
+      "resultsFirstSubmitDate": "2019-11-12",
+      "resultsFirstSubmitQcDate": "2020-01-03",
+      "resultsFirstPostDateStruct": {
+        "date": "2020-01-06",
+        "type": "ACTUAL"
+      },
+      "lastUpdateSubmitDate": "2026-07-14",
+      "lastUpdatePostDateStruct": {
+        "date": "2026-07-30",
+        "type": "ACTUAL"
+      }
+    },
+    "sponsorCollaboratorsModule": {
+      "responsibleParty": {
+        "type": "PRINCIPAL_INVESTIGATOR",
+        "investigatorFullName": "JoAnn E. Manson, MD",
+        "investigatorTitle": "Principal Investigator",
+        "investigatorAffiliation": "Brigham and Women's Hospital"
+      },
+      "leadSponsor": {
+        "name": "Brigham and Women's Hospital",
+        "class": "OTHER"
+      },
+      "collaborators": [
+        {
+          "name": "National Cancer Institute (NCI)",
+          "class": "NIH"
+        },
+        {
+          "name": "National Heart, Lung, and Blood Institute (NHLBI)",
+          "class": "NIH"
+        },
+        {
+          "name": "Office of Dietary Supplements (ODS)",
+          "class": "NIH"
+        },
+        {
+          "name": "National Institute of Neurological Disorders and Stroke (NINDS)",
+          "class": "NIH"
+        },
+        {
+          "name": "National Center for Complementary and Integrative Health (NCCIH)",
+          "class": "NIH"
+        },
+        {
+          "name": "Pharmavite LLC",
+          "class": "INDUSTRY"
+        },
+        {
+          "name": "Pronova BioPharma",
+          "class": "INDUSTRY"
+        },
+        {
+          "name": "BASF",
+          "class": "INDUSTRY"
+        }
+      ]
+    },
+    "oversightModule": {
+      "oversightHasDmc": true,
+      "isFdaRegulatedDrug": true
+    },
+    "descriptionModule": {
+      "briefSummary": "The VITamin D and OmegA-3 TriaL (VITAL) is a randomized clinical trial in 25,871 U.S. men and women investigating whether taking daily dietary supplements of vitamin D3 (2000 IU) or omega-3 fatty acids (Omacor\u00ae fish oil, 1 gram) reduces the risk of developing cancer, heart disease, and stroke in people who do not have a prior history of these illnesses. The 5-year intervention phase (study pill-taking, median 5.3 years) has ended; post-intervention observational follow-up of study participants is ongoing.",
+      "detailedDescription": "The VITamin D and OmegA-3 TriaL (VITAL) is a randomized clinical trial of vitamin D (in the form of vitamin D3 \\[cholecalciferol\\]) and marine omega-3 fatty acid (eicosapentaenoic acid \\[EPA\\] + docosahexaenoic acid \\[DHA\\]) supplements in the primary prevention of cancer and cardiovascular disease (CVD). Existing data from laboratory studies, epidemiologic research, small primary prevention trials, and/or large secondary prevention trials strongly suggest that these nutritional agents may reduce risk for cancer or CVD, but large primary prevention trials with adequate dosing in general populations are lacking.\n\nVITAL tested the independent effects of vitamin D and omega-3 fatty acid supplementation on risk for developing cancer and CVD (primary, secondary, and other outcomes are specified in the Outcome Measures section). VITAL also explored (a) whether vitamin D and omega-3 fatty acid supplements exhibit synergistic or additive effects on cancer and CVD risk and (b) whether the effect of each supplement on cancer and CVD risk varies by baseline blood levels or intake of vitamin D and EPA+DHA, race/ethnicity, and body mass index (for vitamin D), as well as age, sex, sunlight exposure, calcium intake, and baseline risk factors for cancer and CVD.\n\nEligible participants were assigned by chance (like a coin toss) to one of four groups: (1) daily vitamin D and omega-3; (2) daily vitamin D and omega-3 placebo; (3) daily vitamin D placebo and omega-3; or (4) daily vitamin D placebo and omega-3 placebo. Participants had an equal chance of being assigned to any of these four groups and a 3 out of 4 chance of getting at least one active agent.\n\nParticipants in all groups took two pills each day -- one softgel that contained either vitamin D or vitamin D placebo and one capsule that contained either omega-3 or omega-3 placebo. Participants received their study pills in convenient calendar packages via U.S. mail.\n\nParticipants fill out a short (15-20 minute) questionnaire each year. The questionnaire asks about health; lifestyle habits such as physical exercise, diet, and smoking; use of medications and dietary supplements; family history of illness, and new medical diagnoses. We request consent for medical record review to confirm endpoints. Occasionally, participants may receive a phone call from study staff to collect information or to clarify responses on the questionnaire.\n\nAt baseline, 16,954 VITAL participants provided an optional blood sample. Approximately 6,000 of these participants provided a follow-up blood sample during years 1-5 of the trial.\n\nAt baseline, year 2, and year 4 of the trial, a subcohort of 1,054 VITAL participants living within driving distance of Boston, Massachusetts received detailed in-clinic health assessments at the Clinical and Translational Science Center (CTSC) of Brigham and Women's Hospital. During CTSC visits, participants had a clinical exam, including measurement of height, weight, other anthropometrics, blood pressure, and physical performance. They also provided fasting blood and urine samples, and underwent 2-hour oral glucose tolerance testing, lung function testing (spirometry), electrocardiograms, bone mineral density testing, 2D-echocardiography, and assessments of thinking and mood.\n\nVITAL is supported by funding from the National Cancer Institute, National Heart, Lung and Blood Institute, Office of Dietary Supplements, National Institute of Neurological Disorders and Stroke, and the National Center for Complementary and Integrative Health. Pharmavite LLC of Northridge, California (vitamin D) and Pronova BioPharma (BASF) of Norway (Omacor\u00ae fish oil) donated the study agents, matching placebos, and packaging in the form of calendar packs."
+    },
+    "conditionsModule": {
+      "conditions": [
+        "Cancer",
+        "Cardiovascular Disease"
+      ],
+      "keywords": [
+        "vitamin D3",
+        "omega-3 fatty acids",
+        "fish oil",
+        "cardiovascular disease",
+        "cancer",
+        "primary prevention"
+      ]
+    },
+    "designModule": {
+      "studyType": "INTERVENTIONAL",
+      "phases": [
+        "PHASE3"
+      ],
+      "designInfo": {
+        "allocation": "RANDOMIZED",
+        "interventionModel": "FACTORIAL",
+        "primaryPurpose": "PREVENTION",
+        "maskingInfo": {
+          "masking": "TRIPLE",
+          "whoMasked": [
+            "PARTICIPANT",
+            "INVESTIGATOR",
+            "OUTCOMES_ASSESSOR"
+          ]
+        }
+      },
+      "enrollmentInfo": {
+        "count": 25871,
+        "type": "ACTUAL"
+      }
+    },
+    "armsInterventionsModule": {
+      "armGroups": [
+        {
+          "label": "Vitamin D + fish oil",
+          "type": "ACTIVE_COMPARATOR",
+          "interventionNames": [
+            "Dietary Supplement: vitamin D3",
+            "Drug: omega-3 fatty acids (fish oil)"
+          ]
+        },
+        {
+          "label": "Vitamin D + fish oil placebo",
+          "type": "ACTIVE_COMPARATOR",
+          "interventionNames": [
+            "Dietary Supplement: vitamin D3",
+            "Dietary Supplement: Fish oil placebo"
+          ]
+        },
+        {
+          "label": "Vitamin D placebo + fish oil",
+          "type": "ACTIVE_COMPARATOR",
+          "interventionNames": [
+            "Drug: omega-3 fatty acids (fish oil)",
+            "Dietary Supplement: Vitamin D3 placebo"
+          ]
+        },
+        {
+          "label": "Vitamin D placebo + fish oil placebo",
+          "type": "PLACEBO_COMPARATOR",
+          "interventionNames": [
+            "Dietary Supplement: Vitamin D3 placebo",
+            "Dietary Supplement: Fish oil placebo"
+          ]
+        }
+      ],
+      "interventions": [
+        {
+          "type": "DIETARY_SUPPLEMENT",
+          "name": "vitamin D3",
+          "description": "Vitamin D3 (cholecalciferol), 2000 IU per day.",
+          "armGroupLabels": [
+            "Vitamin D + fish oil",
+            "Vitamin D + fish oil placebo"
+          ],
+          "otherNames": [
+            "cholecalciferol"
+          ]
+        },
+        {
+          "type": "DRUG",
+          "name": "omega-3 fatty acids (fish oil)",
+          "description": "Omacor, one 1-gram capsule per day. Each capsule of Omacor contains 840 milligrams of marine omega-3 fatty acids (465 mg of eicosapentaenoic acid \\[EPA\\] and 375 mg of docosahexaenoic acid \\[DHA\\]).",
+          "armGroupLabels": [
+            "Vitamin D + fish oil",
+            "Vitamin D placebo + fish oil"
+          ]
+        },
+        {
+          "type": "DIETARY_SUPPLEMENT",
+          "name": "Vitamin D3 placebo",
+          "description": "Vitamin D placebo",
+          "armGroupLabels": [
+            "Vitamin D placebo + fish oil",
+            "Vitamin D placebo + fish oil placebo"
+          ]
+        },
+        {
+          "type": "DIETARY_SUPPLEMENT",
+          "name": "Fish oil placebo",
+          "description": "Fish oil placebo",
+          "armGroupLabels": [
+            "Vitamin D + fish oil placebo",
+            "Vitamin D placebo + fish oil placebo"
+          ]
+        }
+      ]
+    },
+    "outcomesModule": {
+      "primaryOutcomes": [
+        {
+          "measure": "Number of Participants With Invasive Cancer of Any Type",
+          "description": "Number of participants with invasive cancer of any type",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With a Major Cardiovascular Event",
+          "description": "Major cardiovascular event = a composite endpoint of myocardial infarction, stroke, and death from cardiovascular causes",
+          "timeFrame": "5 years"
+        }
+      ],
+      "secondaryOutcomes": [
+        {
+          "measure": "Number of Participants Who Died From Invasive Cancer of Any Type",
+          "description": "Number of participants who died from invasive cancer of any type",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Female Participants With Breast Cancer",
+          "description": "Number of female participants with breast cancer",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Male Participants With Prostate Cancer",
+          "description": "Number of male participants with prostate cancer",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Colorectal Cancer",
+          "description": "Number of participants with colorectal cancer",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Cardiovascular Event in Expanded Composite Cardiovascular Endpoint",
+          "description": "Expanded composite cardiovascular endpoint = a composite endpoint of myocardial infarction, stroke, death from cardiovascular causes, and coronary revascularization (coronary artery bypass grafting or percutaneous coronary intervention)",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Myocardial Infarction",
+          "description": "Number of participants with myocardial infarction",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Stroke",
+          "description": "Number of participants with stroke",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants Who Died From Cardiovascular Causes",
+          "description": "Number of participants who died from cardiovascular causes",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants Who Died From Any Cause",
+          "description": "Number of participants who died from any cause",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Invasive Cancer of Any Type, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants with invasive cancer of any type, excluding first 2 years of follow-up",
+          "timeFrame": "5 years, excluding first 2 years of follow-up"
+        },
+        {
+          "measure": "Number of Participants With a Major Cardiovascular Event, Excluding First 2 Years of Follow-up",
+          "description": "Major cardiovascular event = a composite endpoint of myocardial infarction, stroke, and death from cardiovascular causes; excluding first 2 years of follow-up",
+          "timeFrame": "5 years, excluding first 2 years of follow-up"
+        }
+      ],
+      "otherOutcomes": [
+        {
+          "measure": "Number of Participants Who Died From Invasive Cancer of Any Type, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants who died from invasive cancer of any type, excluding first 2 years of follow-up",
+          "timeFrame": "5 years, excluding first 2 years of follow-up"
+        },
+        {
+          "measure": "Number of Participants Who Died From Any Cause, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants who died from any cause, excluding first 2 years of follow-up",
+          "timeFrame": "5 years, excluding first 2 years of follow-up"
+        },
+        {
+          "measure": "Number of Participants With Percutaneous Coronary Intervention",
+          "description": "Number of participants with percutaneous coronary intervention",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Coronary-artery Bypass Grafting",
+          "description": "Number of participants with coronary-artery bypass grafting",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Total Coronary Heart Disease",
+          "description": "Total coronary heart disease = a composite of myocardial infarction, coronary revascularization (percutaneous coronary intervention or coronary-artery bypass grafting), and death from coronary heart disease",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Ischemic Stroke",
+          "description": "Number of participants with ischemic stroke",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Hemorrhagic Stroke",
+          "description": "Number of participants with hemorrhagic stroke",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants Who Died From Myocardial Infarction",
+          "description": "Number of participants who died from myocardial infarction",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants Who Died From Coronary Heart Disease",
+          "description": "Number of participants who died from coronary heart disease",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants Who Died From Stroke",
+          "description": "Number of participants who died from stroke",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Myocardial Infarction, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants with myocardial infarction, excluding first 2 years of follow-up",
+          "timeFrame": "5 years, excluding first 2 years of follow-up"
+        },
+        {
+          "measure": "Number of Participants With Conventional Colorectal Adenoma",
+          "description": "tubular, tubulovillous, villous adenoma; adenoma w/high-grade dysplasia",
+          "timeFrame": "5 years"
+        },
+        {
+          "measure": "Number of Participants With Serrated Colorectal Polyps",
+          "description": "hyperplastic polyp, traditional serrated adenoma, sessile serrated polyp",
+          "timeFrame": "5 years"
+        }
+      ]
+    },
+    "eligibilityModule": {
+      "eligibilityCriteria": "To be eligible for the study, respondents had to, at study entry,:\n\n1. be men aged 50 or older or women aged 55 or older;\n2. have no history of cancer (except non-melanoma skin cancer), heart attack, stroke, transient ischemic attack, angina pectoris, coronary-artery bypass grafting, or percutaneous coronary intervention;\n3. have none of the following safety exclusions: history of renal failure or dialysis, hypercalcemia, hypo- or hyperparathyroidism, severe liver disease (cirrhosis), or sarcoidosis or other granulomatous diseases such as active chronic tuberculosis or granulomatosis with polyangiitis (Wegener's);\n4. have no allergy to fish or soy;\n5. have no other serious illness that would preclude participation;\n6. be consuming no more than 800 IU of vitamin D from all supplemental sources combined (individual vitamin D supplements, calcium+vitamin D supplements, medications with vitamin D \\[e.g., Fosamax Plus D\\], and multivitamins), or, if taking, willing to decrease or forego such use during the trial;\n7. be consuming no more than 1200 mg/d of calcium from all supplemental sources combined, or, if taking, willing to decrease or forego such use during the trial;\n8. not be taking fish oil supplements, or, if taking, willing to forego their use during the trial",
+      "healthyVolunteers": true,
+      "sex": "ALL",
+      "minimumAge": "50 Years",
+      "stdAges": [
+        "ADULT",
+        "OLDER_ADULT"
+      ]
+    },
+    "contactsLocationsModule": {
+      "overallOfficials": [
+        {
+          "name": "JoAnn E. Manson, MD, DrPH",
+          "affiliation": "Brigham and Women's Hospital",
+          "role": "PRINCIPAL_INVESTIGATOR"
+        },
+        {
+          "name": "Julie E. Buring, ScD",
+          "affiliation": "Brigham and Women's Hospital",
+          "role": "PRINCIPAL_INVESTIGATOR"
+        }
+      ],
+      "locations": [
+        {
+          "facility": "Brigham and Women's Hospital",
+          "city": "Boston",
+          "state": "Massachusetts",
+          "zip": "02215",
+          "country": "United States",
+          "geoPoint": {
+            "lat": 42.35843,
+            "lon": -71.05977
+          }
+        }
+      ]
+    },
+    "referencesModule": {
+      "references": [
+        {
+          "pmid": "26767629",
+          "type": "BACKGROUND",
+          "citation": "Bassuk SS, Manson JE, Lee IM, Cook NR, Christen WG, Bubes VY, Gordon DS, Copeland T, Friedenberg G, D'Agostino DM, Ridge CY, MacFadyen JG, Kalan K, Buring JE. Baseline characteristics of participants in the VITamin D and OmegA-3 TriaL (VITAL). Contemp Clin Trials. 2016 Mar;47:235-43. doi: 10.1016/j.cct.2015.12.022. Epub 2016 Jan 6."
+        },
+        {
+          "pmid": "25864623",
+          "type": "BACKGROUND",
+          "citation": "Pradhan AD, Manson JE. Update on the Vitamin D and OmegA-3 trial (VITAL). J Steroid Biochem Mol Biol. 2016 Jan;155(Pt B):252-6. doi: 10.1016/j.jsbmb.2015.04.006. Epub 2015 Apr 9."
+        },
+        {
+          "pmid": "21986389",
+          "type": "BACKGROUND",
+          "citation": "Manson JE, Bassuk SS, Lee IM, Cook NR, Albert MA, Gordon D, Zaharris E, Macfadyen JG, Danielson E, Lin J, Zhang SM, Buring JE. The VITamin D and OmegA-3 TriaL (VITAL): rationale and design of a large randomized controlled trial of vitamin D and marine omega-3 fatty acid supplements for the primary prevention of cancer and cardiovascular disease. Contemp Clin Trials. 2012 Jan;33(1):159-71. doi: 10.1016/j.cct.2011.09.009. Epub 2011 Oct 2."
+        },
+        {
+          "pmid": "30415629",
+          "type": "BACKGROUND",
+          "citation": "Manson JE, Cook NR, Lee IM, Christen W, Bassuk SS, Mora S, Gibson H, Gordon D, Copeland T, D'Agostino D, Friedenberg G, Ridge C, Bubes V, Giovannucci EL, Willett WC, Buring JE; VITAL Research Group. Vitamin D Supplements and Prevention of Cancer and Cardiovascular Disease. N Engl J Med. 2019 Jan 3;380(1):33-44. doi: 10.1056/NEJMoa1809944. Epub 2018 Nov 10."
+        },
+        {
+          "pmid": "30415637",
+          "type": "BACKGROUND",
+          "citation": "Manson JE, Cook NR, Lee IM, Christen W, Bassuk SS, Mora S, Gibson H, Albert CM, Gordon D, Copeland T, D'Agostino D, Friedenberg G, Ridge C, Bubes V, Giovannucci EL, Willett WC, Buring JE; VITAL Research Group. Marine n-3 Fatty Acids and Prevention of Cardiovascular Disease and Cancer. N Engl J Med. 2019 Jan 3;380(1):23-32. doi: 10.1056/NEJMoa1811403. Epub 2018 Nov 10."
+        },
+        {
+          "pmid": "31750855",
+          "type": "BACKGROUND",
+          "citation": "Song M, Lee IM, Manson JE, Buring JE, Dushkes R, Gordon D, Walter J, Wu K, Chan AT, Ogino S, Fuchs CS, Meyerhardt JA, Giovannucci EL; VITAL Research Group. Effect of Supplementation With Marine omega-3 Fatty Acid on Risk of Colorectal Adenomas and Serrated Polyps in the US General Population: A Prespecified Ancillary Study of a Randomized Clinical Trial. JAMA Oncol. 2020 Jan 1;6(1):108-115. doi: 10.1001/jamaoncol.2019.4587."
+        },
+        {
+          "pmid": "32062040",
+          "type": "BACKGROUND",
+          "citation": "Song M, Lee IM, Manson JE, Buring JE, Dushkes R, Gordon D, Walter J, Wu K, Chan AT, Ogino S, Fuchs CS, Meyerhardt JA, Giovannucci EL. No Association Between Vitamin D Supplementation and Risk of Colorectal Adenomas or Serrated Polyps in a Randomized Trial. Clin Gastroenterol Hepatol. 2021 Jan;19(1):128-135.e6. doi: 10.1016/j.cgh.2020.02.013. Epub 2020 Feb 13."
+        },
+        {
+          "pmid": "42630947",
+          "type": "DERIVED",
+          "citation": "Cho HL, Li C, Manson JE, Cook NR, Lee IM, Buring JE, Berliner N. Effect of vitamin D and omega-3 fatty acid supplementation on anemia incidence among older adults: the VITAL trial. Blood Red Cells Iron. 2025 Dec;1(3):100032. doi: 10.1016/j.brci.2025.100032. Epub 2025 Dec 9."
+        },
+        {
+          "pmid": "40032221",
+          "type": "DERIVED",
+          "citation": "Hamaya R, Cook NR, Sesso HD, Buring JE, Manson JE. A Bayesian analysis of the VITAL trial: effects of omega-3 fatty acid supplementation on cardiovascular events. Am J Clin Nutr. 2025 May;121(5):1046-1053. doi: 10.1016/j.ajcnut.2025.02.028. Epub 2025 Mar 1."
+        },
+        {
+          "pmid": "39618688",
+          "type": "DERIVED",
+          "citation": "Digvijaya, Mittal S, Mittal P, Singh R, Gupta S, Singh T, Khan R, Alzobaidi N, Alhalmi A. Vitamin D Fortification: A Promising Approach to Overcome Drug Resistance and Tolerance in Therapeutic Interventions. Scientifica (Cairo). 2024 Nov 22;2024:9978076. doi: 10.1155/2024/9978076. eCollection 2024."
+        },
+        {
+          "pmid": "39488682",
+          "type": "DERIVED",
+          "citation": "Qian F, Guo Y, Li C, Liu Y, Luttmann-Gibson H, Gomelskaya N, Demler OV, Cook NR, Lee IM, Buring JE, Larsen J, Boring J, McPhaul MJ, Manson JE, Pradhan AD, Mora S. Biomarkers of glucose-insulin homeostasis and incident type 2 diabetes and cardiovascular disease: results from the Vitamin D and Omega-3 trial. Cardiovasc Diabetol. 2024 Nov 2;23(1):393. doi: 10.1186/s12933-024-02470-1."
+        },
+        {
+          "pmid": "38272846",
+          "type": "DERIVED",
+          "citation": "Costenbader KH, Cook NR, Lee IM, Hahn J, Walter J, Bubes V, Kotler G, Yang N, Friedman S, Alexander EK, Manson JE. Vitamin D and Marine n-3 Fatty Acids for Autoimmune Disease Prevention: Outcomes Two Years After Completion of a Double-Blind, Placebo-Controlled Trial. Arthritis Rheumatol. 2024 Jun;76(6):973-983. doi: 10.1002/art.42811. Epub 2024 Feb 20."
+        },
+        {
+          "pmid": "38113446",
+          "type": "DERIVED",
+          "citation": "Camargo CA Jr, Schaumberg DA, Friedenberg G, Dushkes R, Glynn RJ, Gold DR, Mora S, Lee IM, Buring JE, Manson JE. Effect of Daily Vitamin D Supplementation on Risk of Upper Respiratory Infection in Older Adults: A Randomized Controlled Trial. Clin Infect Dis. 2024 May 15;78(5):1162-1169. doi: 10.1093/cid/ciad770."
+        },
+        {
+          "pmid": "37952113",
+          "type": "DERIVED",
+          "citation": "Vyas CM, Kang JH, Mischoulon D, Cook NR, Reynolds Iii CF, Chang G, Mora S, De Vivo I, Manson JE, Okereke OI. Apolipoprotein E and Its Association With Cognitive Change and Modification of Treatment Effects of Vitamin D3 and Omega-3s on Cognitive Change: Results From the In-Clinic Subset of a Randomized Clinical Trial. J Gerontol A Biol Sci Med Sci. 2024 Mar 1;79(3):glad260. doi: 10.1093/gerona/glad260."
+        },
+        {
+          "pmid": "37878483",
+          "type": "DERIVED",
+          "citation": "Soens MA, Sesso HD, Manson JE, Fields KG, Buring JE, Lee IM, Cook NR, Kim E, Bubes V, Dushkes R, Serhan CN, Rathmell JP. The effect of vitamin D and omega-3 fatty acid supplementation on pain prevalence and severity in older adults: a large-scale ancillary study of the VITamin D and OmegA-3 triaL (VITAL). Pain. 2024 Mar 1;165(3):635-643. doi: 10.1097/j.pain.0000000000003044. Epub 2023 Oct 25."
+        },
+        {
+          "pmid": "37454148",
+          "type": "DERIVED",
+          "citation": "Tikkanen JT, Soliman EZ, Pester J, Danik JS, Gomelskya N, Copeland T, Lee IM, Buring JE, Manson JE, Cook NR, Albert CM. A randomized clinical trial of omega-3 fatty acid and vitamin D supplementation on electrocardiographic risk profiles. Sci Rep. 2023 Jul 15;13(1):11454. doi: 10.1038/s41598-023-38344-x."
+        },
+        {
+          "pmid": "37267732",
+          "type": "DERIVED",
+          "citation": "Vyas CM, Mischoulon D, Chang G, Reynolds CF 3rd, Cook NR, Weinberg A, Copeland T, Bubes V, Bradwin G, Lee IM, Buring JE, Mora S, Rifai N, Manson JE, Okereke OI. Relation of serum BDNF to major depression and exploration of mechanistic roles of serum BDNF in a study of vitamin D3 and omega-3 supplements for late-life depression prevention. J Psychiatr Res. 2023 Jul;163:357-364. doi: 10.1016/j.jpsychires.2023.05.069. Epub 2023 May 26."
+        },
+        {
+          "pmid": "37212116",
+          "type": "DERIVED",
+          "citation": "Vyas CM, Sadreyev RI, Gatchel JR, Kang JH, Reynolds CF, Mischoulon D, Chang G, Hazra A, Manson JE, Blacker D, De Vivo I, Okereke OI. Pilot Study of Second-Generation DNA Methylation Epigenetic Markers in Relation to Cognitive and Neuropsychiatric Symptoms in Older Adults. J Alzheimers Dis. 2023;93(4):1563-1575. doi: 10.3233/JAD-230093."
+        },
+        {
+          "pmid": "36416841",
+          "type": "DERIVED",
+          "citation": "Hlatky MA, Gonzalez PE, Manson JE, Buring JE, Lee IM, Cook NR, Mora S, Bubes V, Stone NJ. Statin-Associated Muscle Symptoms Among New Statin Users Randomly Assigned to Vitamin D or Placebo. JAMA Cardiol. 2023 Jan 1;8(1):74-80. doi: 10.1001/jamacardio.2022.4250."
+        },
+        {
+          "pmid": "36378553",
+          "type": "DERIVED",
+          "citation": "Bassuk SS, Manson JE; VITAL Research Group. Marine omega-3 fatty acid supplementation and prevention of cardiovascular disease: update on the randomized trial evidence. Cardiovasc Res. 2023 Jun 13;119(6):1297-1309. doi: 10.1093/cvr/cvac172."
+        },
+        {
+          "pmid": "36285795",
+          "type": "DERIVED",
+          "citation": "Chandra A, Picard MH, Huang S, Gupta DK, Agusala K, Buring JE, Lee IM, Cook NR, Manson JE, Thadhani RI, Wang TJ. Impact of Vitamin D3 Versus Placebo on Cardiac Structure and Function: A Randomized Clinical Trial. J Am Heart Assoc. 2022 Nov;11(21):e025008. doi: 10.1161/JAHA.121.025008. Epub 2022 Oct 26."
+        },
+        {
+          "pmid": "36098968",
+          "type": "DERIVED",
+          "citation": "Orkaby AR, Dushkes R, Ward R, Djousse L, Buring JE, Lee IM, Cook NR, LeBoff MS, Okereke OI, Copeland T, Manson JE. Effect of Vitamin D3 and Omega-3 Fatty Acid Supplementation on Risk of Frailty: An Ancillary Study of a Randomized Clinical Trial. JAMA Netw Open. 2022 Sep 1;5(9):e2231206. doi: 10.1001/jamanetworkopen.2022.31206."
+        },
+        {
+          "pmid": "35361440",
+          "type": "DERIVED",
+          "citation": "Djousse L, Cook NR, Kim E, Walter J, Al-Ramady OT, Luttmann-Gibson H, Albert CM, Mora S, Buring JE, Gaziano JM, Manson JE. Diabetes Mellitus, Race, and Effects of Omega-3 Fatty Acids on Incidence of Heart Failure Hospitalization. JACC Heart Fail. 2022 Apr;10(4):227-234. doi: 10.1016/j.jchf.2021.12.006. Epub 2022 Mar 9."
+        },
+        {
+          "pmid": "35082139",
+          "type": "DERIVED",
+          "citation": "Hahn J, Cook NR, Alexander EK, Friedman S, Walter J, Bubes V, Kotler G, Lee IM, Manson JE, Costenbader KH. Vitamin D and marine omega 3 fatty acid supplementation and incident autoimmune disease: VITAL randomized controlled trial. BMJ. 2022 Jan 26;376:e066452. doi: 10.1136/bmj-2021-066452."
+        },
+        {
+          "pmid": "34932079",
+          "type": "DERIVED",
+          "citation": "Okereke OI, Vyas CM, Mischoulon D, Chang G, Cook NR, Weinberg A, Bubes V, Copeland T, Friedenberg G, Lee IM, Buring JE, Reynolds CF 3rd, Manson JE. Effect of Long-term Supplementation With Marine Omega-3 Fatty Acids vs Placebo on Risk of Depression or Clinically Relevant Depressive Symptoms and on Change in Mood Scores: A Randomized Clinical Trial. JAMA. 2021 Dec 21;326(23):2385-2394. doi: 10.1001/jama.2021.21187."
+        },
+        {
+          "pmid": "34853363",
+          "type": "DERIVED",
+          "citation": "Kang JH, Vyas CM, Okereke OI, Ogata S, Albert M, Lee IM, D'Agostino D, Buring JE, Cook NR, Grodstein F, Manson JE. Effect of vitamin D on cognitive decline: results from two ancillary studies of the VITAL randomized trial. Sci Rep. 2021 Dec 1;11(1):23253. doi: 10.1038/s41598-021-02485-8."
+        },
+        {
+          "pmid": "34678177",
+          "type": "DERIVED",
+          "citation": "Markland AD, Vaughan C, Huang A, Kim E, Bubes VY, Tangpricha V, Buring J, Lee IM, Cook N, Manson JE, Grodstein F. Effect of vitamin D supplementation on urinary incontinence in older women: ancillary findings from a randomized trial. Am J Obstet Gynecol. 2022 Apr;226(4):535.e1-535.e12. doi: 10.1016/j.ajog.2021.10.017. Epub 2021 Oct 19."
+        },
+        {
+          "pmid": "34543425",
+          "type": "DERIVED",
+          "citation": "Best CM, Zelnick LR, Thummel KE, Hsu S, Limonte C, Thadhani R, Sesso HD, Manson JE, Buring JE, Mora S, Lee IM, Cook NR, Friedenberg G, Luttmann-Gibson H, de Boer IH, Hoofnagle AN. Serum Vitamin D: Correlates of Baseline Concentration and Response to Supplementation in VITAL-DKD. J Clin Endocrinol Metab. 2022 Jan 18;107(2):525-537. doi: 10.1210/clinem/dgab693."
+        },
+        {
+          "pmid": "34366734",
+          "type": "DERIVED",
+          "citation": "Bassuk SS, Chandler PD, Buring JE, Manson JE; VITAL Research Group. The VITamin D and OmegA-3 TriaL (VITAL): Do Results Differ by Sex or Race/Ethnicity? Am J Lifestyle Med. 2020 Dec 24;15(4):372-391. doi: 10.1177/1559827620972035. eCollection 2021 Jul-Aug."
+        },
+        {
+          "pmid": "33724323",
+          "type": "DERIVED",
+          "citation": "Albert CM, Cook NR, Pester J, Moorthy MV, Ridge C, Danik JS, Gencer B, Siddiqi HK, Ng C, Gibson H, Mora S, Buring JE, Manson JE. Effect of Marine Omega-3 Fatty Acid and Vitamin D Supplementation on Incident Atrial Fibrillation: A Randomized Clinical Trial. JAMA. 2021 Mar 16;325(11):1061-1073. doi: 10.1001/jama.2021.1489."
+        },
+        {
+          "pmid": "33513226",
+          "type": "DERIVED",
+          "citation": "Chou SH, Murata EM, Yu C, Danik J, Kotler G, Cook NR, Bubes V, Mora S, Chandler PD, Tobias DK, Copeland T, Buring JE, Manson JE, LeBoff MS. Effects of Vitamin D3 Supplementation on Body Composition in the VITamin D and OmegA-3 TriaL (VITAL). J Clin Endocrinol Metab. 2021 Apr 23;106(5):1377-1388. doi: 10.1210/clinem/dgaa981."
+        },
+        {
+          "pmid": "33206192",
+          "type": "DERIVED",
+          "citation": "Chandler PD, Chen WY, Ajala ON, Hazra A, Cook N, Bubes V, Lee IM, Giovannucci EL, Willett W, Buring JE, Manson JE; VITAL Research Group. Effect of Vitamin D3 Supplements on Development of Advanced Cancer: A Secondary Analysis of the VITAL Randomized Clinical Trial. JAMA Netw Open. 2020 Nov 2;3(11):e2025850. doi: 10.1001/jamanetworkopen.2020.25850."
+        },
+        {
+          "pmid": "32749491",
+          "type": "DERIVED",
+          "citation": "Okereke OI, Reynolds CF 3rd, Mischoulon D, Chang G, Vyas CM, Cook NR, Weinberg A, Bubes V, Copeland T, Friedenberg G, Lee IM, Buring JE, Manson JE. Effect of Long-term Vitamin D3 Supplementation vs Placebo on Risk of Depression or Clinically Relevant Depressive Symptoms and on Change in Mood Scores: A Randomized Clinical Trial. JAMA. 2020 Aug 4;324(5):471-480. doi: 10.1001/jama.2020.10224."
+        },
+        {
+          "pmid": "32205068",
+          "type": "DERIVED",
+          "citation": "Farukhi ZM, Demler OV, Caulfield MP, Kulkarni K, Wohlgemuth J, Cobble M, Luttmann-Gibson H, Li C, Nelson JR, Cook NR, Buring JE, Krauss RM, Manson JE, Mora S. Comparison of nonfasting and fasting lipoprotein subfractions and size in 15,397 apparently healthy individuals: An analysis from the VITamin D and OmegA-3 TriaL. J Clin Lipidol. 2020 Mar-Apr;14(2):241-251. doi: 10.1016/j.jacl.2020.02.005. Epub 2020 Feb 21."
+        },
+        {
+          "pmid": "31923341",
+          "type": "DERIVED",
+          "citation": "LeBoff MS, Chou SH, Murata EM, Donlon CM, Cook NR, Mora S, Lee IM, Kotler G, Bubes V, Buring JE, Manson JE. Effects of Supplemental Vitamin D on Bone Health Outcomes in Women and Men in the VITamin D and OmegA-3 TriaL (VITAL). J Bone Miner Res. 2020 May;35(5):883-893. doi: 10.1002/jbmr.3958. Epub 2020 Jan 30."
+        },
+        {
+          "pmid": "31895658",
+          "type": "DERIVED",
+          "citation": "Manson JE, Bassuk SS, Cook NR, Lee IM, Mora S, Albert CM, Buring JE; VITAL Research Group. Vitamin D, Marine n-3 Fatty Acids, and Primary Prevention of Cardiovascular Disease Current Evidence. Circ Res. 2020 Jan 3;126(1):112-128. doi: 10.1161/CIRCRESAHA.119.314541. Epub 2020 Jan 2."
+        },
+        {
+          "pmid": "31733345",
+          "type": "DERIVED",
+          "citation": "Manson JE, Bassuk SS, Buring JE; VITAL Research Group. Principal results of the VITamin D and OmegA-3 TriaL (VITAL) and updated meta-analyses of relevant vitamin D trials. J Steroid Biochem Mol Biol. 2020 Apr;198:105522. doi: 10.1016/j.jsbmb.2019.105522. Epub 2019 Nov 13."
+        },
+        {
+          "pmid": "31699704",
+          "type": "DERIVED",
+          "citation": "Costenbader KH, MacFarlane LA, Lee IM, Buring JE, Mora S, Bubes V, Kotler G, Camargo CA Jr, Manson JE, Cook NR. Effects of One Year of Vitamin D and Marine Omega-3 Fatty Acid Supplementation on Biomarkers of Systemic Inflammation in Older US Adults. Clin Chem. 2019 Dec;65(12):1508-1521. doi: 10.1373/clinchem.2019.306902. Epub 2019 Nov 7."
+        },
+        {
+          "pmid": "31669447",
+          "type": "DERIVED",
+          "citation": "Luttmann-Gibson H, Mora S, Camargo CA, Cook NR, Demler OV, Ghoshal A, Wohlgemuth J, Kulkarni K, Larsen J, Prentice J, Cobble M, Bubes V, Li C, Friedenberg G, Lee IM, Buring JE, Manson JE. Serum 25-hydroxyvitamin D in the VITamin D and OmegA-3 TriaL (VITAL): Clinical and demographic characteristics associated with baseline and change with randomized vitamin D treatment. Contemp Clin Trials. 2019 Dec;87:105854. doi: 10.1016/j.cct.2019.105854. Epub 2019 Oct 24."
+        },
+        {
+          "pmid": "29526608",
+          "type": "DERIVED",
+          "citation": "Okereke OI, Reynolds CF 3rd, Mischoulon D, Chang G, Cook NR, Copeland T, Friedenberg G, Buring JE, Manson JE. The VITamin D and OmegA-3 TriaL-Depression Endpoint Prevention (VITAL-DEP): Rationale and design of a large-scale ancillary study evaluating vitamin D and marine omega-3 fatty acid supplements for prevention of late-life depression. Contemp Clin Trials. 2018 May;68:133-145. doi: 10.1016/j.cct.2018.02.017. Epub 2018 Mar 8."
+        }
+      ],
+      "seeAlsoLinks": [
+        {
+          "label": "VITAL study website",
+          "url": "http://www.vitalstudy.org"
+        }
+      ]
+    },
+    "ipdSharingStatementModule": {
+      "ipdSharing": "YES",
+      "description": "Researchers who are interested in collaborating on research that uses VITAL data should visit the \"For VITAL Investigators\" section of the VITAL website, www.vitalstudy.org.",
+      "url": "http://www.vitalstudy.org/Investigators.html"
+    }
+  },
+  "resultsSection": {
+    "participantFlowModule": {
+      "preAssignmentDetails": "The trial included a 3-month placebo run-in period to select participants likely to have excellent compliance. Only individuals who reported taking at least 2/3 of their study pills during the run-in and met other eligibility criteria were randomized into the trial.",
+      "recruitmentDetails": "401605 initially screened; 39430 eligible to enter run-in; 25871 eligible for randomization; 2x2 factorial design: 12927 assigned to active vit D (of these, 6463 were assigned to active omega-3 FAs and 6464 to placebo omega-3 FAs) \\& 12944 assigned to placebo vit D (of these, 6470 were assigned to active omega-3 FAs and 6474 to placebo omega-3 FAs)",
+      "groups": [
+        {
+          "id": "FG000",
+          "title": "ACTIVE Vitamin D + ACTIVE Omega-3 Fatty Acids",
+          "description": "ACTIVE Vitamin D = Vitamin D3, one 2000 IU capsule/day; ACTIVE Omega-3 Fatty Acids = Omacor, one 1-gram capsule/day. Each capsule of Omacor contains 840 milligrams of marine omega-3 fatty acids (465 mg of eicosapentaenoic acid \\[EPA\\] and 375 mg of docosahexaenoic acid \\[DHA\\])."
+        },
+        {
+          "id": "FG001",
+          "title": "ACTIVE Vitamin D + PLACEBO Omega-3 Fatty Acids",
+          "description": "ACTIVE Vitamin D = Vitamin D3, one 2000 IU capsule/day; PLACEBO Omega-3 Fatty Acids, one capsule/day"
+        },
+        {
+          "id": "FG002",
+          "title": "PLACEBO Vitamin D + ACTIVE Omega-3 Fatty Acids",
+          "description": "PLACEBO Vitamin D, one capsule/day; ACTIVE Omega-3 Fatty Acids = Omacor, one 1-gram capsule/day. Each capsule of Omacor contains 840 milligrams of marine omega-3 fatty acids (465 mg of eicosapentaenoic acid \\[EPA\\] and 375 mg of docosahexaenoic acid \\[DHA\\])."
+        },
+        {
+          "id": "FG003",
+          "title": "PLACEBO Vitamin D + PLACEBO Omega-3 Fatty Acids",
+          "description": "PLACEBO Vitamin D, one capsule/day; PLACEBO Omega-3 Fatty Acids, one capsule/day"
+        }
+      ],
+      "periods": [
+        {
+          "title": "Overall Study",
+          "milestones": [
+            {
+              "type": "STARTED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "6463"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "6464"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "6470"
+                },
+                {
+                  "groupId": "FG003",
+                  "numSubjects": "6474"
+                }
+              ]
+            },
+            {
+              "type": "COMPLETED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "6463"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "6464"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "6470"
+                },
+                {
+                  "groupId": "FG003",
+                  "numSubjects": "6474"
+                }
+              ]
+            },
+            {
+              "type": "NOT COMPLETED",
+              "achievements": [
+                {
+                  "groupId": "FG000",
+                  "numSubjects": "0"
+                },
+                {
+                  "groupId": "FG001",
+                  "numSubjects": "0"
+                },
+                {
+                  "groupId": "FG002",
+                  "numSubjects": "0"
+                },
+                {
+                  "groupId": "FG003",
+                  "numSubjects": "0"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "baselineCharacteristicsModule": {
+      "groups": [
+        {
+          "id": "BG000",
+          "title": "ACTIVE Vitamin D + ACTIVE Omega-3 Fatty Acids",
+          "description": "ACTIVE Vitamin D = Vitamin D3, one 2000 IU capsule/day; ACTIVE Omega-3 Fatty Acids = Omacor, one 1-gram capsule/day. Each capsule of Omacor contains 840 milligrams of marine omega-3 fatty acids (465 mg of eicosapentaenoic acid \\[EPA\\] and 375 mg of docosahexaenoic acid \\[DHA\\])."
+        },
+        {
+          "id": "BG001",
+          "title": "ACTIVE Vitamin D + PLACEBO Omega-3 Fatty Acids",
+          "description": "ACTIVE Vitamin D = Vitamin D3, one 2000 IU capsule/day; PLACEBO Omega-3 Fatty Acids, one capsule/day"
+        },
+        {
+          "id": "BG002",
+          "title": "PLACEBO Vitamin D + ACTIVE Omega-3 Fatty Acids",
+          "description": "PLACEBO Vitamin D, one capsule/day; ACTIVE Omega-3 Fatty Acids = Omacor, one 1-gram capsule/day. Each capsule of Omacor contains 840 milligrams of marine omega-3 fatty acids (465 mg of eicosapentaenoic acid \\[EPA\\] and 375 mg of docosahexaenoic acid \\[DHA\\])."
+        },
+        {
+          "id": "BG003",
+          "title": "PLACEBO Vitamin D + PLACEBO Omega-3 Fatty Acids",
+          "description": "PLACEBO Vitamin D, one capsule/day; PLACEBO Omega-3 Fatty Acids, one capsule/day"
+        },
+        {
+          "id": "BG004",
+          "title": "Total",
+          "description": "Total of all reporting groups"
+        }
+      ],
+      "denoms": [
+        {
+          "units": "Participants",
+          "counts": [
+            {
+              "groupId": "BG000",
+              "value": "6463"
+            },
+            {
+              "groupId": "BG001",
+              "value": "6464"
+            },
+            {
+              "groupId": "BG002",
+              "value": "6470"
+            },
+            {
+              "groupId": "BG003",
+              "value": "6474"
+            },
+            {
+              "groupId": "BG004",
+              "value": "25871"
+            }
+          ]
+        }
+      ],
+      "measures": [
+        {
+          "title": "Age, Categorical",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "classes": [
+            {
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6463"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6464"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6470"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6474"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25871"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "title": "<=18 years",
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "0"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "0"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "0"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "0"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "0"
+                    }
+                  ]
+                },
+                {
+                  "title": "Between 18 and 65 years",
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "2458"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "2462"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "2461"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "2467"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "9848"
+                    }
+                  ]
+                },
+                {
+                  "title": ">=65 years",
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "4005"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "4002"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "4009"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "4007"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "16023"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Age, Continuous",
+          "paramType": "MEAN",
+          "dispersionType": "STANDARD_DEVIATION",
+          "unitOfMeasure": "years",
+          "classes": [
+            {
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6463"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6464"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6470"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6474"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25871"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "67.1",
+                      "spread": "7.1"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "67.1",
+                      "spread": "7.0"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "67.2",
+                      "spread": "7.1"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "67.1",
+                      "spread": "7.1"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "67.1",
+                      "spread": "7.1"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Sex: Female, Male",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "classes": [
+            {
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6463"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6464"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6470"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6474"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25871"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "title": "Female",
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "3276"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "3271"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "3271"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "3267"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "13085"
+                    }
+                  ]
+                },
+                {
+                  "title": "Male",
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "3187"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "3193"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "3199"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "3207"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "12786"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Race/Ethnicity, Customized",
+          "populationDescription": "Not all participants reported race/ethnicity",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "classes": [
+            {
+              "title": "Non-Hispanic white",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "4515"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "4498"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "4529"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "4504"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "18046"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "African American",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "1278"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "1275"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "1271"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "1282"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "5106"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Hispanic (not African American)",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "246"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "270"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "245"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "252"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "1013"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Asian/Pacific Islander",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "102"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "86"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "98"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "102"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "388"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Native American/Alaskan Native",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "62"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "56"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "58"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "52"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "228"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "Other/unknown",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6329"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6318"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6324"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6333"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25304"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "126"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "133"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "123"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "141"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "523"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Region of Enrollment",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "classes": [
+            {
+              "title": "United States",
+              "denoms": [
+                {
+                  "units": "Participants",
+                  "counts": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6463"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6464"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6470"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6474"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25871"
+                    }
+                  ]
+                }
+              ],
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "BG000",
+                      "value": "6463"
+                    },
+                    {
+                      "groupId": "BG001",
+                      "value": "6464"
+                    },
+                    {
+                      "groupId": "BG002",
+                      "value": "6470"
+                    },
+                    {
+                      "groupId": "BG003",
+                      "value": "6474"
+                    },
+                    {
+                      "groupId": "BG004",
+                      "value": "25871"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "outcomeMeasuresModule": {
+      "outcomeMeasures": [
+        {
+          "type": "PRIMARY",
+          "title": "Number of Participants With Invasive Cancer of Any Type",
+          "description": "Number of participants with invasive cancer of any type",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "793"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "824"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "820"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "797"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.47",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.88",
+              "ciUpperLimit": "1.06"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.56",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.03",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.93",
+              "ciUpperLimit": "1.13"
+            }
+          ]
+        },
+        {
+          "type": "PRIMARY",
+          "title": "Number of Participants With a Major Cardiovascular Event",
+          "description": "Major cardiovascular event = a composite endpoint of myocardial infarction, stroke, and death from cardiovascular causes",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "396"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "409"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "386"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "419"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.69",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.97",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.85",
+              "ciUpperLimit": "1.12"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.24",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.92",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.80",
+              "ciUpperLimit": "1.06"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants Who Died From Invasive Cancer of Any Type",
+          "description": "Number of participants who died from invasive cancer of any type",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "154"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "187"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "168"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "173"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.08",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.83",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.67",
+              "ciUpperLimit": "1.02"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.79",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.97",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.79",
+              "ciUpperLimit": "1.20"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Female Participants With Breast Cancer",
+          "description": "Number of female participants with breast cancer",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "6547"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "6538"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "6547"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "6538"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "124"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "122"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "117"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "129"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.90",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.02",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.79",
+              "ciUpperLimit": "1.31"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.43",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.90",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.70",
+              "ciUpperLimit": "1.16"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Male Participants With Prostate Cancer",
+          "description": "Number of male participants with prostate cancer",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day."
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "6380"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "6406"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "6386"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "6400"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "192"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "219"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "219"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "192"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.19",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.88",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.72",
+              "ciUpperLimit": "1.07"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.17",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.15",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.94",
+              "ciUpperLimit": "1.39"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With Colorectal Cancer",
+          "description": "Number of participants with colorectal cancer",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "51"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "47"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "54"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "44"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.67",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.09",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.73",
+              "ciUpperLimit": "1.62"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.31",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.23",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.83"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With Cardiovascular Event in Expanded Composite Cardiovascular Endpoint",
+          "description": "Expanded composite cardiovascular endpoint = a composite endpoint of myocardial infarction, stroke, death from cardiovascular causes, and coronary revascularization (coronary artery bypass grafting or percutaneous coronary intervention)",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "536"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "558"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "527"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "567"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.53",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.86",
+              "ciUpperLimit": "1.08"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.21",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.93",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.82",
+              "ciUpperLimit": "1.04"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With Myocardial Infarction",
+          "description": "Number of participants with myocardial infarction",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "169"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "176"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "145"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "200"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.73",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.78",
+              "ciUpperLimit": "1.19"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.003",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.72",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.59",
+              "ciUpperLimit": "0.90"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With Stroke",
+          "description": "Number of participants with stroke",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "141"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "149"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "148"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "142"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.68",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.95",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.76",
+              "ciUpperLimit": "1.20"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.72",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.04",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.31"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants Who Died From Cardiovascular Causes",
+          "description": "Number of participants who died from cardiovascular causes",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "152"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "138"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "142"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "148"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.38",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.11",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.88",
+              "ciUpperLimit": "1.40"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.73",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.76",
+              "ciUpperLimit": "1.21"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants Who Died From Any Cause",
+          "description": "Number of participants who died from any cause",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "485"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "493"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "493"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "485"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.87",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.99",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.87",
+              "ciUpperLimit": "1.12"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.79",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.02",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.90",
+              "ciUpperLimit": "1.15"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With Invasive Cancer of Any Type, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants with invasive cancer of any type, excluding first 2 years of follow-up",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years, excluding first 2 years of follow-up",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "490"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "522"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "536"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "476"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.33",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.94",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.06"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.056",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.13",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "1.00",
+              "ciUpperLimit": "1.28"
+            }
+          ]
+        },
+        {
+          "type": "SECONDARY",
+          "title": "Number of Participants With a Major Cardiovascular Event, Excluding First 2 Years of Follow-up",
+          "description": "Major cardiovascular event = a composite endpoint of myocardial infarction, stroke, and death from cardiovascular causes; excluding first 2 years of follow-up",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years, excluding first 2 years of follow-up",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "274"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "296"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "269"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "301"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.38",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.93",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.79",
+              "ciUpperLimit": "1.09"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.18",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.89",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.76",
+              "ciUpperLimit": "1.05"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants Who Died From Invasive Cancer of Any Type, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants who died from invasive cancer of any type, excluding first 2 years of follow-up",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years, excluding first 2 years of follow-up",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "112"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "149"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "126"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "135"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.024",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.75",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.59",
+              "ciUpperLimit": "0.96"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.58",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.93",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.73",
+              "ciUpperLimit": "1.19"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants Who Died From Any Cause, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants who died from any cause, excluding first 2 years of follow-up",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years, excluding first 2 years of follow-up",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "368"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "384"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "371"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "381"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.62",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.84",
+              "ciUpperLimit": "1.11"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.72",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.97",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.84",
+              "ciUpperLimit": "1.12"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Percutaneous Coronary Intervention",
+          "description": "Number of participants with percutaneous coronary intervention",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "182"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "188"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "162"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "208"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.78",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.97",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.79",
+              "ciUpperLimit": "1.19"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.016",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.78",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.63",
+              "ciUpperLimit": "0.95"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Coronary-artery Bypass Grafting",
+          "description": "Number of participants with coronary-artery bypass grafting",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "73"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "98"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "85"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "86"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.058",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.75",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.55",
+              "ciUpperLimit": "1.01"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.94",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.99",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.73",
+              "ciUpperLimit": "1.33"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Total Coronary Heart Disease",
+          "description": "Total coronary heart disease = a composite of myocardial infarction, coronary revascularization (percutaneous coronary intervention or coronary-artery bypass grafting), and death from coronary heart disease",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "332"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "346"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "308"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "370"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.61",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.12"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.016",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.83",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.71",
+              "ciUpperLimit": "0.97"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Ischemic Stroke",
+          "description": "Number of participants with ischemic stroke",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "117"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "110"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "111"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "116"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.61",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.07",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.39"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.74",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.96",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.74",
+              "ciUpperLimit": "1.24"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Hemorrhagic Stroke",
+          "description": "Number of participants with hemorrhagic stroke",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "19"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "25"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "25"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "19"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.37",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.76",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.42",
+              "ciUpperLimit": "1.38"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.37",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.32",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.72",
+              "ciUpperLimit": "2.39"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants Who Died From Myocardial Infarction",
+          "description": "Number of participants who died from myocardial infarction",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "24"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "15"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "13"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "26"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.15",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.60",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.84",
+              "ciUpperLimit": "3.06"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.04",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.50",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.26",
+              "ciUpperLimit": "0.97"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants Who Died From Coronary Heart Disease",
+          "description": "Number of participants who died from coronary heart disease",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "48"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "38"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "37"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "49"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.27",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.27",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.95"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.198",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.76",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.49",
+              "ciUpperLimit": "1.16"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants Who Died From Stroke",
+          "description": "Number of participants who died from stroke",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "19"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "23"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "22"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "20"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.58",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.84",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.46",
+              "ciUpperLimit": "1.54"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.76",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "1.10",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.60",
+              "ciUpperLimit": "2.01"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Myocardial Infarction, Excluding First 2 Years of Follow-up",
+          "description": "Number of participants with myocardial infarction, excluding first 2 years of follow-up",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years, excluding first 2 years of follow-up",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day"
+            },
+            {
+              "id": "OG001",
+              "title": "VItamin D Placebo",
+              "description": "VItamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "108"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "117"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "94"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "131"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.56",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.93",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.71",
+              "ciUpperLimit": "1.20"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "pValue": "0.014",
+              "statisticalMethod": "Regression, Cox",
+              "paramType": "Hazard Ratio (HR)",
+              "paramValue": "0.72",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.55",
+              "ciUpperLimit": "0.93"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Conventional Colorectal Adenoma",
+          "description": "tubular, tubulovillous, villous adenoma; adenoma w/high-grade dysplasia",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day."
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "308"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "287"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "294"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "301"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "paramType": "Odds Ratio (OR)",
+              "paramValue": "1.08",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.92",
+              "ciUpperLimit": "1.27"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "paramType": "Odds Ratio (OR)",
+              "paramValue": "0.98",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.83",
+              "ciUpperLimit": "1.15"
+            }
+          ]
+        },
+        {
+          "type": "OTHER_PRE_SPECIFIED",
+          "title": "Number of Participants With Serrated Colorectal Polyps",
+          "description": "hyperplastic polyp, traditional serrated adenoma, sessile serrated polyp",
+          "reportingStatus": "POSTED",
+          "paramType": "COUNT_OF_PARTICIPANTS",
+          "unitOfMeasure": "Participants",
+          "timeFrame": "5 years",
+          "groups": [
+            {
+              "id": "OG000",
+              "title": "Active Vitamin D",
+              "description": "Vitamin D3, one 2000 IU capsule/day."
+            },
+            {
+              "id": "OG001",
+              "title": "Vitamin D Placebo",
+              "description": "Vitamin D placebo, one capsule/day"
+            },
+            {
+              "id": "OG002",
+              "title": "Active Omega-3 Fatty Acids",
+              "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA)."
+            },
+            {
+              "id": "OG003",
+              "title": "Omega-3 Fatty Acids Placebo",
+              "description": "Omega-3 fatty acids placebo, one capsule/day"
+            }
+          ],
+          "denoms": [
+            {
+              "units": "Participants",
+              "counts": [
+                {
+                  "groupId": "OG000",
+                  "value": "12927"
+                },
+                {
+                  "groupId": "OG001",
+                  "value": "12944"
+                },
+                {
+                  "groupId": "OG002",
+                  "value": "12933"
+                },
+                {
+                  "groupId": "OG003",
+                  "value": "12938"
+                }
+              ]
+            }
+          ],
+          "classes": [
+            {
+              "categories": [
+                {
+                  "measurements": [
+                    {
+                      "groupId": "OG000",
+                      "value": "172"
+                    },
+                    {
+                      "groupId": "OG001",
+                      "value": "169"
+                    },
+                    {
+                      "groupId": "OG002",
+                      "value": "174"
+                    },
+                    {
+                      "groupId": "OG003",
+                      "value": "167"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "analyses": [
+            {
+              "groupIds": [
+                "OG000",
+                "OG001"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "paramType": "Odds Ratio (OR)",
+              "paramValue": "1.02",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.82",
+              "ciUpperLimit": "1.26"
+            },
+            {
+              "groupIds": [
+                "OG002",
+                "OG003"
+              ],
+              "nonInferiorityType": "SUPERIORITY",
+              "paramType": "Odds Ratio (OR)",
+              "paramValue": "1.05",
+              "ciPctValue": "95",
+              "ciNumSides": "TWO_SIDED",
+              "ciLowerLimit": "0.84",
+              "ciUpperLimit": "1.29"
+            }
+          ]
+        }
+      ]
+    },
+    "adverseEventsModule": {
+      "frequencyThreshold": "0",
+      "timeFrame": "5 years",
+      "description": "Vit D Monitored safety cond'ns: hypercalcemia, kidney stones, parathyroid disease, kidney failure or dialysis; Other symptoms, side effects: GI bleeding, easy bruising; stomach upset or pain; nausea; constipation, diarrhea, skin rash\n\nOmega-3 FA Monitored safety cond'ns: GI bleeding; blood in urine; easy bruising; freq nosebleeds; kidney failure or dialysis; Other symptoms, side effects: stomach upset or pain; nausea; constipation; diarrhea; skin rash; bad taste in mouth; increased burping",
+      "eventGroups": [
+        {
+          "id": "EG000",
+          "title": "Active Vitamin D",
+          "description": "Vitamin D3, one 2000 IU capsule/day",
+          "deathsNumAffected": 485,
+          "deathsNumAtRisk": 12927,
+          "seriousNumAffected": 1673,
+          "seriousNumAtRisk": 12927,
+          "otherNumAffected": 10086,
+          "otherNumAtRisk": 12927
+        },
+        {
+          "id": "EG001",
+          "title": "Vitamin D Placebo",
+          "description": "Vitamin D placebo, one capsule/day",
+          "deathsNumAffected": 493,
+          "deathsNumAtRisk": 12944,
+          "seriousNumAffected": 1659,
+          "seriousNumAtRisk": 12944,
+          "otherNumAffected": 10098,
+          "otherNumAtRisk": 12944
+        },
+        {
+          "id": "EG002",
+          "title": "Active Omega-3 Fatty Acids",
+          "description": "Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA).",
+          "deathsNumAffected": 493,
+          "deathsNumAtRisk": 12933,
+          "seriousNumAffected": 1613,
+          "seriousNumAtRisk": 12933,
+          "otherNumAffected": 10094,
+          "otherNumAtRisk": 12933
+        },
+        {
+          "id": "EG003",
+          "title": "Omega-3 Fatty Acids Placebo",
+          "description": "Omega-3 fatty acids placebo, one capsule/day",
+          "deathsNumAffected": 485,
+          "deathsNumAtRisk": 12938,
+          "seriousNumAffected": 1619,
+          "seriousNumAtRisk": 12938,
+          "otherNumAffected": 10090,
+          "otherNumAtRisk": 12938
+        },
+        {
+          "id": "EG004",
+          "title": "Active Vitamin D/Active Omega-3 Fatty Acids",
+          "description": "Vitamin D3 (one 2000 IU capsule/day) + Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA).",
+          "deathsNumAffected": 241,
+          "deathsNumAtRisk": 6463,
+          "seriousNumAffected": 791,
+          "seriousNumAtRisk": 6463,
+          "otherNumAffected": 5101,
+          "otherNumAtRisk": 6463
+        },
+        {
+          "id": "EG005",
+          "title": "Active Vitamin D/Placebo Omega-3 Fatty Acids",
+          "description": "Vitamin D3, one 2000 IU capsule/day + Omega-3 fatty acids placebo, one capsule/day",
+          "deathsNumAffected": 244,
+          "deathsNumAtRisk": 6464,
+          "seriousNumAffected": 782,
+          "seriousNumAtRisk": 6464,
+          "otherNumAffected": 5027,
+          "otherNumAtRisk": 6464
+        },
+        {
+          "id": "EG006",
+          "title": "Placebo Vitamin D/Active Omega-3 Fatty Acids",
+          "description": "Vitamin D placebo, one capsule/day + Omacor, one 1-g capsule/day. Each capsule of Omacor contains 840 mg of marine omega-3 fatty acids (465 mg of EPA + 375 mg of DHA).",
+          "deathsNumAffected": 252,
+          "deathsNumAtRisk": 6470,
+          "seriousNumAffected": 822,
+          "seriousNumAtRisk": 6470,
+          "otherNumAffected": 5037,
+          "otherNumAtRisk": 6470
+        },
+        {
+          "id": "EG007",
+          "title": "Placebo Vitamin D/Placebo Omega-3 Fatty Acids",
+          "description": "Vitamin D placebo, one capsule/day + Omega-3 fatty acids placebo, one capsule/day",
+          "deathsNumAffected": 241,
+          "deathsNumAtRisk": 6474,
+          "seriousNumAffected": 837,
+          "seriousNumAtRisk": 6474,
+          "otherNumAffected": 5101,
+          "otherNumAtRisk": 6474
+        }
+      ],
+      "seriousEvents": [
+        {
+          "term": "Invasive cancer of any type",
+          "organSystem": "Neoplasms benign, malignant and unspecified (incl cysts and polyps)",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "notes": "Total cancer=invasive cancer of any type",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 793,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 824,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 820,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 797,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 408,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 385,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 412,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 412,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Major cardiovascular event",
+          "organSystem": "Vascular disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "notes": "Major cardiovascular event = a composite endpoint of myocardial infarction, stroke, and death from cardiovascular causes",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 396,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 409,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 386,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 419,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 186,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 210,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 200,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 209,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Death from cancer",
+          "organSystem": "Neoplasms benign, malignant and unspecified (incl cysts and polyps)",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 154,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 187,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 168,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 173,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 75,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 79,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 93,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 94,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Breast cancer (in women)",
+          "organSystem": "Neoplasms benign, malignant and unspecified (incl cysts and polyps)",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 124,
+              "numAtRisk": 6547
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 122,
+              "numAtRisk": 6538
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 117,
+              "numAtRisk": 6547
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 129,
+              "numAtRisk": 6538
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 60,
+              "numAtRisk": 3276
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 64,
+              "numAtRisk": 3271
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 57,
+              "numAtRisk": 3271
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 65,
+              "numAtRisk": 3267
+            }
+          ]
+        },
+        {
+          "term": "Prostate cancer (in men)",
+          "organSystem": "Neoplasms benign, malignant and unspecified (incl cysts and polyps)",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 192,
+              "numAtRisk": 6380
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 219,
+              "numAtRisk": 6406
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 219,
+              "numAtRisk": 6386
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 192,
+              "numAtRisk": 6400
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 100,
+              "numAtRisk": 3187
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 83,
+              "numAtRisk": 3193
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 110,
+              "numAtRisk": 3199
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 109,
+              "numAtRisk": 3207
+            }
+          ]
+        },
+        {
+          "term": "Colorectal cancer",
+          "organSystem": "Neoplasms benign, malignant and unspecified (incl cysts and polyps)",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 51,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 47,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 54,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 44,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 28,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 23,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 26,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 21,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Myocardial infarction",
+          "organSystem": "Vascular disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 169,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 176,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 145,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 200,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 72,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 97,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 73,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 103,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Stroke",
+          "organSystem": "Vascular disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 141,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 149,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 148,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 142,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 66,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 75,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 82,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 67,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Death from cardiovascular causes",
+          "organSystem": "Vascular disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 152,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 138,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 142,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 148,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 74,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 78,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 68,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 70,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Hypercalcemia",
+          "organSystem": "Endocrine disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 147,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 143,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 151,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 139,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 77,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 70,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 74,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 69,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Gastrointestinal bleeding",
+          "organSystem": "Blood and lymphatic system disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 341,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 403,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 370,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 374,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 170,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 171,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 200,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 203,
+              "numAtRisk": 6474
+            }
+          ]
+        }
+      ],
+      "otherEvents": [
+        {
+          "term": "Kidney stones",
+          "organSystem": "Renal and urinary disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 477,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 426,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 430,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 473,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 233,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 244,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 197,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 229,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Parathyroid condition",
+          "organSystem": "Endocrine disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "notes": "Parathyroid condition = hyperparathyroidism or hypoparathyroidism",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 50,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 62,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 52,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 60,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 24,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 26,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 28,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 34,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Kidney failure or dialysis",
+          "organSystem": "Renal and urinary disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 85,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 88,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 85,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 88,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 42,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 43,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 43,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 45,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Easy bruising",
+          "organSystem": "Blood and lymphatic system disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 3434,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 3408,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 3443,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 3399,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 1737,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 1697,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 1706,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 1702,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Stomach upset or pain",
+          "organSystem": "Gastrointestinal disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 4860,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 4870,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 4887,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 4843,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 2439,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 2421,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 2448,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 2422,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Nausea",
+          "organSystem": "Gastrointestinal disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 3519,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 3589,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 3558,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 3550,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 1748,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 1771,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 1810,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 1779,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Constipation",
+          "organSystem": "Gastrointestinal disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 5133,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 5162,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 5184,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 5111,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 2567,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 2566,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 2617,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 2545,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Diarrhea",
+          "organSystem": "Gastrointestinal disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 5511,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 5668,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 5599,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 5580,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 2781,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 2730,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 2818,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 2850,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Skin rash",
+          "organSystem": "Skin and subcutaneous tissue disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 3268,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 3430,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 3331,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 3367,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 1629,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 1639,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 1702,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 1728,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Frequent nosebleeds",
+          "organSystem": "Blood and lymphatic system disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 466,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 490,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 465,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 491,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 224,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 242,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 241,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 249,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Bad taste in mouth",
+          "organSystem": "General disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 2195,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 2290,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 2240,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 2245,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 1109,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 1086,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 1131,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 1159,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Increased burping",
+          "organSystem": "Gastrointestinal disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 2168,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 2207,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 2217,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 2158,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 1107,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 1061,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 1110,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 1097,
+              "numAtRisk": 6474
+            }
+          ]
+        },
+        {
+          "term": "Blood in urine",
+          "organSystem": "Blood and lymphatic system disorders",
+          "assessmentType": "SYSTEMATIC_ASSESSMENT",
+          "stats": [
+            {
+              "groupId": "EG000",
+              "numAffected": 911,
+              "numAtRisk": 12927
+            },
+            {
+              "groupId": "EG001",
+              "numAffected": 882,
+              "numAtRisk": 12944
+            },
+            {
+              "groupId": "EG002",
+              "numAffected": 919,
+              "numAtRisk": 12933
+            },
+            {
+              "groupId": "EG003",
+              "numAffected": 874,
+              "numAtRisk": 12938
+            },
+            {
+              "groupId": "EG004",
+              "numAffected": 469,
+              "numAtRisk": 6463
+            },
+            {
+              "groupId": "EG005",
+              "numAffected": 442,
+              "numAtRisk": 6464
+            },
+            {
+              "groupId": "EG006",
+              "numAffected": 450,
+              "numAtRisk": 6470
+            },
+            {
+              "groupId": "EG007",
+              "numAffected": 432,
+              "numAtRisk": 6474
+            }
+          ]
+        }
+      ]
+    },
+    "moreInfoModule": {
+      "certainAgreement": {
+        "piSponsorEmployee": false,
+        "restrictiveAgreement": false
+      },
+      "pointOfContact": {
+        "title": "VITAL Study Director",
+        "organization": "Brigham and Women's Hospital; 900 Commonwealth Ave, 3rd fl.; Boston, MA 02215",
+        "email": "vitalstudy@partners.org",
+        "phone": "1-800-388-3963"
+      }
+    }
+  },
+  "documentSection": {
+    "largeDocumentModule": {
+      "largeDocs": [
+        {
+          "typeAbbrev": "Prot_SAP",
+          "hasProtocol": true,
+          "hasSap": true,
+          "hasIcf": false,
+          "label": "Study Protocol and Statistical Analysis Plan",
+          "date": "2017-11-30",
+          "uploadDate": "2019-10-23T13:34",
+          "filename": "Prot_SAP_000.pdf",
+          "size": 1778152
+        }
+      ]
+    }
+  },
+  "derivedSection": {
+    "miscInfoModule": {
+      "versionHolder": "2026-09-18"
+    },
+    "conditionBrowseModule": {
+      "meshes": [
+        {
+          "id": "D009369",
+          "term": "Neoplasms"
+        },
+        {
+          "id": "D002318",
+          "term": "Cardiovascular Diseases"
+        }
+      ]
+    },
+    "interventionBrowseModule": {
+      "meshes": [
+        {
+          "id": "D002762",
+          "term": "Cholecalciferol"
+        },
+        {
+          "id": "D015525",
+          "term": "Fatty Acids, Omega-3"
+        },
+        {
+          "id": "D005395",
+          "term": "Fish Oils"
+        }
+      ],
+      "ancestors": [
+        {
+          "id": "D002782",
+          "term": "Cholestenes"
+        },
+        {
+          "id": "D002776",
+          "term": "Cholestanes"
+        },
+        {
+          "id": "D013256",
+          "term": "Steroids"
+        },
+        {
+          "id": "D000072473",
+          "term": "Fused-Ring Compounds"
+        },
+        {
+          "id": "D011083",
+          "term": "Polycyclic Compounds"
+        },
+        {
+          "id": "D013261",
+          "term": "Sterols"
+        },
+        {
+          "id": "D014807",
+          "term": "Vitamin D"
+        },
+        {
+          "id": "D012632",
+          "term": "Secosteroids"
+        },
+        {
+          "id": "D008563",
+          "term": "Membrane Lipids"
+        },
+        {
+          "id": "D008055",
+          "term": "Lipids"
+        },
+        {
+          "id": "D004042",
+          "term": "Dietary Fats, Unsaturated"
+        },
+        {
+          "id": "D004041",
+          "term": "Dietary Fats"
+        },
+        {
+          "id": "D005223",
+          "term": "Fats"
+        },
+        {
+          "id": "D005231",
+          "term": "Fatty Acids, Unsaturated"
+        },
+        {
+          "id": "D005227",
+          "term": "Fatty Acids"
+        },
+        {
+          "id": "D009821",
+          "term": "Oils"
+        }
+      ]
+    }
+  },
+  "hasResults": true
+}

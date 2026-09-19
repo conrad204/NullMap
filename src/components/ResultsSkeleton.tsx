@@ -3,10 +3,10 @@ import type { SearchProgress, SearchStage } from "../types";
 import { cx, formatCount } from "../lib/format";
 
 const STAGES: Array<{ id: SearchStage; label: string }> = [
-  { id: "keywords", label: "Extract hypotheses and null-signal phrases" },
-  { id: "searching", label: "Query OpenAlex, arXiv, PubMed and registries" },
-  { id: "classifying", label: "Assign a verdict to each prior attempt" },
-  { id: "estimating", label: "Estimate expected value of pursuit" },
+  { id: "keywords", label: "Parse the question and meaningful-effect threshold" },
+  { id: "searching", label: "Search indexed literature and trial registries" },
+  { id: "classifying", label: "Read cached evidence and extract missing numbers" },
+  { id: "estimating", label: "Pool compatible evidence and assess your study plan" },
 ];
 
 export default function ResultsSkeleton({ progress }: { progress: SearchProgress | null }) {
@@ -14,6 +14,7 @@ export default function ResultsSkeleton({ progress }: { progress: SearchProgress
 
   return (
     <div className="fade-up flex flex-col gap-10" aria-busy="true">
+      {progress?.message && <p className="text-sm leading-relaxed text-ink-2" role="status">{progress.message}</p>}
       <ol className="flex flex-col gap-3">
         {STAGES.map((s, i) => {
           const done = i < currentIndex;

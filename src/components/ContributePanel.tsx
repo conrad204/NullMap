@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import { CheckCircle, FileText, UploadSimple, X } from "@phosphor-icons/react";
 import type { ContributionReceipt, Verdict } from "../types";
-import { submitContribution } from "../api/client";
+import { submitContribution, usingMockApi } from "../api/client";
 import { VERDICT_META } from "../lib/verdicts";
 import { cx, formatBytes } from "../lib/format";
 
@@ -31,18 +31,26 @@ export default function ContributePanel() {
       description.trim().length < 40
         ? "Describe what you tested and what happened, at least a couple of sentences."
         : null,
-    files: files.length === 0 ? "Add at least one file: data, analysis code, or a draft." : null,
+    files: files.length === 0 ? "Add at least one file: data, analysis code, or a draft."
+      : files.length > 3 ? "Choose up to 3 files for this contribution."
+      : files.reduce((bytes, file) => bytes + file.size, 0) > 5 * 1024 * 1024 ? "Keep the combined upload at 5 MB or smaller."
+      : null,
     ownership: ownership ? null : "Confirm the ownership terms to continue.",
   };
   const hasErrors = Object.values(errors).some(Boolean);
   const busy = status.kind === "submitting";
 
   function addFiles(list: FileList | null) {
-    if (!list) return;
+    if (!list || busy) return;
     const incoming = Array.from(list);
     setFiles((prev) => {
       const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
-      return [...prev, ...incoming.filter((f) => !seen.has(`${f.name}:${f.size}`))];
+      return [...prev, ...incoming.filter((file) => {
+        const key = `${file.name}:${file.size}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })];
     });
   }
 
@@ -91,8 +99,8 @@ export default function ContributePanel() {
           Shelved an experiment? Drop the data.
         </h1>
         <p className="mt-3 max-w-[44ch] leading-relaxed text-ink-2">
-          An agent drafts the write-up from your files and notes. You review it before anything
-          becomes searchable, and you keep ownership of the data.
+          Save your files and research notes as a contribution draft. You keep ownership
+          of the data, and submissions are held for review before entering the evidence index.
         </p>
         <dl className="mt-8 flex flex-col gap-5 text-sm">
           <div>
@@ -105,8 +113,8 @@ export default function ContributePanel() {
           <div>
             <dt className="font-medium text-ink">What happens next</dt>
             <dd className="mt-1 leading-relaxed text-ink-2">
-              The draft report lands in your inbox. Publish it under your name, or keep it private
-              and only let the verdict count toward searches.
+              Your notes and files are stored together with a receipt. A submitted outcome is
+              self-reported and needs review before it can support search findings.
             </dd>
           </div>
         </dl>
@@ -117,11 +125,9 @@ export default function ContributePanel() {
           <div className="flex items-start gap-3">
             <CheckCircle size={22} weight="fill" className="mt-0.5 shrink-0 text-v-effect" aria-hidden />
             <div>
-              <h2 className="text-lg font-medium text-ink">Received. A draft is on its way.</h2>
+              <h2 className="text-lg font-medium text-ink">{usingMockApi ? "Demo upload complete." : status.receipt.status === "ready" ? "Contribution draft saved." : "Contribution draft received."}</h2>
               <p className="mt-1 leading-relaxed text-ink-2">
-                {files.length} {files.length === 1 ? "file" : "files"} queued under{" "}
-                <span className="text-ink">{title}</span>. Nothing is published until you approve
-                the draft.
+                {usingMockApi ? "This illustrative upload was not saved." : <>{files.length} {files.length === 1 ? "file" : "files"} received under <span className="text-ink">{title}</span>. {status.receipt.status === "ready" ? "Your files and notes are stored as a draft for review." : "The contribution is held as a draft for review."}</>}
               </p>
               <p className="mt-3 font-mono text-xs text-ink-3">
                 contribution {status.receipt.contributionId}
@@ -142,6 +148,7 @@ export default function ContributePanel() {
           >
             <input
               id="c-title"
+              maxLength={300}
               type="text"
               value={title}
               disabled={busy}
@@ -159,6 +166,7 @@ export default function ContributePanel() {
           >
             <textarea
               id="c-desc"
+              maxLength={20000}
               rows={5}
               value={description}
               disabled={busy}
@@ -184,6 +192,7 @@ export default function ContributePanel() {
                     )}
                   >
                     <input
+                      disabled={busy}
                       type="radio"
                       name="outcome"
                       value={v}
@@ -237,9 +246,10 @@ export default function ContributePanel() {
               <p className="text-sm text-ink">
                 Drop files here or <span className="text-accent">browse</span>
               </p>
-              <p className="text-xs text-ink-3">CSV, XLSX, JSON, notebooks, PDF, ZIP</p>
+              <p className="text-xs text-ink-3">CSV, XLSX, JSON, notebooks, PDF, ZIP · 3 files, 5 MB total</p>
               <input
                 ref={inputRef}
+                disabled={busy}
                 type="file"
                 multiple
                 accept={ACCEPT}
@@ -293,7 +303,7 @@ export default function ContributePanel() {
               />
               <span>
                 I own this data or have the right to share it. I keep ownership and grant nullMap
-                a non-exclusive license to index it and draft a report.
+                a non-exclusive license to store it and index reviewed findings.
               </span>
             </label>
             {touched && errors.ownership && (
@@ -311,7 +321,7 @@ export default function ContributePanel() {
 
           <div>
             <button type="submit" disabled={busy} className="btn btn-primary">
-              {busy ? "Uploading" : "Generate report"}
+              {busy ? "Uploading" : "Save contribution draft"}
             </button>
           </div>
         </form>

@@ -1,0 +1,109 @@
+# nullMap demo guide
+
+This demo maps indexed OpenAlex literature and ClinicalTrials.gov records, then uses compatible numerical evidence to help plan a clinical study. A missing result is an unknown outcome, not a negative finding.
+
+## Start the application
+
+Use the existing, ignored `backend/.env` for service credentials. Do not copy an example file over an already configured file, put keys in browser variables, or display credentials while recording.
+
+From the repository root, start the API:
+
+```sh
+cd backend
+uv sync --inexact
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+In a second terminal at the repository root:
+
+```sh
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The browser uses `/api`; Vite strips that prefix and forwards requests to port 8000. For the bundled deployment, run `npm run build` first: FastAPI serves `dist/` and `/api` on the same origin at port 8000. Separate hosting can use a reverse proxy or `VITE_API_URL` pointing at the backend root URL. `VITE_USE_MOCK` defaults to false. API failures produce an error state, never fictional evidence.
+
+The API needs a reachable Elasticsearch deployment with a populated `studies` index. OpenAI enables structured PICO parsing, evidence extraction, and narration. OpenAlex uses a configured API key when available; the implementation also supports bounded public requests without a key, subject to source limits. ClinicalTrials.gov requires no key. Embeddings need the configured local model and optional inference dependencies. For a fresh environment, complete the CPU embedding setup in [README.md](../README.md) before the embedding stage; `uv sync --inexact` preserves those separately installed dependencies. Check API readiness and coverage before recording; a running HTTP server alone does not demonstrate successful retrieval.
+
+## Prepare a small real corpus
+
+For the prepared clinical topics, run the bootstrap from `backend/`:
+
+```sh
+.venv/bin/python -m app.bootstrap --per-topic 100
+```
+
+It fetches bounded source slices, normalizes, links, embeds, and indexes them, then writes a provenance summary to `data/bootstrap-summary.json`. Source availability determines the final count. The bootstrap includes recent topic slices, a bounded historical highly cited slice, and named landmark lookups; landmark effects are still extracted from source evidence.
+
+For a custom topic instead, the staged commands below expose each step. They write resumable JSONL artifacts under `data/`. Keep output files and checkpoints together. Add `--resume` when continuing a stage rather than overwriting its outputs. Direct `.venv/bin/python` commands avoid an implicit environment re-sync.
+
+```sh
+.venv/bin/python -m app.ingest fetch ctgov --query 'vitamin D depression' --limit 200 --output data/ctgov.raw.jsonl
+.venv/bin/python -m app.ingest fetch openalex --query 'vitamin D depression randomized trial' --limit 500 --output data/openalex.raw.jsonl
+.venv/bin/python -m app.ingest normalize --input data/ctgov.raw.jsonl --output data/ctgov.normalized.jsonl
+.venv/bin/python -m app.ingest normalize --input data/openalex.raw.jsonl --output data/openalex.normalized.jsonl
+.venv/bin/python -m app.ingest classify --input data/openalex.normalized.jsonl --output data/openalex.classified.jsonl
+.venv/bin/python -m app.ingest link --input data/ctgov.normalized.jsonl data/openalex.classified.jsonl --output data/linked.jsonl
+.venv/bin/python -m app.ingest embed --input data/linked.jsonl --output data/embedded.jsonl
+.venv/bin/python -m app.ingest index --input data/embedded.jsonl
+```
+
+The default classifier is the phrase-based fallback unless a trained classifier artifact is supplied. Do not describe it as a validated learned classifier without a saved training/evaluation report. A failed or sparse source pull is a coverage limitation, not evidence about the intervention.
+
+For a no-vector fallback, index `data/linked.jsonl` and run the API with `EMBEDDINGS_ENABLED=false`. The report should identify lexical retrieval; do not present that run as hybrid search or reference expansion.
+
+Large snapshot ingest and trained embedding classifiers are separate batch workflows. Show actual run records and corpus counts if claiming they ran on sponsor compute; the availability of a command is not evidence that a million-record scan completed.
+
+## A five-minute live walkthrough
+
+1. Enter a question covered by the indexed topic, such as “Does vitamin D supplementation reduce depressive symptoms in adults?” Use SMD only when standardized continuous outcomes fit the study question. Leave SESOI blank to show the proposed value and rationale, or supply a prespecified threshold.
+2. Open **Study plan & value**. Explain total N, two-sided alpha, and the equal-arm planning assumption. Put success value, null-result value, and study cost in the same units. Raw EV is utility, not a percentage.
+3. Search. Point to the returned source coverage, retrieval mode, and warnings. The full lexical-match bucket aggregation is distinct from the displayed result page and any semantic/reference-expanded records. Counts reflect the available index.
+4. Open a source study. Check its exact evidence span, source URL, evidence tier, original CI level, and p-value inequality. Show why “no significant difference” without a compatible narrow CI remains inconclusive. Raw ratios appear in the study row; the forest plot uses the pool's analysis scale.
+5. Show the meaningful-effect threshold and the quantitative panel. Pools require at least three compatible primary studies. Different effect types, outcomes, and units stay separate. If pooling is unavailable, say so; do not change the question solely to manufacture a number.
+6. Explain the registry reporting gap. These trials have unknown outcomes. It is a measured count within the indexed registry/linking coverage, not an estimate that every unreported trial was null.
+7. Change N or SESOI and rerun. Explain how the study plan changes assurance and EV, and how SESOI changes the interpretation of the evidence. Assurance is Bayesian expected statistical power under the stated model, not the probability of a clinically meaningful benefit. Show N for 80% assurance only when returned.
+8. Expand **Query cost**, record the first run, then repeat the identical query. Compare actual token counts, extraction-cache hits, new extractions, and estimated model spend. The “read 200 abstracts,” cold, and warm columns are modeled cost comparisons; a second observed run is needed to support a measured cache-saving claim.
+9. Optionally upload a small, non-sensitive example contribution. The current flow stores files and notes as a draft with a receipt. It does not promise an autonomous manuscript, email delivery, or publication. Mock uploads explicitly save nothing.
+
+## Capture evidence for the presentation
+
+Save the first and repeated search JSON responses or browser network responses with the question and plan recorded. Preserve the indexed corpus size, source mix, date, retrieval mode, exact study IDs, and configuration assumptions alongside the run. Avoid recording authorization headers.
+
+| Claim | Evidence to show | What it does not establish |
+| --- | --- | --- |
+| Full-match counts use Elasticsearch | Response counts/scope and aggregation implementation | Exhaustive worldwide literature coverage |
+| Extraction is cached | First/repeated run token use, extraction counts, and cache-hit counts | A guaranteed savings percentage on all topics |
+| A result is a credible null | Verifiable numeric interval, scale, and SESOI | Absence of every possible benefit |
+| Registry reporting gap | Eligible completed count and missing-report count | That unknown outcomes were negative |
+| A model classifier performs well | Held-out metrics and label provenance | Performance inferred from weak-label agreement |
+| Compression saves tokens | Paired token and field-fidelity measurements | Safe compression based only on shorter prompts |
+| Sponsor compute processed a large corpus | Actual job logs, corpus counts, runtime, and resource identity | Scale implied by an available snapshot command |
+
+Token Company compression is optional and should stay disabled until the evidence-preservation gate has been measured. Do not present unrun compression, a synthetic cost baseline, or a hypothetical compute scale as observed performance.
+
+## Eleven-slide outline
+
+1. **The missed evidence problem.** A clinical planning question; published nulls, registry-only results, and unreported completed trials.
+2. **A result taxonomy with a threshold.** Five buckets, explicit SESOI, and the difference between equivalence and an underpowered result.
+3. **Live question to evidence map.** A real query, actual corpus/source counts, and displayed-study versus full-match counts.
+4. **Every claim is inspectable.** One paper and one registry record with source links, verbatim evidence, numeric tiers, CI level, and p-value inequality.
+5. **One index, two execution stages.** Offline normalization/embedding/classification/linking; FastAPI plus Elasticsearch online retrieval and extraction cache. Explain any active fallbacks.
+6. **Finding buried work with Elastic.** Demonstrate the retrieval mode actually used, full-match aggregations, null-associated terms, and reference expansion if it returned records.
+7. **Registry linkage and the reporting gap.** Deduplicated paper/trial identity and the observed unreported fraction, with coverage limitations.
+8. **Planning the next study.** Compatible random-effects pools, MDE, assurance, required N, and user-valued EV; show one N or SESOI change.
+9. **Cost before and after reuse.** Observed first and repeated query usage next to clearly labeled modeled baselines. Include compression only with paired fidelity evidence.
+10. **What was built and checked.** Registry flattener, numeric/statistical tests, streaming/browser checks, batch checkpoints, and a concrete Codex-authored contribution. Cite actual check results and run records.
+11. **Limits and next milestones.** Corpus coverage, classifier calibration, endpoint comparability, missing outcomes, and a measured expansion plan. Link the repository and demo video only after those artifacts are actually available.
+
+For a Regeneron submission, verify the current challenge's packaging requirements against the supplied sponsor documents. The architecture calls for an MIT license, public repository, demo video, and a 10–12-slide deck; preparing this guide does not publish any of them.
+
+## Explicit UI-only demonstration
+
+When service access is unavailable, use a separately labeled illustrative run:
+
+```sh
+VITE_USE_MOCK=true npm run dev
+```
+
+`?state=results` displays fictional fixtures only in that explicitly enabled mode. A banner states that all studies, findings, and costs are illustrative and that uploads are not saved. This mode demonstrates the interface and must not be used as evidence of search quality, scientific findings, API access, or cost savings.

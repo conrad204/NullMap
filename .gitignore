@@ -14,3 +14,10 @@ __pycache__/
 
 # secrets
 keys.txt
+.env.*
+!.env.example
+data/
+artifacts/
+*.pem
+*.key
+.playwright/
