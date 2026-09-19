@@ -32,6 +32,8 @@ class Experiment(BaseModel):
     p_value: float | None = None
     summary: str
     embedding: list[float] | None = None
+    year: int | None = None
+    url: str | None = None
 
     @field_validator("p_value")
     @classmethod

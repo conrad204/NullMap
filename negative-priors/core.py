@@ -21,6 +21,7 @@ from functools import lru_cache
 from typing import Iterable, Sequence
 
 from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk
 
 from schema import (
     Experiment,
@@ -51,6 +52,7 @@ except ImportError:  # pragma: no cover
 log = logging.getLogger("negative_priors")
 
 INDEX = "negative-priors"
+OPENALEX_SOURCE = "openalex"
 LOCAL_EMBED_MODEL = "thenlper/gte-small"
 OPENAI_EMBED_MODEL = "text-embedding-3-small"
 OPENAI_PARSE_MODEL = os.environ.get("NP_PARSE_MODEL", "gpt-4o-mini")
@@ -90,6 +92,8 @@ class Embedder:
             raise RuntimeError("no embedding backend: set OPENAI_API_KEY or install sentence-transformers")
 
     def __call__(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
         if self.backend.startswith("openai"):
             resp = self._client.embeddings.create(model=OPENAI_EMBED_MODEL, input=list(texts))
             return [d.embedding for d in resp.data]
@@ -104,6 +108,10 @@ def get_embedder() -> Embedder:
 
 def embed(text: str) -> list[float]:
     return get_embedder()([text])[0]
+
+
+def embed_many(texts: Sequence[str]) -> list[list[float]]:
+    return get_embedder()(texts)
 
 
 # ------------------------------------------------------------------------------------- extraction
@@ -301,6 +309,54 @@ def parse_raw_experiment(raw_text: str, source: str = "lab-notes") -> Experiment
     return experiment
 
 
+# ------------------------------------------------------------------------------- openalex ingestion
+
+
+def work_to_experiment(work: dict) -> Experiment:
+    """An OpenAlex work as an `Experiment`, so published and internal evidence share one index."""
+    abstract = _abstract_of(work)
+    title = work.get("title") or "(untitled)"
+    text = f"{title} {abstract}"
+    p_match = P_VALUE.search(abstract)
+    effect_match = EFFECT.search(abstract)
+    return Experiment(
+        experiment_id=work.get("id", "").rsplit("/", 1)[-1] or f"W{abs(hash(title))}",
+        source=OPENALEX_SOURCE,
+        hypothesis=title,
+        outcome_type=_classify(text, None, None),
+        p_value=float(p_match.group(2)) if p_match else None,
+        effect_size=float(effect_match.group(1)) if effect_match else None,
+        summary=abstract[:2000] or title,
+        year=work.get("publication_year"),
+        url=work.get("doi") or work.get("id"),
+    )
+
+
+def ingest_openalex(client: Elasticsearch, query: str, limit: int = 25) -> list[Experiment]:
+    """Pull published work for a topic into the index so later checks kNN it instead of refetching.
+
+    The live API is rate-limited and its semantic endpoint 504s often, so a demo-time corpus beats
+    a per-query call; embeddings are batched because that is the expensive half.
+    """
+    works = _fetch_works(query, limit)
+    experiments = [work_to_experiment(w) for w in works]
+    if not experiments:
+        return []
+
+    for exp, vector in zip(experiments, embed_many([e.text_for_embedding() for e in experiments])):
+        exp.embedding = vector
+    ensure_index(client, dims=len(experiments[0].embedding or []))
+    bulk(
+        client,
+        (
+            {"_index": INDEX, "_id": e.experiment_id, "_source": e.model_dump()}
+            for e in experiments
+        ),
+        refresh="wait_for",
+    )
+    return experiments
+
+
 # ------------------------------------------------------------------------------------ elasticsearch
 
 
@@ -321,6 +377,8 @@ def ensure_index(client: Elasticsearch, dims: int | None = None) -> None:
                 "dependent_vars": {"type": "object", "enabled": False},
                 "effect_size": {"type": "float"},
                 "p_value": {"type": "float"},
+                "year": {"type": "integer"},
+                "url": {"type": "keyword"},
                 "embedding": {"type": "dense_vector", "dims": dims, "index": True,
                               "similarity": "cosine"},
             }
@@ -345,7 +403,40 @@ def index_to_elastic(client: Elasticsearch, exp: Experiment, refresh: bool = Tru
 # -------------------------------------------------------------------------------------- prior risk
 
 
-def _internal_matches(client: Elasticsearch, query: str, top_k: int) -> list[PriorRisk]:
+def _origin_filter(origin: str) -> dict:
+    """Published works are the same documents with `source == "openalex"`, so origin is a filter."""
+    term = {"term": {"source": OPENALEX_SOURCE}}
+    return {"bool": {"filter" if origin == "openalex" else "must_not": [term]}}
+
+
+def _cosine_of(client: Elasticsearch, vector: list[float], ids: list[str]) -> dict[str, float]:
+    """Cosine for BM25-only hits, which carry no kNN score; reporting 0.0 would hide a real prior."""
+    if not ids:
+        return {}
+    hits = client.search(
+        index=INDEX,
+        query={
+            "script_score": {
+                "query": {"ids": {"values": ids}},
+                # script_score rejects negative scores, hence the +1 shift
+                "script": {
+                    "source": "cosineSimilarity(params.q, 'embedding') + 1.0",
+                    "params": {"q": vector},
+                },
+            }
+        },
+        size=len(ids),
+        source=False,
+    )["hits"]["hits"]
+    return {h["_id"]: h["_score"] - 1.0 for h in hits}
+
+
+def _index_matches(
+    client: Elasticsearch,
+    query: str,
+    top_k: int,
+    origin: str = "internal",
+) -> list[PriorRisk]:
     """kNN and BM25 as separate legs: RRF decides the order, cosine stays as the reported score.
 
     Blending the two ES scores into one number would make `score` query-relative -- the top hit
@@ -354,15 +445,20 @@ def _internal_matches(client: Elasticsearch, query: str, top_k: int) -> list[Pri
     if not client.indices.exists(index=INDEX):
         return []
     vector = embed(query)
+    scope = _origin_filter(origin)
     dense = client.search(
         index=INDEX,
-        knn={"field": "embedding", "query_vector": vector, "k": top_k, "num_candidates": 100},
+        knn={"field": "embedding", "query_vector": vector, "k": top_k, "num_candidates": 100,
+             "filter": scope},
         size=top_k,
         source_excludes=["embedding"],
     )["hits"]["hits"]
     lexical = client.search(
         index=INDEX,
-        query={"multi_match": {"query": query, "fields": ["hypothesis^2", "summary"]}},
+        query={"bool": {
+            "must": [{"multi_match": {"query": query, "fields": ["hypothesis^2", "summary"]}}],
+            **scope["bool"],
+        }},
         size=top_k,
         source_excludes=["embedding"],
     )["hits"]["hits"]
@@ -370,6 +466,8 @@ def _internal_matches(client: Elasticsearch, query: str, top_k: int) -> list[Pri
     sources = {h["_id"]: h["_source"] for h in dense + lexical}
     # ES reports cosine as (1 + cos) / 2
     cosine = {h["_id"]: 2 * h["_score"] - 1 for h in dense}
+    cosine.update(_cosine_of(client, vector, [h["_id"] for h in lexical if h["_id"] not in cosine]))
+
     fused: dict[str, float] = {}
     for leg in (dense, lexical):
         for rank, hit in enumerate(leg):
@@ -378,11 +476,13 @@ def _internal_matches(client: Elasticsearch, query: str, top_k: int) -> list[Pri
     ordered = sorted(fused, key=lambda i: -fused[i])[:top_k]
     return [
         PriorRisk(
-            origin="internal",
+            origin=origin,  # type: ignore[arg-type]
             ref=sources[i]["experiment_id"],
             title=sources[i]["hypothesis"],
             outcome_type=sources[i]["outcome_type"],
             score=round(cosine.get(i, 0.0), 4),
+            year=sources[i].get("year"),
+            url=sources[i].get("url"),
             p_value=sources[i].get("p_value"),
             effect_size=sources[i].get("effect_size"),
             snippet=sources[i].get("summary", "")[:300],
@@ -418,16 +518,15 @@ def _openalex_query(query: str, top_k: int, semantic: bool) -> list[dict]:
     return works.get(per_page=top_k)
 
 
-def _published_matches(query: str, top_k: int) -> list[PriorRisk]:
+def _fetch_works(query: str, top_k: int) -> list[dict]:
+    """Semantic first, then lexical, then lexical without internal codes ('NP-114' is unpublished)."""
     if Works is None:
         return []
     pyalex.config.email = os.environ.get("OPENALEX_EMAIL", "hackmit-negative-priors@example.com")
     semantic_first = os.environ.get("NP_OPENALEX_SEMANTIC", "1") != "0"
     attempts = [(query, True)] * (2 if semantic_first else 0)
-    # last resort: lexical, then lexical without internal codes ('NP-114' matches nothing published)
     attempts += [(query, False), (_generalize(query), False)]
 
-    works: list[dict] = []
     for i, (text, semantic) in enumerate(attempts):
         if not text:
             continue
@@ -439,8 +538,12 @@ def _published_matches(query: str, top_k: int) -> list[PriorRisk]:
             log.warning("OpenAlex lookup failed (semantic=%s): %s", semantic, exc)
             continue
         if works:
-            break
+            return works
+    return []
 
+
+def _published_matches(query: str, top_k: int) -> list[PriorRisk]:
+    works = _fetch_works(query, top_k)
     matches: list[PriorRisk] = []
     for rank, work in enumerate(works[:top_k]):
         abstract = _abstract_of(work)
@@ -498,10 +601,15 @@ def check_prior_risk(
     top_k: int = 5,
     include_openalex: bool = True,
 ) -> PriorCheck:
-    """Find prior attempts -- internal failures first, then published work -- for a proposal."""
-    matches = _internal_matches(client, protocol_or_hypothesis, top_k)
+    """Find prior attempts -- internal failures first, then published work -- for a proposal.
+
+    Published work comes from whatever `ingest_openalex` has already indexed; the live API is only
+    called when that corpus has nothing, so a warm index means no per-query OpenAlex round trip.
+    """
+    matches = _index_matches(client, protocol_or_hypothesis, top_k, origin="internal")
     if include_openalex:
-        matches += _published_matches(protocol_or_hypothesis, top_k)
+        published = _index_matches(client, protocol_or_hypothesis, top_k, origin="openalex")
+        matches += published or _published_matches(protocol_or_hypothesis, top_k)
 
     risk = _score_risk(matches)
     similar, _ = similarity_band()
@@ -539,8 +647,11 @@ __all__ = [
     "check_prior_risk",
     "connect",
     "embed",
+    "embed_many",
     "get_embedder",
     "index_to_elastic",
+    "ingest_openalex",
     "parse_raw_experiment",
     "reset_index",
+    "work_to_experiment",
 ]

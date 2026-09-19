@@ -1,13 +1,29 @@
 # negative-priors
 
 Raw engine for the HackMIT project: turn failed runs into a searchable prior, then warn before
-someone repeats one. No API server, no MCP layer — three functions and a demo script.
+someone repeats one. No API server, no MCP layer — four functions and a demo script.
 
 ```
 parse_raw_experiment(raw_text)         messy lab note / CSV excerpt -> Experiment (+ embedding)
 index_to_elastic(client, experiment)   Experiment -> elasticsearch (dense_vector + BM25)
 check_prior_risk(client, protocol)     protocol -> PriorCheck (internal failures + published work)
+ingest_openalex(client, topic)         OpenAlex works -> the same index, as `source="openalex"`
 ```
+
+## Published prior art
+
+OpenAlex can be read live per query, but its semantic endpoint is rate-limited to ~1 req/s and 504s
+often, and the lexical fallback answers a JAK2 query with mushroom oncology. So `ingest_openalex`
+pulls a topic once, reconstructs each `abstract_inverted_index` into text, embeds it and writes it
+into the *same* index as internal runs, with `source="openalex"`, `year` and `url`.
+
+Origin is then a filter, not a second store: `check_prior_risk` runs the hybrid query twice, once
+with `must_not source:openalex` (internal) and once with `filter source:openalex` (published), and
+only hits the live API when the published leg comes back empty. Published matches never contribute
+to `risk_score` — `risk_score` is about *our own* runs having already failed; papers are context.
+
+A work's `outcome_type` comes from the same classifier as lab notes read over title+abstract, so it
+is a weak signal on published text — good enough to surface "this was already tried", not evidence.
 
 ## Run it
 
@@ -59,8 +75,8 @@ A new embedding model needs its own band; the default (0.60 → 0.90) is a guess
 ## Files
 
 - `schema.py` — `Experiment`, `ExperimentDraft`/`ExperimentExtraction` (what the LLM fills in), `PriorRisk`, `PriorCheck`
-- `core.py` — the three functions plus the extraction heuristics and OpenAlex leg
-- `test_core.py` — end-to-end demo: two messy failures, indexed, then one proposal and one control
+- `core.py` — the three functions plus the extraction heuristics, OpenAlex ingestion and live leg
+- `test_core.py` — end-to-end demo: two messy failures indexed, 30 OpenAlex works ingested, then one proposal and one control
 
 ## Environment variables
 

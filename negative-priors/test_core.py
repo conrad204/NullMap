@@ -15,6 +15,7 @@ from core import (
     connect,
     get_embedder,
     index_to_elastic,
+    ingest_openalex,
     parse_raw_experiment,
     reset_index,
 )
@@ -52,6 +53,12 @@ NEW_PROTOCOL = (
     "Proposed protocol: dose HEK293 cells with NP-114 at 100 uM in aqueous PBS and measure "
     "JAK2 phosphorylation to confirm target engagement."
 )
+
+# topics to pull published prior art for, once, instead of calling OpenAlex on every check
+CORPUS_TOPICS = [
+    "small molecule JAK2 kinase inhibitor phosphorylation assay in cell lysate",
+    "compound aqueous solubility precipitation artifact in cell viability assays",
+]
 
 
 def show_experiment(exp: Experiment) -> None:
@@ -104,10 +111,17 @@ def main() -> int:
     for exp in experiments:
         print(f"  indexed {index_to_elastic(client, exp)}  <- {exp.source}")
 
-    print("\n[3] PRIOR CHECK ------------------------------------------------------------------\n")
+    print("\n[3] INGEST OPENALEX --------------------------------------------------------------\n")
+    for topic in CORPUS_TOPICS:
+        works = ingest_openalex(client, topic, limit=15)
+        print(f"  {len(works):>3} works indexed  <- {topic}")
+        for w in works[:3]:
+            print(f"        {w.experiment_id}  {w.outcome_type:<13} {w.hypothesis[:70]}")
+
+    print("\n[4] PRIOR CHECK ------------------------------------------------------------------\n")
     show_check(check_prior_risk(client, NEW_PROTOCOL, top_k=5))
 
-    print("[4] CONTROL QUERY (unrelated proposal, should not flag) --------------------------\n")
+    print("[5] CONTROL QUERY (unrelated proposal, should not flag) --------------------------\n")
     show_check(
         check_prior_risk(
             client,
