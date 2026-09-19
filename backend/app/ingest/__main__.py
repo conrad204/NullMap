@@ -84,15 +84,14 @@ def transform_file(source: Path, output: Path, transform, *, resume: bool,
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="NullMap resumable ingestion; all intermediate stages use JSONL")
     commands = root.add_subparsers(dest="command", required=True)
-    fetch = commands.add_parser("fetch", help="Download a bounded OpenAlex/ClinicalTrials.gov slice")
-    fetch.add_argument("source", choices=["openalex", "ctgov"])
+    fetch = commands.add_parser("fetch", help="Download ClinicalTrials.gov records")
+    fetch.add_argument("source", choices=["ctgov"])
     fetch.add_argument("--output", type=Path, required=True)
     fetch.add_argument("--query", default="")
     fetch.add_argument("--filter", default=None)
     fetch.add_argument("--limit", type=int, default=1000)
-    fetch.add_argument("--page-size", type=int)
-    fetch.add_argument("--sort", default="publication_date:desc",
-                       help="OpenAlex sort, e.g. cited_by_count:desc; ignored for ClinicalTrials.gov")
+    fetch.add_argument("--all", action="store_true", help="Continue until the registry cursor is exhausted")
+    fetch.add_argument("--page-size", type=int, default=1000)
     fetch.add_argument("--resume", action="store_true")
     for name in ("normalize", "classify", "embed"):
         command = commands.add_parser(name)
@@ -122,14 +121,22 @@ def parser() -> argparse.ArgumentParser:
     index.add_argument("--resume", action="store_true")
     index.add_argument("--sesoi", type=float, default=0.2)
     index.add_argument("--effect-type", default="SMD")
-    snapshot = commands.add_parser("snapshot", help="Bounded projected Parquet scan")
+    references = commands.add_parser("reference-ids", help="Collect missing review-reference IDs for S3 backfill")
+    references.add_argument("--input", type=Path, nargs="+", required=True)
+    references.add_argument("--output", type=Path, required=True)
+    snapshot = commands.add_parser("snapshot", help="Read the public OpenAlex S3 Parquet snapshot")
     snapshot.add_argument("--input", nargs="+", default=[])
-    snapshot.add_argument("--manifest", type=Path, help='JSON array of {"url": "s3://...", "size_bytes": 123}')
+    snapshot.add_argument("--manifest", help="Public S3 manifest URL or a pinned local manifest; defaults to public works")
     snapshot.add_argument("--max-files", type=int, help="Select at most this many manifest files before enforcing the byte budget")
-    snapshot.add_argument("--output", type=Path, required=True)
+    snapshot.add_argument("--output", type=Path, default=Path("data/snapshot/works.jsonl"))
     snapshot.add_argument("--max-bytes", type=int, default=5_000_000_000)
-    snapshot.add_argument("--limit", type=int, default=1_000_000)
-    snapshot.add_argument("--topic", default="medicine")
+    snapshot.add_argument("--limit", type=int, help="Optional explicit row cap; absent means exhaust selected parts")
+    snapshot.add_argument("--topic", default="", help="Optional additional topic-name filter")
+    snapshot.add_argument("--profile", choices=["hypertension-kidney", "all"], default="hypertension-kidney")
+    snapshot.add_argument("--work-ids", type=Path, help="Backfill these newline-separated W IDs from S3; overrides topic/profile filtering")
+    snapshot.add_argument("--min-free-bytes", type=int, default=1_000_000_000)
+    snapshot.add_argument("--plan", action="store_true", help="Inspect the manifest without reading Parquet")
+    snapshot.add_argument("--resume", action="store_true")
     return root
 
 
@@ -139,9 +146,9 @@ async def run(args) -> dict:
     if getattr(args, "batch_size", 1) <= 0:
         raise ValueError("batch-size must be positive")
     if args.command == "fetch":
-        state = await fetch_pages(args.source, args.output, api_key=settings.openalex_api_key,
-                                  query=args.query, filters=args.filter, limit=args.limit,
-                                  resume=args.resume, page_size=args.page_size, sort=args.sort)
+        state = await fetch_pages(args.source, args.output,
+                                  query=args.query, filters=args.filter, limit=None if args.all else args.limit,
+                                  resume=args.resume, page_size=args.page_size)
         return {"records": state["count"], "source_exhausted": state["done"], "output": str(args.output)}
     if args.command == "label":
         from app.ingest.label import label_file
@@ -195,20 +202,55 @@ async def run(args) -> dict:
     elif args.command == "train-classifier":
         from app.classifier import train_classifier
         return train_classifier(list(read_jsonl(args.input)), args.output, label_field=args.label_field)
+    elif args.command == "reference-ids":
+        from app.ingest.openalex import normalize_work
+        known, referenced = set(), set()
+        for path in args.input:
+            for row in read_jsonl(path):
+                study = normalize_work(row) if "source" not in row else row
+                known.add(str(study["id"]).rsplit("/", 1)[-1])
+                if study.get("is_review"):
+                    referenced.update(str(x).rsplit("/", 1)[-1] for x in study.get("referenced_works", []))
+        missing = sorted(referenced - known)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.output.with_suffix(args.output.suffix + ".tmp")
+        temporary.write_text("".join(identifier + "\n" for identifier in missing))
+        temporary.replace(args.output)
+        return {"missing_reference_ids": len(missing), "output": str(args.output)}
     elif args.command == "snapshot":
-        from app.ingest.snapshot import scan_snapshot
-        manifest = json.loads(args.manifest.read_text()) if args.manifest else []
-        if isinstance(manifest, dict):
-            manifest = manifest.get("files", [])
-        if args.max_files is not None:
-            if args.max_files <= 0:
-                raise ValueError("max-files must be positive")
-            manifest = manifest[:args.max_files]
-        remote_sizes = {entry["url"]: int(entry.get("size_bytes") or entry.get("meta", {}).get("content_length", 0))
-                        for entry in manifest}
-        files = [*args.input, *remote_sizes.keys()]
-        return scan_snapshot(files, args.output, max_bytes=args.max_bytes, limit=args.limit,
-                             topic=args.topic, remote_sizes=remote_sizes)
+        from app.ingest.snapshot import fingerprint, load_manifest, plan_manifest, scan_snapshot
+        if args.input and args.manifest:
+            raise ValueError("Choose --input local files or --manifest, not both")
+        location = args.manifest or settings.openalex_snapshot_manifest
+        if args.input:
+            manifest = {"files": [{"url": str(Path(x).resolve()), "size_bytes": Path(x).stat().st_size} for x in args.input]}
+        else:
+            manifest = await load_manifest(location)
+        plan = plan_manifest(manifest, max_files=args.max_files)
+        if args.plan:
+            return {k: v for k, v in plan.items() if k != "files"}
+        pinned = args.output.with_suffix(args.output.suffix + ".manifest.json")
+        if pinned.exists() and fingerprint(json.loads(pinned.read_text())) != plan["manifest_sha256"]:
+            raise ValueError("The snapshot manifest changed; use a new output directory for this release")
+        atomic_json(pinned, manifest)
+        files = [part["url"] for part in plan["files"]]
+        work_ids = {line.strip() for line in args.work_ids.read_text().splitlines() if line.strip()} if args.work_ids else None
+        result = await asyncio.to_thread(
+            scan_snapshot, files, args.output, max_bytes=args.max_bytes, limit=args.limit,
+            topic=args.topic, profile=args.profile,
+            remote_sizes={part["url"]: part["size_bytes"] for part in plan["files"]},
+            resume=args.resume, snapshot_id=plan["manifest_sha256"], snapshot_date=plan["snapshot_date"],
+            all_parts_selected=plan["all_parts_selected"], work_ids=work_ids,
+            min_free_bytes=args.min_free_bytes,
+            progress=lambda state: print(json.dumps({"stage": "snapshot", "part": state["part"], "parts": state["selected_parts"], "records": state["records"]}), flush=True),
+        )
+        if not args.input and "://" in location and result["selected_parts_complete"]:
+            if fingerprint(await load_manifest(location)) != plan["manifest_sha256"]:
+                result["complete_snapshot_scope"] = False
+                result["manifest_changed_during_scan"] = True
+                atomic_json(args.output.with_suffix(args.output.suffix + ".checkpoint.json"), result)
+                raise RuntimeError("Public snapshot changed during the scan; result is not a complete release")
+        return result
     elif args.command == "index":
         from app.repository import ElasticRepository
         from app.statistics import assign_bucket

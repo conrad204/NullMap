@@ -62,10 +62,20 @@ def test_llm_labels_require_exact_evidence():
         validate_label(AbstractLabel(label="null", evidence_span="Invented sentence."), row)
 
 
-def test_bootstrap_fingerprint_changes_with_lexicon_version(tmp_path, monkeypatch):
-    import app.bootstrap as bootstrap
+def test_materialization_checkpoint_changes_with_lexicon_version(tmp_path, monkeypatch):
+    import asyncio
+
+    import app.ingest.materialize as ingestion
+
+    class Repository:
+        index = "test"
+
+        async def bulk_upsert(self, rows):
+            pass
+
     source = tmp_path / "source.jsonl"
     source.write_text('{"id":"W1"}\n')
-    before = bootstrap._fingerprint([source])
-    monkeypatch.setattr(bootstrap, "WEAK_CLASSIFIER_VERSION", "future-test-version")
-    assert bootstrap._fingerprint([source]) != before
+    asyncio.run(ingestion.materialize(source, Repository()))
+    monkeypatch.setattr(ingestion, "WEAK_CLASSIFIER_VERSION", "future-test-version")
+    with pytest.raises(ValueError, match="Source, target index or model changed"):
+        asyncio.run(ingestion.materialize(source, Repository()))

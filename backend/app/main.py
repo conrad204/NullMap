@@ -69,7 +69,8 @@ async def ready(request: Request):
         "status": "ready",
         "elasticsearch": elastic,
         "openaiConfigured": bool(settings.openai_api_key),
-        "openalexConfigured": bool(settings.openalex_api_key),
+        "openalexSource": "public_s3_snapshot",
+        "openalexSnapshotManifest": settings.openalex_snapshot_manifest,
         "embeddingsEnabled": settings.embeddings_enabled,
         "compressionEnabled": settings.compression_enabled and settings.compression_validated,
     }

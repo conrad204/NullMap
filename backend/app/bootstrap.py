@@ -1,184 +1,184 @@
-"""Reproducible real-data demo bootstrap: ``python -m app.bootstrap --per-topic 100``."""
+"""Public S3 corpus build. Run --plan first, then --run on the batch machine."""
 
 import argparse
 import asyncio
-import hashlib
 import json
-from collections import Counter
 from pathlib import Path
 
-from app.classifier import WEAK_CLASSIFIER_VERSION, weak_classify
 from app.config import settings
-from app.ingest import flatten_trial, link_studies, normalize_work
 from app.ingest.__main__ import parser as ingest_parser
-from app.ingest.__main__ import read_jsonl, run, transform_file
-from app.ingest.fetch import atomic_json, fetch_pages, fetch_work
-from app.ingest.openalex import NORMALIZER_VERSION
-
-TOPICS = {
-    "vitamin-d": "vitamin D depression",
-    "omega-3": "omega-3 cognitive decline",
-    "knee": "arthroscopic surgery knee osteoarthritis",
-}
-HISTORICAL_FILTER = "type:article|review,has_abstract:true,primary_topic.field.id:27"
-# Source DOIs verified against NEJM, JAMA and PubMed. These are source lookups,
-# not hand-entered effects; a landmark with no source abstract is reported/skipped.
-LANDMARKS = {
-    "moseley-2002": "https://doi.org/10.1056/NEJMoa013259",
-    "kirkley-2008": "https://doi.org/10.1056/NEJMoa0708333",
-    "sihvonen-2013": "https://doi.org/10.1056/NEJMoa1305189",
-    "vital-dep-2020": "https://doi.org/10.1001/jama.2020.10224",
-    "areds2-cognition-2015": "https://doi.org/10.1001/jama.2015.9677",
-    "opal-cognition-2010": "https://doi.org/10.3945/ajcn.2009.29121",
-    "mapt-cognition-2017": "pmid:28359749",
-}
+from app.ingest.__main__ import run as ingest
+from app.ingest.fetch import atomic_json, fetch_pages
+from app.ingest.materialize import materialize
+from app.ingest.scope import CTGOV_QUERY, SCOPE_VERSION
+from app.ingest.snapshot import fingerprint, load_manifest, plan_manifest
 
 
-def _fingerprint(paths: list[Path], extra: str = "bootstrap-v1") -> str:
-    digest = hashlib.sha256(f"{extra}:{NORMALIZER_VERSION}:{WEAK_CLASSIFIER_VERSION}".encode())
-    for path in paths:
-        with path.open("rb") as handle:
-            while chunk := handle.read(1024 * 1024):
-                digest.update(chunk)
-    return digest.hexdigest()[:16]
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    action = result.add_mutually_exclusive_group()
+    action.add_argument("--plan", action="store_true", help="Read only the manifest (the default)")
+    action.add_argument("--run", action="store_true", help="Scan, normalize, embed, link and index")
+    result.add_argument("--manifest", default=settings.openalex_snapshot_manifest)
+    result.add_argument("--data-dir", type=Path, default=Path("data/research-s3"))
+    result.add_argument("--max-files", type=int, help="Explicit partial snapshot for smoke tests")
+    result.add_argument("--max-snapshot-bytes", type=int, default=5_000_000_000)
+    result.add_argument(
+        "--max-records", type=int, help="Explicit partial record cap; default has no cap"
+    )
+    result.add_argument(
+        "--registry-limit", type=int, help="Explicit partial registry cap; default exhausts cursor"
+    )
+    result.add_argument("--skip-registry", action="store_true")
+    result.add_argument("--skip-embeddings", action="store_true")
+    result.add_argument(
+        "--work-ids", type=Path, help="Reference backfill from S3; requires --skip-registry"
+    )
+    result.add_argument("--batch-size", type=int, default=100)
+    result.add_argument("--min-free-bytes", type=int, default=1_000_000_000)
+    return result
 
 
-def _write_rows(path: Path, rows: list[dict]) -> None:
-    if path.exists():
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("w") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    temporary.replace(path)
+async def bootstrap(args) -> dict:
+    if args.work_ids and not args.skip_registry:
+        raise ValueError("Reference backfill requires --skip-registry")
+    if args.registry_limit is not None and args.registry_limit <= 0:
+        raise ValueError("registry-limit must be positive")
+    if args.batch_size <= 0:
+        raise ValueError("batch-size must be positive")
+    if args.max_records is not None and args.max_records <= 0:
+        raise ValueError("max-records must be positive")
+    if args.max_snapshot_bytes <= 0 or args.min_free_bytes < 0:
+        raise ValueError("Snapshot budget must be positive and free-space threshold nonnegative")
+    manifest = await load_manifest(args.manifest)
+    plan = plan_manifest(manifest, max_files=args.max_files)
+    summary = {k: v for k, v in plan.items() if k != "files"}
+    summary.update(
+        source="public_s3",
+        scope="reference_backfill" if args.work_ids else SCOPE_VERSION,
+        registry_scope="all statuses, study types and dates for the hypertension/kidney condition union",
+        target_index=settings.elastic_index,
+        note="Complete means all matches under the declared scope in the pinned snapshot, not all research worldwide.",
+    )
+    if not args.run:
+        return summary
+    if plan["physical_bytes_budgeted"] > args.max_snapshot_bytes:
+        raise ValueError(
+            f"Plan requires {plan['physical_bytes_budgeted']} physical bytes; set --max-snapshot-bytes after inspecting capacity on the batch host"
+        )
+    from app.embeddings import get_embedder
+    from app.repository import ElasticRepository
 
+    args.data_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = args.data_dir / "manifest.json"
+    if manifest_path.exists() and json.loads(manifest_path.read_text()) != manifest:
+        raise ValueError("Snapshot changed; use a new data directory for the new release")
+    atomic_json(manifest_path, manifest)
+    report_path = args.data_dir / "corpus-summary.json"
+    summary.update(complete=False, stage="starting", stages={})
+    atomic_json(report_path, summary)
+    repository = ElasticRepository()
+    embedder = (
+        None
+        if args.skip_embeddings
+        else get_embedder(settings.embedding_model, settings.embedding_device)
+    )
 
-async def bootstrap(*, per_topic: int = 100, cited_per_topic: int = 30,
-                    data_dir: Path = Path("data"), embeddings: bool = True,
-                    landmarks: bool = True) -> dict:
-    if per_topic < 1 or cited_per_topic < 0:
-        raise ValueError("per-topic must be positive and cited-per-topic cannot be negative")
-    raw_dir = data_dir / "raw"
-    stages = data_dir / "bootstrap-stages"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    stages.mkdir(parents=True, exist_ok=True)
-    files: list[Path] = []
-    fetch_counts = []
-    for name, query in TOPICS.items():
-        for source in ("ctgov", "openalex"):
-            path = raw_dir / f"{name}-{source}.jsonl"
-            state = await fetch_pages(source, path, api_key=settings.openalex_api_key,
-                                      query=query, limit=per_topic, resume=True)
-            files.append(path)
-            row = {"topic": name, "source": source, "selection": "recent",
-                   "records": state["count"], "source_exhausted": state["done"]}
-            fetch_counts.append(row)
-            print(json.dumps({"stage": "fetch", **row}), flush=True)
-        if cited_per_topic:
-            path = raw_dir / f"{name}-openalex-cited.jsonl"
-            state = await fetch_pages("openalex", path, api_key=settings.openalex_api_key,
-                                      query=query, filters=HISTORICAL_FILTER,
-                                      limit=cited_per_topic, sort="cited_by_count:desc", resume=True)
-            files.append(path)
-            row = {"topic": name, "source": "openalex", "selection": "most_cited_all_years",
-                   "records": state["count"], "source_exhausted": state["done"]}
-            fetch_counts.append(row)
-            print(json.dumps({"stage": "fetch", **row}), flush=True)
-    landmark_status = []
-    if landmarks:
-        landmark_rows = []
-        for name, identifier in LANDMARKS.items():
-            path = raw_dir / f"landmark-{name}.json"
-            try:
-                if path.exists():
-                    work = json.loads(path.read_text())
-                else:
-                    work = await fetch_work(identifier, api_key=settings.openalex_api_key)
-                    atomic_json(path, work)
-                normalized = normalize_work(work)
-                landmark_status.append({"name": name, "source": identifier,
-                                        "id": normalized["id"] if normalized else work.get("id"),
-                                        "abstract_available": normalized is not None})
-                if normalized:
-                    landmark_rows.append(work)
-            except (RuntimeError, ValueError, TypeError):
-                landmark_status.append({"name": name, "source": identifier,
-                                        "abstract_available": False, "lookup_failed": True})
-            print(json.dumps({"stage": "landmark", **landmark_status[-1]}), flush=True)
-        landmark_hash = hashlib.sha256(json.dumps(landmark_rows, sort_keys=True).encode()).hexdigest()[:16]
-        path = stages / f"landmarks-{landmark_hash}.jsonl"
-        _write_rows(path, landmark_rows)
-        files.append(path)
-    normalized_paths = []
-    for source in files:
-        target = stages / f"normalized-{source.stem}-{_fingerprint([source])}.jsonl"
+    def progress(stage):
+        def emit(state):
+            summary["stage"] = stage
+            summary["stages"][stage] = state
+            atomic_json(report_path, summary)
+            print(json.dumps({"stage": stage, "records": state["records"]}), flush=True)
 
-        def normalize(rows):
-            output = []
-            for row in rows:
-                study = flatten_trial(row) if "protocolSection" in row else normalize_work(row)
-                if study is not None:
-                    if study["source"] == "openalex":
-                        study.update(weak_classify(study["abstract"], is_review=study["is_review"]))
-                    output.append(study)
-            return output
+        return emit
 
-        transform_file(source, target, normalize, resume=True,
-                       stage=f"bootstrap-normalize-{NORMALIZER_VERSION}-{WEAK_CLASSIFIER_VERSION}")
-        normalized_paths.append(target)
-    digest = _fingerprint(normalized_paths)
-    normalized_path = stages / f"studies-{digest}.jsonl"
-    unique = {row["id"]: row for path in normalized_paths for row in read_jsonl(path)}
-    _write_rows(normalized_path, list(unique.values()))
-    print(json.dumps({"stage": "normalize_and_classify", "unique_records": len(unique)}), flush=True)
-    prepared_path = normalized_path
-    if embeddings:
-        model_digest = hashlib.sha256(settings.embedding_model.encode()).hexdigest()[:8]
-        prepared_path = stages / f"embedded-{digest}-{model_digest}.jsonl"
-        await run(ingest_parser().parse_args([
-            "embed", "--input", str(normalized_path), "--output", str(prepared_path),
-            "--batch-size", "32", "--resume",
-        ]))
-        print(json.dumps({"stage": "embed", "records": len(unique), "model": settings.embedding_model}), flush=True)
-    linked_path = stages / f"linked-{_fingerprint([prepared_path])}.jsonl"
-    if not linked_path.exists():
-        _write_rows(linked_path, link_studies(list(read_jsonl(prepared_path))))
-    linked = list(read_jsonl(linked_path))
-    result = await run(ingest_parser().parse_args([
-        "index", "--input", str(linked_path), "--batch-size", "100", "--resume",
-    ]))
-    summary = {
-        "fetched_slices": fetch_counts, "landmarks": landmark_status,
-        "weak_classifier_version": WEAK_CLASSIFIER_VERSION,
-        "normalizer_version": NORMALIZER_VERSION,
-        "unique_before_linking": len(unique), "canonical_studies": len(linked),
-        "source_counts": dict(Counter(row["source"] for row in linked)),
-        "weak_result_labels": dict(Counter(row["result_label"] for row in linked)),
-        "reviews": sum(bool(row.get("is_review")) for row in linked),
-        "embedded_records": sum(bool(row.get("embedding")) for row in linked),
-        "indexed_records": result["records"], "index": settings.elastic_index,
-        "canonical_jsonl": str(linked_path),
-        "scope": "Bounded topic slices plus explicit landmark lookups; not exhaustive clinical coverage.",
-    }
-    atomic_json(data_dir / "bootstrap-summary.json", summary)
-    return summary
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--per-topic", type=int, default=100)
-    parser.add_argument("--cited-per-topic", type=int, default=30)
-    parser.add_argument("--data-dir", type=Path, default=Path("data"))
-    parser.add_argument("--skip-embeddings", action="store_true", help="Use BM25 only")
-    parser.add_argument("--skip-landmarks", action="store_true")
-    args = parser.parse_args()
     try:
-        summary = asyncio.run(bootstrap(per_topic=args.per_topic, cited_per_topic=args.cited_per_topic,
-                                        data_dir=args.data_dir, embeddings=not args.skip_embeddings,
-                                        landmarks=not args.skip_landmarks))
-        print(json.dumps(summary, indent=2))
-    except (ValueError, RuntimeError, TypeError) as exc:
+        await repository.ensure_index()
+        registry = None
+        if not args.skip_registry:
+            registry_path = args.data_dir / "ctgov.jsonl"
+            registry = await fetch_pages(
+                "ctgov",
+                registry_path,
+                query=CTGOV_QUERY,
+                filters="",
+                limit=args.registry_limit,
+                resume=True,
+            )
+            summary["registry"] = registry
+            await materialize(
+                registry_path,
+                repository,
+                embedder=embedder,
+                batch_size=args.batch_size,
+                progress=progress("registry_index"),
+            )
+        paper_path = args.data_dir / "openalex.jsonl"
+        commands = [
+            "snapshot",
+            "--manifest",
+            str(manifest_path),
+            "--output",
+            str(paper_path),
+            "--profile",
+            "hypertension-kidney",
+            "--resume",
+            "--max-bytes",
+            str(args.max_snapshot_bytes),
+            "--min-free-bytes",
+            str(args.min_free_bytes),
+        ]
+        for flag, value in (
+            ("--max-files", args.max_files),
+            ("--limit", args.max_records),
+            ("--work-ids", args.work_ids),
+        ):
+            if value is not None:
+                commands.extend([flag, str(value)])
+        summary["stage"] = "snapshot_scan"
+        atomic_json(report_path, summary)
+        snapshot = await ingest(ingest_parser().parse_args(commands))
+        summary["snapshot"] = snapshot
+        if "://" in args.manifest and snapshot["selected_parts_complete"]:
+            if fingerprint(await load_manifest(args.manifest)) != plan["manifest_sha256"]:
+                snapshot["complete_snapshot_scope"] = False
+                snapshot["manifest_changed_during_scan"] = True
+                atomic_json(paper_path.with_suffix(".jsonl.checkpoint.json"), snapshot)
+                raise RuntimeError(
+                    "Public snapshot changed during the scan; result is not a complete release"
+                )
+        await materialize(
+            paper_path,
+            repository,
+            embedder=embedder,
+            batch_size=args.batch_size,
+            progress=progress("snapshot_index"),
+        )
+        summary.update(
+            stage="finished",
+            complete=bool(
+                snapshot["complete_snapshot_scope"] and registry is not None and registry["done"]
+            ),
+            index=await repository.health(),
+        )
+        if args.work_ids:
+            summary["reference_scan_complete"] = snapshot["complete_snapshot_scope"]
+        atomic_json(report_path, summary)
+        return summary
+    except Exception as exc:
+        summary.update(stage="interrupted", complete=False, error=type(exc).__name__)
+        atomic_json(report_path, summary)
+        raise
+    finally:
+        await repository.close()
+
+
+def main():
+    args = parser().parse_args()
+    try:
+        print(json.dumps(asyncio.run(bootstrap(args)), indent=2))
+    except (ValueError, RuntimeError, FileExistsError, TypeError) as exc:
         raise SystemExit(str(exc)) from None
 
 

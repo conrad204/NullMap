@@ -14,7 +14,7 @@ Null results are slow to find for three separate reasons, and each needs a diffe
 
 The efficiency claim, stated plainly: **move the expensive reading from query time to index time.** A naive "AI literature review" sends the top 200 abstracts to an LLM per query. Here, the "2 positive / 1 credible null / 3 inconclusive / 1 failed / 1 unreported" breakdown is an Elasticsearch aggregation over precomputed fields. It returns in milliseconds, covers every matching study rather than the top 50, and costs zero LLM calls. The LLM is only used for (a) parsing the user's idea and (b) pulling numbers out of the handful of top papers nobody has extracted before, and those extractions are written back to the index so they are never paid for twice.
 
-One more retrieval trick does a lot of work: **meta-analysis expansion**. A systematic review on your topic is a hand-curated list of 20 to 60 studies, nulls included, that someone already screened. Find the reviews, pull their `referenced_works` from OpenAlex, and re-rank those against the query. This surfaces nulls whose abstracts share no keywords with the user's phrasing.
+One more retrieval trick does a lot of work: **meta-analysis expansion**. A systematic review on your topic is a hand-curated list of 20 to 60 studies, nulls included, that someone already screened. Find the reviews, read their snapshot-imported `referenced_works` from the index, and re-rank those against the query. This surfaces nulls whose abstracts share no keywords with the user's phrasing.
 
 **Scope recommendation:** build and demo on clinical/biomedical questions. That is where the registry exists, so buckets 4 and 5 of your taxonomy come from hard data rather than LLM judgment. It also puts you squarely in the Regeneron challenge and the Healthcare track. The paper side of the pipeline is domain-agnostic, so say in the pitch that it extends to any field.
 
@@ -23,7 +23,7 @@ One more retrieval trick does a lot of work: **meta-analysis expansion**. A syst
 ```mermaid
 flowchart TB
   subgraph Offline["Index time - runs once on Voloridge EC2 / GPU"]
-    OA["OpenAlex: API slice + S3 snapshot"] --> RB["Rebuild abstracts from inverted index"]
+    OA["OpenAlex: public S3 Parquet snapshot"] --> RB["Rebuild available abstracts; retain metadata-only works"]
     CT["ClinicalTrials.gov API v2 bulk pull"] --> FL["Flatten status, dates, results analyses"]
     RB --> EMB["Embed abstracts"]
     EMB --> CLS["Result-direction classifier on embeddings"]
@@ -58,15 +58,14 @@ Components: one Elasticsearch deployment, one Python API service, one batch box 
 - Gotcha: abstracts ship as `abstract_inverted_index` (word to positions). You must rebuild the text. About ten lines of Python; do it in the ingest step.
 - Useful fields: `ids.pmid`, `referenced_works`, `type`, `is_retracted`, `topics`, `cited_by_count`, `publication_year`.
 
-Two-tier ingest so you have something working tonight and a scale story by morning:
+**Implementation amendment, 2026-09-19:** the public S3 snapshot is the sole OpenAlex ingestion source. The API seed and singleton lookup paths have been removed. No OpenAlex API key or AWS credentials are required. The default scope is hypertension **or** kidney research, across all years and work types, retaining metadata-only records when abstracts are absent.
 
-1. **Tier 1, today:** pull a seed slice through the OpenAlex API. List+filter costs $0.10 per 1,000 calls at 100 works per call, and each free key gets $1/day, so roughly 1M works per key per day. One key per teammate. Filter on medicine topics, `type:article`, `has_abstract:true`, recent years first. Target 300k to 1M works.
-2. **Tier 2, overnight (venue is closed 1am to 7am):** on the Voloridge EC2 box, scan the Parquet snapshot with DuckDB using column projection (id, title, abstract index, topics, type, year, pmid, referenced_works, is_retracted) and a topic filter. Same-region S3 reads are free and fast. Launch before you leave, index the output in the morning. If it fails, Tier 1 still demos. Check how the abstract column is encoded in Parquet before relying on it.
+Run a manifest-only plan, then scan Parquet on the remote batch host using DuckDB column projection and the versioned topic/text rules. Checkpoints pin the release, scope and committed byte offsets. Partial runs never claim complete snapshot coverage. Matched rows are normalized, classified, embedded and linked into Elasticsearch in bounded batches. Query-time reference expansion uses indexed references only; a separate S3 pass can backfill missing work IDs. See the [ingestion guide](../backend/app/ingest/README.md) for commands and exact coverage semantics.
 
-API key note: OpenAlex has required a key on every request since February 2026. Single-work lookups by ID or DOI are free, which matters for the linker and for reference expansion.
+The checked manifest contains 2,446 works parts totaling 724,970,323,127 physical bytes, dated 2026-06-26. Abstract indexes are JSON strings in the inspected Parquet schema. The snapshot contains metadata and available abstracts, not full-text papers. A full scan has not been launched.
 
 ### ClinicalTrials.gov API v2
-No key. `GET https://clinicaltrials.gov/api/v2/studies` with `pageSize=1000` and page tokens. Pull all interventional studies with status COMPLETED, TERMINATED, WITHDRAWN, or SUSPENDED. A few hundred thousand records; this is an hour of paging, start it first. Fields to keep:
+No key. `GET https://clinicaltrials.gov/api/v2/studies` with `pageSize=1000` and page tokens. For the hypertension/kidney corpus, exhaust the condition-union query across all statuses, study types and dates. Reporting-gap analysis applies its own eligibility rules after ingestion. Fields to keep:
 
 - `protocolSection.statusModule`: `overallStatus`, `whyStopped`, `primaryCompletionDateStruct`
 - `protocolSection.designModule.enrollmentInfo` (count, ACTUAL vs ESTIMATED)
@@ -82,7 +81,7 @@ Look at the EvidenceInference dataset (Lehman et al. 2019, v2 DeYoung et al. 202
 
 ## 4. Index-time pipeline
 
-1. **Rebuild and normalize** abstracts; drop works without one.
+1. **Rebuild and normalize** available abstracts; retain and mark works without one.
 2. **Embed** every abstract with a small open model on the GPU box (a MiniLM or BGE-small class model does millions of abstracts in well under an hour on one modern GPU). Use the same model for queries at serve time. Do not use an embeddings API for the bulk pass: rate limits will eat your night, and batch endpoints have 24-hour turnaround.
 3. **Result-direction classifier.** Labels: `positive`, `null`, `mixed`, `no_result_stated` (protocols, reviews, methods papers).
    - Weak labels from a phrase lexicon: "no significant difference", "did not differ", "not superior", "failed to", "did not reach", "futility", "no evidence of" versus "significantly improved/reduced", "superior to".
@@ -205,7 +204,7 @@ Skip: Meta, Visa, Dropbox, GiveCampus, Maximor, Arrowstreet, Deepgram, ElevenLab
 
 | When | What |
 |---|---|
-| Now to 4pm | Voloridge booth (EC2 + GPU), Elastic deployment, OpenAlex key per person, OpenAI credits. Start the ClinicalTrials.gov pull and the OpenAlex API seed pull immediately; both are just paging. |
+| Now to 4pm | Voloridge compute/storage, Elastic deployment and OpenAI credits. Inspect the public S3 manifest; start the scoped registry pull and budgeted snapshot scan on the batch host. |
 | 4 to 7pm | Abstract rebuild, ES mapping, bulk index with BM25 only. Registry flattener (Codex). FastAPI endpoint returning raw hits. End-to-end skeleton working before dinner. |
 | 7 to 10pm | Embeddings, kNN + RRF. Weak labels, LLM labels, train classifier, write `result_label` back. Bucket rules for registry rows. |
 | 10pm to 1am | Extraction with write-back, stats module, linker. Launch the overnight DuckDB snapshot scan. **Create the Plume project before midnight or you cannot be judged.** |
@@ -219,12 +218,12 @@ Demo queries: pick questions with well-known large nulls so judges can verify th
 - **Abstract spin** biases the classifier toward "positive". Mitigate by preferring registry primary-outcome numbers whenever a link exists, and report the disagreement rate.
 - **Effect scales differ** (SMD, odds ratio, hazard ratio, mean difference). Only pool within one type; convert log-OR to SMD if needed; otherwise present per-study rows without pooling.
 - **SESOI is a judgment call.** Make it a visible, editable input, not a hidden constant.
-- **Overnight scan fails.** Tier 1 must be demo-complete on its own before you launch Tier 2.
+- **Snapshot scan fails.** Retain checkpoints and a clearly labelled, verified partial demo corpus. Resume the full scan on the batch host; do not describe a partial run as complete.
 - **Registry coverage** is US-centric and clinical. Say so. Outside medicine the tool still gives buckets 1 to 3 from papers, without 4 and 5.
 
 ## Sources
 
 - Voloridge challenge materials and OpenAlex fetch README: https://voloridge-hack-mit-2026.s3.us-east-1.amazonaws.com/index.html
-- OpenAlex API pricing and key requirement: https://developers.openalex.org/api-reference/authentication and https://blog.openalex.org/openalex-api-new-features-and-usage-based-pricing/
+- OpenAlex public snapshot access: https://help.openalex.org/access/snapshot/
 - ClinicalTrials.gov results field paths (as listed in ClinicalTrialsHub, arXiv 2512.08193): https://arxiv.org/pdf/2512.08193
 - AACT description: https://arxiv.org/pdf/1907.00185

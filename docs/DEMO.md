@@ -23,40 +23,54 @@ npm run dev
 
 Open `http://localhost:5173`. The browser uses `/api`; Vite strips that prefix and forwards requests to port 8000. For the bundled deployment, run `npm run build` first: FastAPI serves `dist/` and `/api` on the same origin at port 8000. Separate hosting can use a reverse proxy or `VITE_API_URL` pointing at the backend root URL. `VITE_USE_MOCK` defaults to false. API failures produce an error state, never fictional evidence.
 
-The API needs a reachable Elasticsearch deployment with a populated `studies` index. OpenAI enables structured PICO parsing, evidence extraction, and narration. OpenAlex uses a configured API key when available; the implementation also supports bounded public requests without a key, subject to source limits. ClinicalTrials.gov requires no key. Embeddings need the configured local model and optional inference dependencies. For a fresh environment, complete the CPU embedding setup in [README.md](../README.md) before the embedding stage; `uv sync --inexact` preserves those separately installed dependencies. Check API readiness and coverage before recording; a running HTTP server alone does not demonstrate successful retrieval.
+The API needs a reachable Elasticsearch deployment with a populated index.
+OpenAI enables structured PICO parsing, evidence extraction and narration.
+OpenAlex uses the public S3 snapshot exclusively, with no OpenAlex API key.
+ClinicalTrials.gov uses its separate keyless API. Embeddings run on the host
+running Python; serving FastAPI on remote compute makes query inference remote.
+Complete the CPU dependency setup in [README.md](../README.md) on that host.
+Check readiness and coverage before recording.
 
-## Prepare a small real corpus
+## Prepare the hypertension/kidney corpus
 
-For the prepared clinical topics, run the bootstrap from `backend/`:
+Follow the [S3 ingestion guide](../backend/app/ingest/README.md). Begin with a
+manifest-only plan on the batch host:
 
 ```sh
-.venv/bin/python -m app.bootstrap --per-topic 100
+.venv/bin/python -m app.bootstrap --plan
 ```
 
-It fetches bounded source slices, normalizes, links, embeds, and indexes them, then writes a provenance summary to `data/bootstrap-summary.json`. Source availability determines the final count. The bootstrap includes recent topic slices, a bounded historical highly cited slice, and named landmark lookups; landmark effects are still extracted from source evidence.
+The full workflow needs persistent output/index storage and an explicit scan
+budget. It scans the hypertension/kidney union across all years, retains records
+without abstracts, and writes resumable provenance and coverage reports. The
+snapshot contains metadata and available abstracts, not full-text PDFs.
 
-For a custom topic instead, the staged commands below expose each step. They write resumable JSONL artifacts under `data/`. Keep output files and checkpoints together. Add `--resume` when continuing a stage rather than overwriting its outputs. Direct `.venv/bin/python` commands avoid an implicit environment re-sync.
+For a deliberately small demonstration, inspect and run a capped import:
 
 ```sh
-.venv/bin/python -m app.ingest fetch ctgov --query 'vitamin D depression' --limit 200 --output data/ctgov.raw.jsonl
-.venv/bin/python -m app.ingest fetch openalex --query 'vitamin D depression randomized trial' --limit 500 --output data/openalex.raw.jsonl
-.venv/bin/python -m app.ingest normalize --input data/ctgov.raw.jsonl --output data/ctgov.normalized.jsonl
-.venv/bin/python -m app.ingest normalize --input data/openalex.raw.jsonl --output data/openalex.normalized.jsonl
-.venv/bin/python -m app.ingest classify --input data/openalex.normalized.jsonl --output data/openalex.classified.jsonl
-.venv/bin/python -m app.ingest link --input data/ctgov.normalized.jsonl data/openalex.classified.jsonl --output data/linked.jsonl
-.venv/bin/python -m app.ingest embed --input data/linked.jsonl --output data/embedded.jsonl
-.venv/bin/python -m app.ingest index --input data/embedded.jsonl
+.venv/bin/python -m app.bootstrap --plan --max-files 1
+.venv/bin/python -m app.bootstrap --run --max-files 1 --max-records 100 \
+  --registry-limit 20 --data-dir data/s3-smoke
 ```
 
-The default classifier is the phrase-based fallback unless a trained classifier artifact is supplied. Do not describe it as a validated learned classifier without a saved training/evaluation report. A failed or sparse source pull is a coverage limitation, not evidence about the intervention.
+A date partition may contain few or no relevant works. It does not represent
+complete topic coverage. Inspect `data/s3-smoke/corpus-summary.json` and select
+a question represented in the actual index. Previous vitamin D/depression,
+omega-3/cognition and knee-surgery demo records are historical slices; the S3
+migration does not silently replace them or claim a full renal corpus is loaded.
 
-For a no-vector fallback, index `data/linked.jsonl` and run the API with `EMBEDDINGS_ENABLED=false`. The report should identify lexical retrieval; do not present that run as hybrid search or reference expansion.
+Search uses stored review references. Missing references are reported and can
+be imported with the guide's offline S3 backfill; no query makes OpenAlex API
+calls. The default classifier remains a phrase heuristic. For a lexical-only
+build, use `--skip-embeddings` and serve with `EMBEDDINGS_ENABLED=false`.
 
-Large snapshot ingest and trained embedding classifiers are separate batch workflows. Show actual run records and corpus counts if claiming they ran on sponsor compute; the availability of a command is not evidence that a million-record scan completed.
+Show actual logs, counts and resource identity before claiming a full scan or
+sponsor-compute deployment. The checked 20-record S3 read proves connectivity
+and decoding, not corpus completeness.
 
 ## A five-minute live walkthrough
 
-1. Enter a question covered by the indexed topic, such as “Does vitamin D supplementation reduce depressive symptoms in adults?” Use SMD only when standardized continuous outcomes fit the study question. Leave SESOI blank to show the proposed value and rationale, or supply a prespecified threshold.
+1. Enter a question covered by the indexed topic, such as “Does intensive blood pressure control slow chronic kidney disease progression?” after that corpus is loaded Use SMD only when standardized continuous outcomes fit the study question. Leave SESOI blank to show the proposed value and rationale, or supply a prespecified threshold.
 2. Open **Study plan & value**. Explain total N, two-sided alpha, and the equal-arm planning assumption. Put success value, null-result value, and study cost in the same units. Raw EV is utility, not a percentage.
 3. Search. Point to the returned source coverage, retrieval mode, and warnings. The full lexical-match bucket aggregation is distinct from the displayed result page and any semantic/reference-expanded records. Counts reflect the available index.
 4. Open a source study. Check its exact evidence span, source URL, evidence tier, original CI level, and p-value inequality. Show why “no significant difference” without a compatible narrow CI remains inconclusive. Raw ratios appear in the study row; the forest plot uses the pool's analysis scale.

@@ -26,7 +26,7 @@ def inline_worker(monkeypatch):
 
 def config(**kwargs):
     return Settings(
-        _env_file=None, openai_api_key="", openalex_api_key="", embeddings_enabled=False, **kwargs
+        _env_file=None, openai_api_key="", embeddings_enabled=False, **kwargs
     )
 
 
@@ -506,6 +506,27 @@ def test_reference_expansion_preserves_condition_screening_after_vector_ranking(
         )
         assert [row["id"] for row in result] == ["knee"]
         repo.screen_population.assert_awaited_once_with(["knee", "ankle"], query_pico)
+
+    asyncio.run(exercise())
+
+
+def test_missing_snapshot_references_never_trigger_external_fetch(monkeypatch):
+    import httpx
+
+    async def no_network(*args, **kwargs):
+        pytest.fail("Search must resolve OpenAlex references only from the snapshot index")
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", no_network)
+
+    async def exercise():
+        review = paper("review", is_review=True, referenced_works=["known", "missing"])
+        known = paper("known", embedding=[1.0, 0.0])
+        warnings = []
+        result = await SearchPipeline(MemoryRepository([review, known]), FakeLLM(), config()).expand(
+            [review], [1.0, 0.0], warnings
+        )
+        assert [row["id"] for row in result] == ["known"]
+        assert any("1 review references" in message for message in warnings)
 
     asyncio.run(exercise())
 

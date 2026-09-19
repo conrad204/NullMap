@@ -120,7 +120,7 @@ def test_sparse_and_json_openalex_inverted_indexes():
     assert reconstruct_abstract({"key": ["A", "result"], "value": [[0], [1]]}) == "A result"
 
 
-def test_normalize_openalex_and_drop_missing_abstract():
+def test_normalize_openalex_and_preserve_missing_abstract_metadata():
     work = {"id": "https://openalex.org/W123", "title": "A systematic review", "publication_year": 2024,
             "ids": {"pmid": "https://pubmed.ncbi.nlm.nih.gov/12345/"},
             "abstract_inverted_index": {"Trial": [0], "nct01169259": [1]},
@@ -131,7 +131,9 @@ def test_normalize_openalex_and_drop_missing_abstract():
     assert normalized["nct_ids"] == ["NCT01169259"]
     assert normalized["pmids"] == ["12345"]
     assert normalized["referenced_works"] == ["W456"]
-    assert normalize_work({"id": "W123"}) is None
+    missing = normalize_work({"id": "W123"})
+    assert missing["abstract_available"] is False and missing["abstract"] == ""
+    assert normalize_work({"id": "W123"}, require_abstract=True) is None
 
 
 @pytest.mark.parametrize("title", [
@@ -213,21 +215,22 @@ def test_fetch_retry_checkpoint_and_resume(tmp_path):
     calls = []
     def handler(request):
         calls.append(dict(request.url.params))
-        cursor = request.url.params.get("cursor")
-        if cursor == "*":
-            return httpx.Response(200, json={"results": [{"id": "W1"}], "meta": {"next_cursor": "next"}})
-        return httpx.Response(200, json={"results": [{"id": "W2"}], "meta": {"next_cursor": None}})
+        cursor = request.url.params.get("pageToken")
+        if cursor is None:
+            return httpx.Response(200, json={"studies": [{"id": "NCT1"}], "nextPageToken": "next", "totalCount": 2})
+        return httpx.Response(200, json={"studies": [{"id": "NCT2"}], "totalCount": 2})
 
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             output = tmp_path / "raw.jsonl"
-            await fetch_pages("openalex", output, limit=1, page_size=1, client=client)
+            await fetch_pages("ctgov", output, limit=1, page_size=1, client=client)
             with output.open("a") as handle:
                 handle.write('partial crash write')
-            state = await fetch_pages("openalex", output, limit=2, page_size=1, resume=True, client=client)
+            state = await fetch_pages("ctgov", output, limit=None, page_size=1, resume=True, client=client)
             assert state["count"] == 2
-            assert [json.loads(line)["id"] for line in output.read_text().splitlines()] == ["W1", "W2"]
-            assert calls[-1]["cursor"] == "next"
+            assert [json.loads(line)["id"] for line in output.read_text().splitlines()] == ["NCT1", "NCT2"]
+            assert calls[-1]["pageToken"] == "next"
+            assert state["done"] is True and state["total_count"] == 2
     asyncio.run(scenario())
 
 
@@ -259,23 +262,23 @@ def test_transform_checkpoint_prevents_duplicate_rows(tmp_path):
     assert output.stat().st_mtime_ns == original_mtime
 
 
-def test_citation_sort_is_sent_and_cannot_reuse_date_cursor(tmp_path):
+def test_registry_query_change_cannot_reuse_cursor(tmp_path):
     observed = []
     def handler(request):
-        observed.append(request.url.params["sort"])
-        return httpx.Response(200, json={"results": [{"id": "W1"}], "meta": {"next_cursor": "next"}})
+        observed.append(request.url.params["query.term"])
+        return httpx.Response(200, json={"studies": [{"id": "NCT1"}], "nextPageToken": "next"})
 
     async def scenario():
         output = tmp_path / "cited.jsonl"
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await fetch_pages("openalex", output, sort="cited_by_count:desc", limit=1, client=client)
+            await fetch_pages("ctgov", output, query="kidney", limit=1, client=client)
             original_mtime = output.stat().st_mtime_ns
-            await fetch_pages("openalex", output, sort="cited_by_count:desc", limit=1,
+            await fetch_pages("ctgov", output, query="kidney", limit=1,
                               resume=True, client=client)
             assert output.stat().st_mtime_ns == original_mtime
-            assert observed == ["cited_by_count:desc"]
+            assert observed == ["kidney"]
             with pytest.raises(ValueError, match="parameters"):
-                await fetch_pages("openalex", output, limit=2, resume=True, client=client)
+                await fetch_pages("ctgov", output, query="hypertension", limit=2, resume=True, client=client)
     asyncio.run(scenario())
 
 

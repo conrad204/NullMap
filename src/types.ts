@@ -16,6 +16,9 @@ export interface Paper {
   source: Source;
   url: string;
   citations: number;
+  abstractAvailable?: boolean | null;
+  workType?: string | null;
+  snapshotDate?: string | null;
   verdict: Verdict;
   rationale: string;
   sampleSize: number | null;

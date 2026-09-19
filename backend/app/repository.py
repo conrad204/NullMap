@@ -32,7 +32,7 @@ _LINK_FIELDS = set(
 _PAPER_FIELDS = set(
     (
         "title abstract authors venue embedding embedding_model result_label null_score evidence_span "
-        "classification_method"
+        "classification_method abstract_available work_type snapshot_provenance"
     ).split()
 )
 
@@ -43,7 +43,7 @@ def index_mapping(dimensions: int = 384) -> dict:
         "record_kind source result_label bucket evidence_tier effect_type overall_status "
         "pmids nct_ids referenced_works result_pmids canonical_id canonical_ids outcome_unit "
         "p_value_operator ci_sides extraction_version extraction_status embedding_model "
-        "analysis_effect_type effect_direction outcome_direction"
+        "analysis_effect_type effect_direction outcome_direction work_type"
     ).split():
         properties[name] = {"type": "keyword"}
     for name in "title abstract population intervention comparator outcome".split():
@@ -61,7 +61,7 @@ def index_mapping(dimensions: int = 384) -> dict:
         properties[name] = {"type": "integer"}
     for name in (
         "is_retracted is_review has_results has_linked_publication has_control spin_flag "
-        "possible_abstract_spin reporting_missing significant_but_trivial"
+        "possible_abstract_spin reporting_missing significant_but_trivial abstract_available"
     ).split():
         properties[name] = {"type": "boolean"}
     for name in (
@@ -81,6 +81,7 @@ def index_mapping(dimensions: int = 384) -> dict:
         "attachments",
         "metadata",
         "linked_papers",
+        "snapshot_provenance",
     ):
         properties[name] = {"type": "object", "enabled": False}
     return {"dynamic": False, "properties": properties}

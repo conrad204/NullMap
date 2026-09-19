@@ -2,7 +2,9 @@
 
 Find prior clinical studies, inspect null and missing results, and explore whether a proposed study is adequately powered. The application combines OpenAlex papers and ClinicalTrials.gov records in one Elasticsearch index, with a React interface and a FastAPI service.
 
-The working demo uses bounded real-data slices. It does not claim exhaustive literature coverage, independently validated clinical decisions, or a million-record production run.
+OpenAlex ingestion uses its **public S3 Parquet snapshot**, with no OpenAlex API or API key. The default corpus scope is hypertension **or** kidney research across all years, including records without abstracts. Full imports run on the batch/compute host; the browser receives search results. The previous small demo index is preserved. A full replacement corpus has not been imported yet.
+
+See the [S3 ingestion guide](backend/app/ingest/README.md) for the remote workflow, exact scope, storage requirements, checkpoints and reference backfills. Running `python -m app.bootstrap` defaults to a manifest-only plan; scanning requires `--run` and an adequate explicit byte budget.
 
 ## Local setup
 
@@ -39,18 +41,18 @@ docker run -d --name nullmap-elasticsearch --memory 3g \
   docker.elastic.co/elasticsearch/elasticsearch:9.1.4
 ```
 
-Install the backend and CPU embedding dependencies, then bootstrap real data:
+Install the backend and CPU embedding dependencies, then inspect the data plan:
 
 ```sh
 cd backend
 uv sync
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 uv pip install sentence-transformers scikit-learn
-.venv/bin/python -m app.bootstrap --per-topic 100
+.venv/bin/python -m app.bootstrap --plan
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The first bootstrap needs network access for source APIs and the MiniLM model download. It fetches the three demo topics, adds most-cited historical papers and explicit landmark lookups, then normalizes, classifies, embeds, links, and indexes. Completed stages are reusable. Inspect `backend/data/bootstrap-summary.json` for actual counts and missing abstracts; classifier-version changes invalidate derived classification checkpoints.
+Planning reads only the public S3 manifest. For an import, follow the ingestion guide on a host with sufficient persistent storage and an Elasticsearch connection. The first model load downloads MiniLM to that host. The importer scans selected columns, filters the declared scope, normalizes, classifies, embeds, links and indexes in resumable batches. Inspect its `corpus-summary.json` for completion and coverage. Starting the API alone does not populate an empty index.
 
 Use `.venv/bin/...` or `uv run --no-sync ...` after the CPU installation. A later plain `uv sync` or `uv run` can remove those separately installed optional packages; use `uv sync --inexact` when refreshing core dependencies. For an appropriately provisioned GPU machine, the optional `ingest` dependency group is also available.
 
@@ -75,7 +77,9 @@ cd backend
 
 Open **http://127.0.0.1:8000**. FastAPI serves the built `dist/` interface and same-origin `/api` routes; `/docs` exposes the API schema. `FRONTEND_DIST` can select another build directory. The API also retains its unprefixed routes for direct clients.
 
-Alternatively, after `npm run build`, run `docker compose up --build -d` from the repository root. Compose mounts `./dist` into the API container at `/web` and sets `FRONTEND_DIST=/web`. Bootstrap the index first using the local backend command above. The API image includes CPU embedding dependencies; its first model load may download the configured model.
+Alternatively, after `npm run build`, run `docker compose up --build -d` from the repository root. Compose mounts `./dist` into the API container at `/web` and sets `FRONTEND_DIST=/web`. Populate the target index using the ingestion guide first. The API image includes CPU embedding dependencies; its first model load may download the configured model.
+
+For remote inference, run the batch job and FastAPI on the remote compute host, configured to use the same Elasticsearch index and embedding model. Keep FastAPI bound to localhost and access it through an SSH tunnel, for example `ssh -L 8000:127.0.0.1:8000 user@compute-host`. Opening `http://127.0.0.1:8000` then uses the remotely served interface and model. Source records and model files stay on the compute host. No remote job or storage provisioning is launched automatically.
 
 ## Configuration
 
@@ -86,14 +90,14 @@ Backend settings are read from `backend/.env`; examples contain names and defaul
 | `ELASTIC_URL`, `ELASTIC_API_KEY`, `ELASTIC_INDEX` | Elasticsearch connection and shared study index |
 | `ELASTIC_LOCAL=true` | Unauthenticated local development service; use `false` with Elastic Cloud |
 | `OPENAI_API_KEY` | Structured PICO parsing, quoted extraction, and bounded narration |
-| `OPENALEX_API_KEY` | Optional higher source allowance; bounded public requests worked without a key |
-| `EMBEDDING_MODEL`, `EMBEDDING_DEVICE` | Local MiniLM model shared by indexing and retrieval |
+| `OPENALEX_SNAPSHOT_MANIFEST` | Public works manifest; defaults to anonymous OpenAlex S3 |
+| `EMBEDDING_MODEL`, `EMBEDDING_DEVICE` | MiniLM model shared by indexing and retrieval on the compute host |
 | `EMBEDDINGS_ENABLED=false` | Explicit BM25 fallback when local inference is unavailable |
 | `REFERENCE_MIN_SIMILARITY` | Review-reference cosine cutoff; defaults to 0.55 for the configured MiniLM model |
 | `CLASSIFIER_MODEL_PATH` | Optional evaluated classifier artifact; leave empty for the active weak classifier |
 | `TTC_API_KEY`, `COMPRESSION_ENABLED`, `COMPRESSION_VALIDATED` | Optional compression experiment; compression remains off by default |
 
-ClinicalTrials.gov needs no key. OpenAlex's current [official API documentation](https://help.openalex.org/api/) and observed public requests differ from the architecture's earlier mandatory-key assumption. Optional Voloridge SSH settings are for batch-machine access; the API does not launch remote jobs.
+ClinicalTrials.gov needs no key. OpenAlex's [public snapshot](https://help.openalex.org/access/snapshot/) requires no OpenAlex API access or AWS credentials. It provides dated metadata and available abstracts, not full-text PDFs. Optional Voloridge SSH settings are for batch-machine access; the API does not launch remote jobs.
 
 ## Verification
 
@@ -112,9 +116,9 @@ The repository tests opt into real Elasticsearch only when `NULLMAP_TEST_ELASTIC
 
 ## Architecture and interpretation
 
-The implementation follows [the architecture proposal](docs/ARCHITECTURE.md): index-time result classification and local embeddings; hybrid BM25/vector retrieval; review-reference expansion; separate full-match aggregations; structured registry parsing; quoted, cached paper extraction; and pure-Python statistical analysis. Elasticsearch stores studies, vectors, extraction caches, and contribution drafts. No additional database or queue is required.
+The implementation follows [the architecture proposal](docs/ARCHITECTURE.md), updated for S3-only literature ingestion: index-time classification and embeddings; hybrid BM25/vector retrieval; indexed review-reference expansion; separate full-match aggregations; structured registry parsing; quoted, cached paper extraction; and pure-Python statistical analysis. Elasticsearch stores studies, vectors, extraction caches, and contribution drafts. Missing review references are reported and can be backfilled by an offline S3 pass. No additional database or queue is required.
 
-The current classifier is an explicitly heuristic phrase lexicon. A small trained pilot achieved 56.25% agreement on 16 held-out LLM-labelled abstracts and missed both held-out nulls, so it was not promoted. These are model-agreement metrics, not human-validated clinical accuracy. The Parquet path was checked on one 3.6 MB real source file and a 30-row projected scan; large-scale processing remains a separate bounded workflow.
+The current classifier is an explicitly heuristic phrase lexicon. A small trained pilot achieved 56.25% agreement on 16 held-out LLM-labelled abstracts and missed both held-out nulls, so it was not promoted. These are model-agreement metrics, not human-validated clinical accuracy. The new anonymous S3 path was checked with a 20-record scan from one 3.6 MB public part. Full-snapshot processing has not been run.
 
 - A textual “no significant difference” is inconclusive unless compatible numerical evidence supports equivalence within the chosen SESOI. Missing reports have unknown outcomes; they are not null findings.
 - Explicit condition and anatomical terms constrain both direct matches and review references. Generic demographics affect ranking. Reference screening is heuristic and does not replace a systematic review's eligibility assessment.
@@ -124,7 +128,7 @@ The current classifier is an explicitly heuristic phrase lexicon. A small traine
 - Assurance is expected two-sided statistical power under the stated model, not the probability of meaningful clinical benefit. EV uses the user's success value, null-result value, and cost in common units.
 - Paper facts select numbered source sentences; code supplies exact quotations and rejects unsupported numeric values. Narration is deterministic when a compatible numerical pool is unavailable. Registry facts retain their JSON paths. Contributions are stored drafts with receipts, not automatic publications or emails.
 
-See the [ingestion guide](backend/app/ingest/README.md) for checkpoints, citation sorting, classifier training, snapshot schema/budgets, and source limitations. The [demo guide](docs/DEMO.md) explains the workflow and presentation evidence; the [validation record](docs/VALIDATION.md) records actual tests, experiments, and measured costs.
+See the [ingestion guide](backend/app/ingest/README.md) for checkpoints, scope rules, snapshot budgets, reference backfills and source limitations. The [demo guide](docs/DEMO.md) explains the workflow; the [validation record](docs/VALIDATION.md) distinguishes the S3 migration checks from historical demo measurements.
 
 ## Optional measured benchmarks
 
@@ -132,8 +136,8 @@ With the API running, execute from `backend/`:
 
 ```sh
 .venv/bin/python -m app.benchmark search --idea 'Does vitamin D reduce depression?' --output data/search-benchmark.json
-NULLMAP_CORPUS=$(.venv/bin/python -c 'import json; print(json.load(open("data/bootstrap-summary.json"))["canonical_jsonl"])')
-.venv/bin/python -m app.benchmark compression --input "$NULLMAP_CORPUS" --limit 20 --output data/compression-benchmark.json
+.venv/bin/python -m app.ingest normalize --input data/research-s3/openalex.jsonl --output data/benchmark-papers.jsonl --resume
+.venv/bin/python -m app.benchmark compression --input data/benchmark-papers.jsonl --limit 20 --output data/compression-benchmark.json
 ```
 
 The search benchmark records first/repeated requests; a first request is cold only for uncached documents. Token counts are observed, while dollar amounts use configured price assumptions. Compression requires both OpenAI and Token Company credentials and compares supported facts against uncompressed extraction; agreement alone is not clinical validation. Keep compression disabled until the paired results and actual pricing justify enabling it.

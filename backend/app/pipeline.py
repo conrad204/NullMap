@@ -39,6 +39,9 @@ def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
         else study.get("source", "openalex"),
         "url": study.get("url") or (links[0] if links else ""),
         "citations": study.get("cited_by_count", 0),
+        "abstractAvailable": study.get("abstract_available"),
+        "workType": study.get("work_type"),
+        "snapshotDate": (study.get("snapshot_provenance") or {}).get("snapshot_date"),
         "verdict": verdict["bucket"],
         "rationale": verdict["rationale"],
         "sampleSize": study.get("n"),
@@ -105,22 +108,10 @@ class SearchPipeline:
         if vector is None:
             return []
         reviews = [d for d in hits if d.get("is_review")][:3]
-        for review in reviews:
-            if review.get("referenced_works") or review.get("references_checked_at"):
-                continue
-            from app.ingest.fetch import fetch_work
-
-            try:
-                work = await fetch_work(review["id"], api_key=self.config.openalex_api_key)
-                review["referenced_works"] = [
-                    str(identifier).rstrip("/").rsplit("/", 1)[-1]
-                    for identifier in work.get("referenced_works", [])
-                ]
-                review["references_checked_at"] = datetime.now(UTC).isoformat()
-                await self.repo.bulk_upsert([review])
-            except Exception as exc:
-                logger.warning("Review references unavailable: %s", type(exc).__name__)
-                warnings.append("Some review reference lists were unavailable from OpenAlex.")
+        if any(not review.get("referenced_works") for review in reviews):
+            warnings.append(
+                "Some indexed reviews lack reference lists, limiting reference discovery."
+            )
         references = list(
             dict.fromkeys(ref for review in reviews for ref in review.get("referenced_works", []))
         )[:180]
@@ -128,44 +119,12 @@ class SearchPipeline:
             return []
         indexed = await self.repo.get_many(references)
         known = {d["id"] for d in indexed}
-        # A configured key increases API allowance; public access can work without one.
-        # Bound missing singleton lookups to keep requests responsive.
-        missing = [ref for ref in references if ref not in known][:30]
+        missing = [ref for ref in references if ref not in known]
         if missing:
-            from app.classifier import weak_classify
-            from app.ingest.fetch import fetch_work
-            from app.ingest.openalex import normalize_work
-
-            fetched = []
-            slots = asyncio.Semaphore(5)
-
-            async def fetch_reference(ref):
-                async with slots:
-                    try:
-                        work = await fetch_work(ref, api_key=self.config.openalex_api_key)
-                        doc = normalize_work(work)
-                        if doc:
-                            doc.update(
-                                weak_classify(
-                                    doc["abstract"], is_review=doc.get("is_review", False)
-                                )
-                            )
-                            doc["embedding"] = await self.embed(doc["abstract"])
-                            doc["embedding_model"] = self.config.embedding_model
-                            return doc
-                    except Exception as exc:
-                        logger.warning("Reference expansion unavailable: %s", type(exc).__name__)
-                        warnings.append("Some OpenAlex review references could not be fetched.")
-                return None
-
-            fetched = [
-                doc
-                for doc in await asyncio.gather(*(fetch_reference(ref) for ref in missing))
-                if doc
-            ]
-            if fetched:
-                await self.repo.bulk_upsert(fetched)
-                indexed.extend(fetched)
+            warnings.append(
+                f"{len(missing)} review references are outside the loaded snapshot index. "
+                "Reference discovery is limited to the imported records."
+            )
         canonical_ids = list(
             dict.fromkeys(
                 identifier

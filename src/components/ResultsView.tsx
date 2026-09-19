@@ -95,6 +95,8 @@ function PaperRow({ paper }: { paper: Paper }) {
       {url ? <a href={url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-1.5 font-medium leading-snug text-ink transition-colors hover:text-accent"><span>{paper.title}</span><ArrowUpRight size={14} className="mt-1 shrink-0 text-ink-3 group-hover:text-accent" aria-hidden /></a> : <p className="font-medium leading-snug text-ink">{paper.title}</p>}
       <p className="mt-1 text-sm text-ink-2">{formatAuthors(paper.authors)}{paper.year ? `, ${paper.year}` : ""}{paper.venue ? `, ${paper.venue}` : ""}</p>
       <p className="mt-1 text-xs text-ink-3">{SOURCES[paper.source] ?? paper.source} · {TIERS[paper.evidenceTier ?? "text_only"]}</p>
+      {paper.abstractAvailable === false && <p className="mt-1 text-xs text-ink-3">Bibliographic record · abstract unavailable</p>}
+      {paper.snapshotDate && <p className="mt-1 text-xs text-ink-3">Literature snapshot: {paper.snapshotDate}</p>}
       {paper.primaryOutcome && <p className="mt-2 text-xs leading-relaxed text-ink-2"><span className="font-medium text-ink">Primary outcome:</span> {paper.primaryOutcome}{paper.outcomeUnit ? ` · ${paper.outcomeUnit}` : ""}</p>}
       <p className="mt-2 max-w-[70ch] text-sm leading-relaxed text-ink-2">{paper.rationale}</p>
       {paper.evidenceSpan && <blockquote className="mt-3 border-l-2 border-line-strong pl-3 text-sm leading-relaxed text-ink"><span className="mb-1 block text-xs text-ink-3">Source evidence</span>“{paper.evidenceSpan}”</blockquote>}

@@ -59,6 +59,7 @@ def link_studies(studies: list[dict]) -> list[dict]:
                 trial["registry_abstract"] = trial.get("abstract", "")
                 trial["registry_url"] = trial.get("url", "")
                 for key in ("title", "abstract", "authors", "venue", "embedding", "embedding_model",
+                            "abstract_available", "work_type", "snapshot_provenance",
                             "result_label", "null_score", "evidence_span", "classification_method"):
                     if key in paper:
                         trial[key] = paper[key]

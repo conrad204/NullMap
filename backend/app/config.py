@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     elastic_index: str = "studies"
     elastic_local: bool = False
     openai_api_key: str = ""
-    openalex_api_key: str = ""
+    openalex_snapshot_manifest: str = (
+        "https://openalex.s3.amazonaws.com/data/parquet/works/manifest.json"
+    )
     hf_token: str = ""
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimensions: int = 384

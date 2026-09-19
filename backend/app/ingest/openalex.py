@@ -4,7 +4,7 @@ from typing import Any
 
 from app.ingest.common import NCT_PATTERN, empty_study, integer, pmid
 
-NORMALIZER_VERSION = "openalex-v2-nonprimary-titles"
+NORMALIZER_VERSION = "openalex-v3-snapshot-metadata"
 REVIEW_TITLE_RE = re.compile(
     r"\b(?:(?:systematic|scoping|narrative|umbrella|literature|integrative|rapid)\s+reviews?"
     r"|meta[-\s]?analys(?:is|es)"
@@ -16,7 +16,8 @@ REVIEW_TITLE_RE = re.compile(
 
 def is_nonprimary_work(work: dict, title: str) -> bool:
     """Recognize explicit synthesis/guideline titles without treating peer review as a review."""
-    return work.get("type") in {"review", "guideline", "standard"} or bool(REVIEW_TITLE_RE.search(title))
+    kind = work.get("type")
+    return (kind is not None and kind not in {"article", "preprint", "dissertation"}) or bool(REVIEW_TITLE_RE.search(title))
 
 
 def _decoded(value):
@@ -71,9 +72,9 @@ def reconstruct_abstract(inverted: Any) -> str:
     return " ".join(positions[position] for position in sorted(positions))
 
 
-def normalize_work(work: dict) -> dict | None:
+def normalize_work(work: dict, *, require_abstract: bool = False) -> dict | None:
     abstract = reconstruct_abstract(work.get("abstract_inverted_index"))
-    if not abstract:
+    if require_abstract and not abstract:
         return None
     identifier = str(work.get("id", "")).rstrip("/").rsplit("/", 1)[-1]
     if not re.fullmatch(r"W\d+", identifier):
@@ -87,6 +88,7 @@ def normalize_work(work: dict) -> dict | None:
     venue = _object(location.get("source"))
     study.update({
         "title": title, "abstract": abstract,
+        "abstract_available": bool(abstract), "work_type": work.get("type") or "unknown",
         "authors": [author["display_name"]
                     for item in _array(work.get("authorships"))
                     if (author := _object(_object(item).get("author"))).get("display_name")],
@@ -100,6 +102,7 @@ def normalize_work(work: dict) -> dict | None:
         "is_retracted": bool(work.get("is_retracted", False)),
         "is_review": is_nonprimary_work(work, title),
         "normalizer_version": NORMALIZER_VERSION,
+        "snapshot_provenance": work.get("snapshot_provenance", {}),
         "cited_by_count": integer(work.get("cited_by_count")) or 0,
         "topics": [topic.get("display_name", "") if isinstance(topic, dict) else str(topic)
                    for topic in _array(work.get("topics"))],

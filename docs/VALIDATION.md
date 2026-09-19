@@ -2,7 +2,24 @@
 
 This records observed implementation checks, not a clinical validation study. Counts and timings belong to these runs and may change as the index expands or caches warm.
 
-## Corpus and source checks
+## Public S3 migration
+
+The current implementation removes OpenAlex API fetching and live singleton/reference lookups. Literature ingestion uses unsigned public S3 Parquet reads. Search expands citations already present in Elasticsearch, with an offline S3 backfill command for missing references. The default scope is hypertension or kidney research across all years, retaining records without abstracts. ClinicalTrials.gov remains a separate keyless API source.
+
+Observed source checks:
+
+- Anonymous manifest planning succeeded against `https://openalex.s3.amazonaws.com/data/parquet/works/manifest.json`: **2,446 parts**, **724,970,323,127 physical bytes**, snapshot date **2026-06-26**; SHA-256 `a2513ed0b67571b515f7bdee6558e3ee07ffbcfbe52dcb5773628bc5df9bc064`.
+- A real anonymous HTTPS scan read selected columns from `updated_date=2016-06-24/part_0000.parquet` (**3,628,657 bytes**), stopping at **20 records**. Its retained JSONL was **79,832 bytes**, and all 20 records normalized successfully. **13 lacked abstracts** and were retained as metadata-only records. The checkpoint correctly reported incomplete coverage. Physical file size is not a measurement of transferred range-request bytes.
+- This check exposed a timestamp-conversion dependency; projecting timestamps as UTC strings removed it. Local regression tests cover that schema behavior.
+- A second scan applied the actual hypertension/kidney profile to that same public part: **17 matching records**, including **3 without abstracts**, all normalized successfully. It exhausted that one part while correctly keeping full-snapshot coverage false. The [filtered JSONL](../backend/data/s3-migration-check/hypertension-kidney.jsonl) is another ignored local validation artifact.
+
+The S3 migration passed **230 backend tests**, with **5 opt-in real Elasticsearch tests skipped** because the service remained stopped. Fixture-based integration exercises manifest → Parquet filtering → registry linking → embedding → indexing and a repeated run without reindexing. Regression tests also cover row caps, crash recovery, uncommitted-byte rollback, changed releases and classifier versions, appended source output, missing abstracts, reference backfills, source budgets and low disk space. **8 frontend checks**, the production build/typecheck, Ruff and diff whitespace checks passed.
+
+The live source check used no OpenAlex API key or AWS credentials. Its local ignored artifacts are [scan validation](../backend/data/s3-migration-check/validation.json) and [the bounded JSONL](../backend/data/s3-migration-check/works.jsonl). No full hypertension/kidney import or remote batch job was launched, and no persistent service was restarted. The previous demo index was preserved. The migration's end-to-end integration uses fixture sources and an in-memory repository; it does not establish full-scale throughput or a new real Elasticsearch deployment.
+
+## Historical demo corpus and source checks
+
+The remaining sections describe the **earlier API-based demo**, before the S3-only migration. Its source commands and automatic reference fetching have since been replaced. These observations remain historical measurements, not claims that the current S3 corpus was populated.
 
 The reproducible bootstrap produced **575 canonical studies**: **193 ClinicalTrials.gov records, 379 OpenAlex papers, and 3 merged records**, including **49 reviews/nonprimary sources**. All 575 had **384-dimensional local MiniLM embeddings**. Duplicate linked publications were archived rather than counted as additional studies. Live review-reference expansion brought the active index to **627 records** at final verification; this includes discovery reviews and is a changing index count, not the fixed bootstrap total.
 
