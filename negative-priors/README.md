@@ -69,5 +69,6 @@ A new embedding model needs its own band; the default (0.60 → 0.90) is a guess
 | `OPENAI_API_KEY` | switches extraction + embeddings to OpenAI |
 | `NP_PARSE_MODEL` | extraction model, default `gpt-4o-mini` |
 | `ELASTIC_URL` | default `http://localhost:9200` |
+| `ELASTIC_API_KEY` | API key for a hosted cluster; omitted for the local node |
 | `OPENALEX_EMAIL` | OpenAlex polite-pool address |
 | `NP_OPENALEX_SEMANTIC=0` | skip the semantic endpoint, lexical only |

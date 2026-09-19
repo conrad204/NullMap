@@ -521,8 +521,11 @@ def check_prior_risk(
     return PriorCheck(query=protocol_or_hypothesis, matches=matches, risk_score=risk, verdict=verdict)
 
 
-def connect(url: str | None = None) -> Elasticsearch:
-    return Elasticsearch(url or os.environ.get("ELASTIC_URL", "http://localhost:9200"))
+def connect(url: str | None = None, api_key: str | None = None) -> Elasticsearch:
+    """Local single-node by default; `ELASTIC_URL` + `ELASTIC_API_KEY` point at a hosted cluster."""
+    url = url or os.environ.get("ELASTIC_URL", "http://localhost:9200")
+    api_key = api_key or os.environ.get("ELASTIC_API_KEY")
+    return Elasticsearch(url, api_key=api_key) if api_key else Elasticsearch(url)
 
 
 def reset_index(client: Elasticsearch) -> None:
