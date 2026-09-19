@@ -24,6 +24,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
 from schema import (
+    AbstractVerdicts,
     Experiment,
     ExperimentDraft,
     ExperimentExtraction,
@@ -57,6 +58,7 @@ LOCAL_EMBED_MODEL = "thenlper/gte-small"
 OPENAI_EMBED_MODEL = "text-embedding-3-small"
 OPENAI_PARSE_MODEL = os.environ.get("NP_PARSE_MODEL", "gpt-4o-mini")
 SEMANTIC_MIN_INTERVAL = 1.05
+CLASSIFY_BATCH = 10
 
 EXTRACTION_PROMPT = """You convert messy experimental records into structured data.
 
@@ -70,6 +72,19 @@ Rules:
   (assay failure, contamination, underpowered).
 - Copy numbers exactly; use null when a number is not stated. Never invent an effect size.
 - `summary` is 1-2 sentences a colleague could act on."""
+
+CLASSIFY_PROMPT = """You label published abstracts by what the study *found*, for a tool that warns
+researchers when an experiment has already been tried and did not work.
+
+Each item is `[index] title` followed by its abstract. Return one verdict per index:
+- "null": the study looked for an effect and found none (no significant difference, p > 0.05).
+- "negative": a real effect, but the unwanted one -- toxicity, resistance, loss of signal, a
+  method or compound that did not work.
+- "positive": the hypothesis was supported, or a working method/inhibitor/assay is reported.
+- "inconclusive": a review, protocol, dataset, or a study that could not answer its question.
+
+Judge the reported result, not the topic. Default to "inconclusive" when the abstract only
+describes methods or the outcome is unclear."""
 
 
 # --------------------------------------------------------------------------------------- embedding
@@ -332,17 +347,63 @@ def work_to_experiment(work: dict) -> Experiment:
     )
 
 
+def _llm_outcomes(experiments: Sequence[Experiment]) -> dict[int, OutcomeType]:
+    """Classify abstracts `CLASSIFY_BATCH` at a time; one call per paper is the expensive way."""
+    client = OpenAI()
+    outcomes: dict[int, OutcomeType] = {}
+    for start in range(0, len(experiments), CLASSIFY_BATCH):
+        batch = experiments[start:start + CLASSIFY_BATCH]
+        listing = "\n\n".join(
+            f"[{i}] {e.hypothesis}\n{e.summary[:1200]}" for i, e in enumerate(batch)
+        )
+        completion = client.chat.completions.parse(
+            model=OPENAI_PARSE_MODEL,
+            messages=[
+                {"role": "system", "content": CLASSIFY_PROMPT},
+                {"role": "user", "content": listing},
+            ],
+            response_format=AbstractVerdicts,
+            temperature=0,
+        )
+        parsed = completion.choices[0].message.parsed
+        if parsed is None:  # pragma: no cover - refusal path
+            continue
+        for verdict in parsed.verdicts:
+            if 0 <= verdict.index < len(batch):
+                outcomes[start + verdict.index] = verdict.outcome_type
+    return outcomes
+
+
+def classify_published(experiments: Sequence[Experiment]) -> None:
+    """Relabel published work in place with an LLM read of the abstract.
+
+    The heuristic classifier keys off phrases an experimenter writes ('no effect', 'crashed out');
+    papers describe their own outcomes nothing like that, so on published text it is near noise.
+    Without a key the heuristic labels stand.
+    """
+    if not experiments or not os.environ.get("OPENAI_API_KEY") or OpenAI is None:
+        return
+    try:
+        outcomes = _llm_outcomes(experiments)
+    except Exception as exc:
+        log.warning("LLM classification failed (%s); keeping heuristic outcomes", exc)
+        return
+    for i, outcome in outcomes.items():
+        experiments[i].outcome_type = outcome
+
+
 def ingest_openalex(client: Elasticsearch, query: str, limit: int = 25) -> list[Experiment]:
     """Pull published work for a topic into the index so later checks kNN it instead of refetching.
 
     The live API is rate-limited and its semantic endpoint 504s often, so a demo-time corpus beats
-    a per-query call; embeddings are batched because that is the expensive half.
+    a per-query call; embeddings and outcome labels are batched.
     """
     works = _fetch_works(query, limit)
     experiments = [work_to_experiment(w) for w in works]
     if not experiments:
         return []
 
+    classify_published(experiments)
     for exp, vector in zip(experiments, embed_many([e.text_for_embedding() for e in experiments])):
         exp.embedding = vector
     ensure_index(client, dims=len(experiments[0].embedding or []))
@@ -645,6 +706,7 @@ __all__ = [
     "PriorCheck",
     "PriorRisk",
     "check_prior_risk",
+    "classify_published",
     "connect",
     "embed",
     "embed_many",

@@ -91,6 +91,19 @@ class ExperimentExtraction(BaseModel):
         )
 
 
+class AbstractVerdict(BaseModel):
+    """One published abstract's outcome, keyed by its position in the batch sent to the model."""
+
+    index: int
+    outcome_type: OutcomeType
+
+
+class AbstractVerdicts(BaseModel):
+    """Batched response_format: classifying abstracts one call each is the slow, expensive way."""
+
+    verdicts: list[AbstractVerdict]
+
+
 class PriorRisk(BaseModel):
     """A prior attempt that bears on a proposed protocol."""
 

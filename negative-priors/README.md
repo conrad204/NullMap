@@ -22,8 +22,10 @@ with `must_not source:openalex` (internal) and once with `filter source:openalex
 only hits the live API when the published leg comes back empty. Published matches never contribute
 to `risk_score` — `risk_score` is about *our own* runs having already failed; papers are context.
 
-A work's `outcome_type` comes from the same classifier as lab notes read over title+abstract, so it
-is a weak signal on published text — good enough to surface "this was already tried", not evidence.
+A work's `outcome_type` is labelled by `classify_published`: one LLM call per 10 abstracts
+(`AbstractVerdicts`, verdicts keyed by batch index). The lab-note heuristic keys off phrases an
+experimenter writes — "no effect", "crashed out" — which papers never use, so without a key the
+labels fall back to it and are close to noise on published text.
 
 ## Run it
 
