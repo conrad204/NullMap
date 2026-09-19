@@ -22,7 +22,7 @@ They are thin one-tool-per-endpoint wrappers. Verified against the live API toda
 | --- | --- | --- |
 | `search.semantic=<text>` on `/works` | Native AI semantic search. GTE-Large-EN, 1024-dim, cosine over title+abstract embeddings of every work | **We do not build or host an embedding index for v1.** This is the single biggest scope cut available |
 | Semantic input | Up to 2,000 chars, truncated beyond. Longer, paragraph-shaped queries rank better | Query planner should *expand* the user's idea into a paragraph, not compress it into keywords |
-| Semantic result cap | **50 results max**, ~6 s latency observed, 1 req/s | Recall has to come from *many complementary queries*, fused — not from one deep query |
+| Semantic result cap | **50 results max**; **1 req/s, enforced hard** (a second concurrent call 429s in 0.1 s); ~0.8 s median latency | Recall comes from *many complementary probes*, fused. k probes costs ≈ k seconds of wall clock — the rate limit, not latency, is the bottleneck (§4) |
 | Semantic filters | Only `author.id`, `authorships.*`, `funders.id`, `has_abstract`, `has_fulltext`, `institution(s).id`, `is_oa`, `is_retracted`, `language`, `primary_location.license`, `primary_location.source.id`, `publication_year`, `type`. **`primary_topic.*` and `cited_by_count` are rejected** | Field-scoping (e.g. "biology only") must be a *post-filter* or a parallel lexical branch, not a semantic pre-filter. This is a real design constraint, verified by a 400 from the API |
 | Lexical `search=` | Stemmed, stop-worded, supports `AND/OR/NOT`, quoted phrases, `search.exact` for unstemmed | The null-signal phrase branch ("no significant difference", "failed to replicate") lives here, not in semantic |
 | One search param per request | `search`, `search.exact`, `search.semantic` are mutually exclusive | Multi-strategy retrieval is *forced* to be multi-request → fusion is mandatory, not optional |
@@ -30,8 +30,8 @@ They are thin one-tool-per-endpoint wrappers. Verified against the live API toda
 | Paging | `per_page` ≤ 100, basic paging ≤ 10,000 results, cursor paging beyond | Fine for us; we never bulk-pull |
 | Pricing | API key required at scale, $1/day free. Singleton lookups free, list+filter $0.10/1k, search **and** semantic $1/1k, PDF download $10/1k | A budget accountant is a first-class component, not an afterthought. One naive agent loop can burn the daily budget in minutes |
 | Abstracts | `abstract_inverted_index` (positions → words), not plain text | Reconstruction util needed; trivial but everyone forgets it |
-| Classification | 4-level `topics` hierarchy: domain → field → subfield → topic, plus `keywords`, `sustainable_development_goals` | Biology scoping = domain `Life Sciences` (id 1) + fields 11, 13, 24, 28, 30 (+27 Medicine when clinical) |
-| Graph | `referenced_works`, `related_works`, `cited_by_api_url` | Cheap recall expansion at list+filter prices ($0.10/1k), 10× cheaper than search |
+| Classification | 4-level `topics` hierarchy: domain → field → subfield → topic, plus `keywords`, `sustainable_development_goals` | Biology scoping = domains **1 (Life Sciences) + 4 (Health Sciences)**. Not the "pure biology" fields: for a rodent-metabolism query, 67% of matching works classify as `field = Medicine` (§6) |
+| Graph | `referenced_works`, `related_works`, `cites:` filter | **Edges are effectively free** — they ride along with metadata hydration, and inbound edges for 100 seeds come back in one $0.0001 call. This is why we do not precompute a graph (§4.2) |
 | Full text | `has_fulltext`, `content.openalex.org/works/{id}.pdf` at $0.01/call | Evidence extraction on PDFs is *expensive*; gate it behind explicit opt-in and a budget cap |
 | Deprecated | `/text` aboutness endpoint (also $10/1k) | Do not build on it |
 
@@ -44,8 +44,9 @@ retrieval with fusion, evidence extraction, and cost control are the parts no ex
 
 Explicitly out of scope, listed so nobody "helpfully" adds them mid-hackathon:
 
-- Self-hosted vector index / snapshot ingestion / Postgres+pgvector. Native semantic search covers it.
-- Any source other than OpenAlex **implemented** — but the adapter seam for them is in scope (§4.1).
+- Self-hosted vector index / snapshot ingestion / Postgres+pgvector. Native semantic search covers
+  it, and the numbers in §4.5 say building one would not pay for itself here.
+- Any source other than OpenAlex **implemented** — but the adapter seam for them is in scope (§5.1).
 - Write paths to OpenAlex (curation, collections), author disambiguation, institution analytics.
 - User accounts, persistence beyond a local cache, multi-tenancy.
 - Fine-tuned or trained models. Every classifier is prompt- or heuristic-based in v1.
@@ -120,18 +121,115 @@ that fills it is a post-core extension.
   `meta.cost_usd` accounting, per-search and per-session caps, and a hard stop that degrades
   gracefully (drop probes, not correctness) rather than throwing at 80% of the way through.
 - Disk+memory cache keyed on the normalized request URL. Singleton lookups are free and cacheable
-  forever; searches are cached for the session. During a demo this is the difference between a 6 s
-  and a 200 ms response — and during development it keeps the $1/day from evaporating.
+  forever; searches are cached for the session. On the measured numbers in §4 this is the
+  difference between a ~6.5 s and a ~0.2 s response — and during development it is what keeps the
+  $1/day from evaporating (one cold search is ~1% of it).
 - `select=` on every call. `per_page=100`. Batch ID lookups with `|` (≤100 values, chunked).
 
 ---
 
-## 4. Modularity: where the seams are
+## 4. Performance and efficiency (measured)
+
+All numbers below come from `docs/bench/retrieval_bench.py`, run against the live API today from a
+single 8-core box, keyless. It runs the real pipeline on one biology query ("does intermittent
+fasting improve insulin sensitivity in DIO mice"): 5 semantic probes + 4 lexical clauses → RRF →
+hydrate 150 → biology post-filter → local embedding rerank.
+
+```
+branches: [46, 42, 46, 45, 49, 100, 100, 100, 100]   fused distinct: 480
+semantic-only distinct: 146        single best probe: 46
+hydrated 141; biology post-filter keeps 141; 8,149 citation edges came along free
+citation expansion returned 100 works in one call
+
+retrieve (5 semantic ∥ 4 lexical)     4.71s
+hydrate 150 ids (2 calls)             0.95s
+graph expansion (1 call)              0.94s
+rerank 141 abstracts (gte-small, cpu) 3.60s
+---------------------------------------------
+12 API calls, $0.0093
+```
+
+**A whole cold search costs about one cent and ~6.5 s of API time.** That is ~100 cold searches
+inside the $1/day free budget, and the retrieval core is not where the seconds go — the LLM stages
+(planning, extraction) will dominate once they exist.
+
+### 4.1 Where the time actually goes
+
+| Stage | Measured | Parallelizable? | Notes |
+| --- | --- | --- | --- |
+| Semantic probe | 0.75–1.9 s each | **No** — 1 req/s, hard | The only true serialization point. 5 probes ≈ 5 s floor |
+| Lexical `search=` | 0.6–0.9 s | Yes (4 in 0.85 s wall) | Runs *inside* the semantic ladder's shadow, so it is free wall-clock |
+| `filter=` only | ~0.5 s | Yes | 10× cheaper than search ($0.0001) |
+| Singleton `/works/{id}` | ~0.4 s for 8 in parallel | Yes | **$0** and carries `referenced_works` |
+| Hydrate 100 works w/ abstracts | ~0.5 s, $0.0001 | Yes | 44 KB gzipped with `select`; 260 KB without |
+| Local rerank, gte-small | 23 ms/abstract | Yes | 141 abstracts in 3.6 s cold, ~0 warm (cache vectors by work id) |
+| Local rerank, gte-large | 230 ms/abstract | — | 10× slower on CPU. OpenAlex's own model; GPU-only option |
+
+### 4.2 Should we precompute edges? No — they are already free
+
+This was worth checking properly, and the answer is a clean no for v1:
+
+- **Outbound edges cost nothing.** `referenced_works` ships inside the hydration call we were
+  making anyway: 141 works carried **8,149 citation edges** for $0.0001 total. A singleton lookup
+  carries them too, and singletons are *free*.
+- **Inbound edges are one call.** `filter=cites:<id1>|<id2>|…` takes 100 seeds at once — 0.94 s,
+  $0.0001, and `meta.count` gives the full inbound degree (29,322 for our 50 seeds) even though
+  only 100 rows come back.
+- So a precomputed edge store would save ~1 s and ~$0.0002 per query. It is not the bottleneck.
+
+Precomputation only starts paying when we want something the API charges for repeatedly:
+multi-hop expansion, co-citation/bibliographic-coupling scores, or an offline eval loop that
+replays hundreds of queries. **The cheap way to get there is accretion, not ingestion:** every
+hydration already returns edges, so write them to a local SQLite edge table as a side effect of
+normal traffic. After a few dozen queries in one domain the local graph is dense enough for
+co-citation features, and it cost nothing extra. Bulk snapshot ingest stays out of scope.
+
+### 4.3 What to do instead, in order of leverage
+
+1. **Overlap the branches.** Lexical, filter, and graph calls run concurrently with the 1 req/s
+   semantic ladder, so 9 branches took 4.71 s — the same as the 5 semantic probes alone. Anything
+   not semantic is wall-clock free.
+2. **Fire the first probe before planning finishes.** The verbatim idea needs no LLM planning, so
+   probe 1 goes out immediately and the planner's 1–2 s hides inside the ladder.
+3. **Stream stages over SSE.** The `SearchStage` union in `src/types.ts` already anticipates this.
+   Fused candidates can render at ~1.5 s while rerank and extraction continue, so *perceived*
+   latency is ~1.5 s regardless of the deep-mode total. This is the single biggest demo win and
+   costs no infrastructure.
+4. **Content-addressed cache** keyed on the normalized request URL, in SQLite. Singleton lookups
+   are free and can be cached indefinitely; probe results for the session. A warm repeat query is
+   ~0.2 s. Plus in-flight request coalescing so duplicate probes share one future.
+5. **Rerank locally, not with an LLM.** gte-small scores 141 candidates in 3.6 s on CPU and ~0 when
+   vectors are cached per work id — cheaper and faster than an LLM listwise pass, and it frees the
+   LLM budget for extraction, where judgment actually matters.
+6. **`select=` on every call.** 50 works: 5 KB minimal, 44 KB with abstracts, 260 KB with no
+   `select` — a 50× difference in wire bytes and JSON parse time.
+7. **Token buckets per endpoint class** (semantic 1/s; everything else ≤10 concurrent against a
+   100/s ceiling), with backoff on 429 *and* 5xx — a 504 showed up during benchmarking, so retries
+   must cover transient upstream errors, not just rate limits.
+
+### 4.4 How many probes?
+
+Measured marginal recall: one probe → 46 distinct works; five semantic probes → 146 (3.2×); adding
+four lexical clauses → 480. Each extra semantic probe costs exactly 1 s and $0.001, so the knob is
+linear and legible. Proposed modes: `fast` = 2 probes, no rerank (~2 s, $0.003); `balanced` =
+5 probes + local rerank (~7 s, $0.01); `deep` = 8 probes + graph expansion + LLM rerank.
+
+### 4.5 If we ever do want a real index (post-hackathon)
+
+The only reasons to build one: breaking the 50-result cap, escaping 1 req/s, or sub-second cold
+latency. That means a local corpus slice (biology, abstracts, 2010+), gte-large embeddings to stay
+in OpenAlex's own vector space, and HNSW. gte-large runs at 230 ms/abstract on CPU, so this is GPU
+work, ~1–2 sessions plus hardware. Explicitly deferred — and the `Retriever` seam means it drops in
+as one more branch without touching fusion, ranking, or the MCP surface.
+
+---
+
+## 5. Modularity: where the seams are
 
 Modularity means *one file added, one line registered, zero core edits*. Five extension points,
 each a Protocol with a registry:
 
-### 4.1 `SourceAdapter`
+### 5.1 `SourceAdapter`
 ```python
 class SourceAdapter(Protocol):
     name: Source                                  # matches src/types.ts Source union
@@ -143,31 +241,31 @@ OpenAlex is the reference implementation and the only one in v1. arXiv, Europe P
 ClinicalTrials.gov are ~100-line adapters afterwards. The fusion stage is source-agnostic, so a new
 adapter improves recall with no change to ranking code.
 
-### 4.2 `Retriever` — one retrieval strategy (a semantic probe, a boolean clause set, graph
+### 5.2 `Retriever` — one retrieval strategy (a semantic probe, a boolean clause set, graph
 expansion). Branches are declarative config: adding a probe family is a list entry, and the planner
 decides which to fire per query.
 
-### 4.3 `Reranker` — `(query, candidates) -> ranked`. Ship heuristic + LLM-listwise; a cross-encoder
+### 5.3 `Reranker` — `(query, candidates) -> ranked`. Ship heuristic + LLM-listwise; a cross-encoder
 drops in later behind the same signature.
 
-### 4.4 `Extractor` — `(paper, text_level) -> EvidenceFragment`. Composable and additive: an
+### 5.4 `Extractor` — `(paper, text_level) -> EvidenceFragment`. Composable and additive: an
 effect-size extractor, a sample-size extractor, a preregistration-checker can be written by three
 people in parallel with no merge conflicts.
 
-### 4.5 `Scorer` — `(query, [paper+evidence]) -> (verdicts, PursuitEstimate)`. Swappable so the
+### 5.5 `Scorer` — `(query, [paper+evidence]) -> (verdicts, PursuitEstimate)`. Swappable so the
 estimate can go from heuristic → Bayesian → LLM-judge without touching retrieval.
 
 Registration via entry points (`nullmap.sources`, `nullmap.extractors`, …) so a plugin can even live
 in a separate repo. Every plugin declares a capability manifest; the MCP server advertises the
 resulting capability set, which keeps agent-facing behaviour honest when a plugin is absent.
 
-### 4.6 What is deliberately *not* pluggable
+### 5.6 What is deliberately *not* pluggable
 Fusion, dedup, the cost accountant, the cache, and the wire types. One implementation each. Pluggable
 infrastructure is how hackathon codebases die.
 
 ---
 
-## 5. MCP surface (v1)
+## 6. MCP surface (v1)
 
 Small on purpose — 7 tools. Agents degrade badly past ~15, and the 31-tool prior art is a
 demonstration of that failure mode. Every tool takes an explicit `budget_usd` ceiling and returns
@@ -194,13 +292,15 @@ stages, so progress events fall out of the architecture rather than being faked.
 
 ---
 
-## 6. Biology-first: yes, but as configuration
+## 7. Biology-first: yes, but as configuration
 
 Narrowing to biology is worth doing, and it should cost ~30 lines, not a fork. It buys:
 
-- **Scoping** — `primary_topic.domain.id:domains/1` (Life Sciences, 32.8M works) plus fields
-  11/13/24/28/30, and 27 (Medicine) for clinical. Applied as a post-filter on semantic branches and a
-  pre-filter on lexical ones.
+- **Scoping** — `primary_topic.domain.id:domains/1|domains/4` (Life Sciences 48M + Health Sciences
+  63M works). Applied as a post-filter on semantic branches and a pre-filter on lexical ones.
+  Do **not** scope to the five "pure biology" fields: a `group_by` on a rodent-metabolism query puts
+  67% of matching works under `field = Medicine`, and an early version of the benchmark threw away
+  134 of 141 good hits that way. Wet-lab biology and clinical work are not separable by field id.
 - **Better evidence extraction** — biology/biomed abstracts are structured far more often
   (Background/Methods/Results/Conclusions), report n and effect sizes, and use a narrow, learnable
   vocabulary of null phrasings. Extraction accuracy is the riskiest part of the project; this is the
@@ -216,14 +316,14 @@ the code. The demo still *says* "academia"; it just wins on biology queries.
 
 ---
 
-## 7. Build plan
+## 8. Build plan
 
 Sessions, not weeks. Roughly parallelizable across 3-4 people after M0 lands.
 
 | Milestone | Contents | Est. |
 | --- | --- | --- |
-| **M0 — skeleton** | Package layout, wire types mirrored from `src/types.ts`, OpenAlex client (key, retry/backoff on 429, `select`, chunked `\|` batching, abstract reconstruction), cost accountant, cache, golden-file tests against recorded fixtures | ~0.5 session |
-| **M1 — retrieval core** | Query planner, semantic + lexical + graph retrievers, RRF fusion, dedup, post-filters. `search_literature` end-to-end, unranked | ~1 session |
+| **M0 — skeleton** | Package layout, wire types mirrored from `src/types.ts`, OpenAlex client (key, per-class token buckets, backoff on 429/5xx, `select`, chunked `\|` batching, abstract reconstruction), cost accountant, SQLite cache + edge store, golden-file tests against recorded fixtures | ~0.5 session |
+| **M1 — retrieval core** | Query planner, semantic + lexical + graph retrievers, RRF fusion, dedup, post-filters, local gte-small rerank. `search_literature` end-to-end. `docs/bench/retrieval_bench.py` is the throwaway prototype of exactly this — promote it, don't re-derive it | ~1 session |
 | **M2 — MCP surface** | All 7 tools, resources, prompts, stdio + HTTP, capability manifest. Usable from Claude/Cursor at this point — **this is the demoable milestone; freeze it before doing anything else** | ~0.5 session |
 | **M3 — results layer** | Abstract extractor, verdict classifier, pursuit estimator, null-signal phrase bank, biology `DomainProfile` | ~1 session |
 | **M4 — nullMap backend** | FastAPI `POST /search` + SSE progress + `POST /contributions` stub, wired to the same pipeline; point the existing frontend at it via `VITE_API_URL` | ~0.5 session |
@@ -234,7 +334,7 @@ each other.
 
 ---
 
-## 8. Evaluation (hackathon-sized, but real)
+## 9. Evaluation (hackathon-sized, but real)
 
 Without this we cannot tell whether hybrid retrieval actually beats `search=`, which is the entire
 technical claim.
@@ -246,19 +346,21 @@ technical claim.
   Target: fused recall@50 ≥ 1.5× the lexical baseline, and ≥ 1 buried null result surfaced per query.
 - **Extraction metrics**: verdict accuracy vs. hand labels on ~100 abstracts; separately, the rate of
   *fabricated* effect sizes, which must be ~0 — a wrong number is worse than an abstention.
-- **Cost/latency**: p50 and p95 $ and seconds per `search_literature` call per mode. Budget target:
-  `balanced` ≤ $0.02 and ≤ 15 s.
+- **Cost/latency**: p50 and p95 $ and seconds per `search_literature` call per mode, tracked by the
+  same ledger the benchmark uses. Current measured baseline for the retrieval half of `balanced`:
+  $0.0093 and ~6.5 s. Target with extraction included: ≤ $0.03 and ≤ 15 s, with first results
+  streamed by 2 s.
 
 ---
 
-## 9. Open questions
+## 10. Open questions
 
 1. **API key** — needed before M1 (the $0.10/day keyless budget will not survive development).
    Whose account owns it, and do we prepay a few dollars for demo day?
 2. **LLM for planning/extraction/rerank** — which provider and key? It sits on the critical path for
    M3, and the rerank step is the difference between "a search box" and "results-focused".
-3. **Latency vs. depth for the demo** — semantic calls are ~6 s and capped at 1 req/s; six probes is
-   therefore ~6-8 s wall-clock even fully parallel. Is `balanced` (≈15 s with rerank) acceptable on
-   stage, or should the demo path be warm-cached?
+3. **Latency vs. depth for the demo** — retrieval measures ~6.5 s for 5 probes, and SSE streaming
+   puts first results on screen at ~1.5 s. That is probably fine unstaged; confirm nobody wants a
+   pre-warmed demo path instead.
 4. **Does the MCP ship as its own repo?** Recommendation: `packages/` inside NullMap during the
    hackathon, split out after — a separate repo now adds coordination cost for no demo value.
