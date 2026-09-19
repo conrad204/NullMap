@@ -1,0 +1,7 @@
+study_id,cluster_id,year,design,population,intervention,comparator,outcome,timepoint,measure,scale_id,higher_is_better,effect,se,p_value,p_operator,test_type,two_sided,direction,n1,n2,qualitative_label,risk_of_bias,pico_compatible,primary_result,methodologically_failed,completed_unreported
+S1,A,2022,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,0.04,0.08,,,,,,250,250,,low,True,True,False,False
+S2,A,2023,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,-0.02,0.09,,,,,,210,212,,some_concerns,True,True,False,False
+S3,A,2021,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,,,0.18,=,two_sample_t,True,1,40,40,,low,True,True,False,False
+S4,A,2020,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,,,,,,,,,,null_underpowered,unknown,True,True,False,False
+S5,A,2019,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,,,,,,,,,,,unknown,True,True,True,False
+S6,A,2018,RCT,Adults with condition X,Drug A 10 mg,Placebo,Symptom score,12 weeks,hedges_g,symptom_v1,True,,,,,,,,,,,unknown,True,True,False,True

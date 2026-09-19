@@ -1,0 +1,46 @@
+[
+  {
+    "cluster_id":"A",
+    "n_records":6,
+    "tier_counts":{
+      "full_quant":2,
+      "p_reconstructed":1,
+      "qualitative":1,
+      "methodologically_failed":1,
+      "completed_unreported":1
+    },
+    "qualitative_finding_counts":{
+      "inconclusive":1
+    },
+    "n_completed_unreported":1,
+    "n_methodologically_failed":1,
+    "n_high_risk_excluded":0,
+    "n_numeric_eligible":2,
+    "status":"uncertain",
+    "redundancy_score":72.2,
+    "score_definition":"100 \u00d7 predictive-zone resolution \u00d7 evidence maturity",
+    "dominant_zone":"clinically_negligible",
+    "predictive_zone_probabilities":{
+      "harm":0.0002,
+      "clinically_negligible":0.9989,
+      "benefit":0.0009
+    },
+    "resolution_component":0.9918,
+    "maturity_component":0.7281,
+    "conflict_flag":false,
+    "meta_analysis":{
+      "k":2,
+      "mean":0.013517,
+      "se":0.059793,
+      "ci_low":-0.103674,
+      "ci_high":0.130709,
+      "tau2":0.0,
+      "q":0.248276,
+      "q_p_value":0.618292,
+      "i2":0.0,
+      "prediction_low":null,
+      "prediction_high":null,
+      "total_information":279.70679
+    }
+  }
+]

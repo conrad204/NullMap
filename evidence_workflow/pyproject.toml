@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evidence-redundancy"
+version = "0.1.0"
+description = "Heterogeneity-aware evidence synthesis and research-redundancy scoring"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "scipy>=1.11",
+]
+
+[project.scripts]
+evidence-workflow = "evidence_workflow.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evidence_workflow"]
+
