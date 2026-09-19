@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/*
+  Theme tokens. One palette, cool zinc neutrals, one accent (deep blue).
+  The five verdict colors are data-semantic, not decoration.
+  Radius rule: controls 8px, panels 12px, small marks 4px. Nothing else.
+*/
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f6f7;
+  --surface: #fcfcfc;
+  --surface-2: #eeeef1;
+  --line: #e2e2e6;
+  --line-strong: #c6c6ce;
+  --ink: #16161a;
+  --ink-2: #55555e;
+  --ink-3: #75757e;
+
+  --accent: #2a55c2;
+  --accent-soft: #e6ecfa;
+  --on-accent: #fbfbfc;
+
+  --v-effect: #1e8a5a;
+  --v-null: #2a55c2;
+  --v-inconclusive: #8e8e98;
+  --v-failed: #c0463f;
+  --v-unreported: #a8741a;
+
+  --shadow: 0 1px 2px rgb(22 22 26 / 0.05), 0 10px 28px -14px rgb(22 22 26 / 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e11;
+    --surface: #16161a;
+    --surface-2: #1e1e23;
+    --line: #27272d;
+    --line-strong: #3b3b44;
+    --ink: #f2f2f4;
+    --ink-2: #a6a6ae;
+    --ink-3: #8b8b95;
+
+    --accent: #7a9ff2;
+    --accent-soft: #1a2440;
+    --on-accent: #0e0e11;
+
+    --v-effect: #4cc08a;
+    --v-null: #7a9ff2;
+    --v-inconclusive: #83838d;
+    --v-failed: #e0655e;
+    --v-unreported: #d9a43b;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  }
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+
+  --color-v-effect: var(--v-effect);
+  --color-v-null: var(--v-null);
+  --color-v-inconclusive: var(--v-inconclusive);
+  --color-v-failed: var(--v-failed);
+  --color-v-unreported: var(--v-unreported);
+
+  --shadow-panel: var(--shadow);
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-mark: 4px;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1rem;
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition:
+      background-color 0.2s,
+      color 0.2s,
+      border-color 0.2s,
+      filter 0.2s,
+      transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn:active {
+    transform: scale(0.98);
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  .btn-primary:hover {
+    filter: brightness(1.08);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+  }
+  .btn-secondary:hover {
+    background: var(--surface-2);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: var(--ink);
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
+  }
+  .field::placeholder {
+    color: var(--ink-3);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--v-failed);
+  }
+
+  .fade-up {
+    animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .skeleton {
+    background: var(--surface-2);
+    border-radius: var(--radius-mark);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .skeleton {
+    animation: none;
+  }
+  * {
+    transition-duration: 0ms !important;
+  }
+}
