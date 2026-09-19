@@ -1,0 +1,6 @@
+pydantic>=2.9
+elasticsearch==8.15.0
+pyalex>=0.18
+sentence-transformers>=3.0   # local embedding fallback; skip if you only use OpenAI
+# optional, enables LLM extraction + hosted embeddings:
+# openai>=1.40
