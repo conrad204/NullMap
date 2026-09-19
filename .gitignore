@@ -4,3 +4,13 @@ dist
 .env.local
 *.log
 .DS_Store
+
+# python backend
+backend/.venv
+__pycache__/
+*.pyc
+.pytest_cache
+.ruff_cache
+
+# secrets
+keys.txt

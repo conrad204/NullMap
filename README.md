@@ -15,6 +15,20 @@ npm run build      # typecheck + production build
 With no `VITE_API_URL` set, the UI runs against the mock in `src/api/mock.ts` and shows a
 "sample data" badge. Copy `.env.example` to `.env` and set the URL once a backend exists.
 
+## Backend
+
+Python 3.12 managed by [uv](https://docs.astral.sh/uv/). Everything lives in `backend/`.
+
+```sh
+cd backend
+uv sync                                   # creates .venv and installs from uv.lock
+cp .env.example .env                      # fill in Elastic / OpenAI / OpenAlex keys
+uv run uvicorn app.main:app --reload      # http://localhost:8000, GET /health
+uv run pytest                             # tests
+uv run ruff check .                       # lint
+uv add <package>                          # add a dependency (updates pyproject + lock)
+```
+
 ## API contract (for the backend)
 
 Types live in [`src/types.ts`](src/types.ts). Endpoints the client calls, in
