@@ -68,6 +68,7 @@ def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
         "verdict": verdict["bucket"],
         "rationale": verdict["rationale"],
         "inconclusiveReason": verdict["inconclusive_reason"],
+        "resultDirection": study.get("result_direction"),
         "sampleSize": study.get("n"),
         "effectSize": effect,
         "evidenceSpan": study.get("evidence_span", ""),
@@ -281,6 +282,119 @@ class SearchPipeline:
             await self.repo.cache_extraction(study["id"], extraction)
             return dict(current, **extraction)
 
+    async def group_outcomes(
+        self, question: dict, studies: list[dict], verdicts: dict, usage: Usage, warnings: list[str]
+    ) -> dict[str, str]:
+        """Ask which numeric studies measure the same thing; pooling itself stays in code.
+
+        Exact outcome wording almost never repeats across reports, so without this no
+        pool forms. Only studies that already have a usable standard error are sent.
+        """
+        rows = [
+            {
+                "id": d["id"],
+                "outcome": d.get("outcome") or "",
+                "unit": d.get("outcome_unit") or "",
+                "intervention": d.get("intervention") or "",
+                "comparator": d.get("comparator") or "",
+                "scale": verdicts[d["id"]]["analysis_effect_type"],
+            }
+            for d in studies
+            if verdicts[d["id"]]["analysis_se"] is not None
+            and verdicts[d["id"]]["bucket"] not in {"failed", "unreported"}
+            and d.get("outcome")
+        ]
+        if len(rows) < 3 or not self.config.openai_api_key:
+            return {}
+        try:
+            return await self.llm.group_outcomes(question, rows, usage)
+        except Exception as exc:
+            logger.warning("Outcome grouping unavailable: %s", type(exc).__name__)
+            warnings.append(
+                "Outcome grouping was unavailable; only studies with identical outcome "
+                "wording could be pooled."
+            )
+            return {}
+
+    async def effect_trend(
+        self,
+        idea: str,
+        studies: list[dict],
+        verdicts: dict,
+        aggregation: dict,
+        stats: dict,
+        usage: Usage,
+        warnings: list[str],
+    ) -> dict | None:
+        """What the studies reporting an effect have in common; tallies are counted here."""
+        effects = [d for d in studies if verdicts[d["id"]]["bucket"] == "effect"]
+        if not effects:
+            return None
+        directions = Counter(d.get("result_direction") or "unclear" for d in effects)
+        counts = aggregation["bucketCounts"]
+        trend = {
+            "studied": len(effects),
+            "totalEffects": counts["effect"],
+            "favoursIntervention": directions["favours_intervention"],
+            "favoursComparator": directions["favours_comparator"],
+            "unclear": directions["unclear"],
+            "summary": None,
+            "patterns": [],
+            "scope": f"Based on the {len(effects)} effect-reporting studies read in detail, of "
+            f"{counts['effect']} in the full match set.",
+        }
+        if len(effects) < 2 or not self.config.openai_api_key:
+            return trend
+        rows = []
+        for d in effects[:20]:
+            verdict = verdicts[d["id"]]
+            evidence = d.get("extraction_evidence") or {}
+            rows.append(
+                {
+                    "id": d["id"],
+                    "population": (d.get("population") or "")[:160],
+                    "intervention": (d.get("intervention") or "")[:160],
+                    "comparator": (d.get("comparator") or "")[:160],
+                    "outcome": (d.get("outcome") or "")[:200],
+                    "unit": d.get("outcome_unit") or "",
+                    "n": d.get("n"),
+                    "direction": d.get("result_direction") or "unclear",
+                    "estimate": d.get("estimate"),
+                    "scale": d.get("effect_type"),
+                    "tier": verdict["evidence_tier"],
+                    "quote": (
+                        evidence.get("reported_result")
+                        or evidence.get("result_direction")
+                        or d.get("evidence_span")
+                        or ""
+                    )[:320],
+                }
+            )
+        try:
+            narrative = await self.llm.trend(
+                {
+                    "question": idea,
+                    "rows": rows,
+                    "pools": [
+                        {key: pool[key] for key in ("outcome", "effectType", "k", "estimate", "ci")}
+                        for pool in stats.get("pools", [])
+                    ],
+                    "context": {
+                        "effectStudiesInTable": len(rows),
+                        "effectStudiesInFullMatchSet": counts["effect"],
+                        "reportedNulls": counts["credible_null"] + counts.get("reported_null", 0),
+                        "unreportedTrials": counts["unreported"],
+                        "directionTally": dict(directions),
+                    },
+                },
+                usage,
+            )
+            trend.update(summary=narrative.summary, patterns=narrative.patterns)
+        except Exception as exc:
+            logger.warning("Effect trend unavailable: %s", type(exc).__name__)
+            warnings.append("The effect-trend summary was unavailable; direction counts are shown.")
+        return trend
+
     async def search(self, request: SearchRequest, progress=None) -> dict:
         async with self.active:
             return await self._search(request, progress)
@@ -366,8 +480,21 @@ class SearchPipeline:
         aggregation = await self.repo.aggregate(query, pico.sesoi, pico.effectType)
         plan = request.model_dump()
         plan.update(sesoi=pico.sesoi, effectType=pico.effectType)
-        stats = await asyncio.to_thread(analyze_studies, studies, plan, aggregation["fileDrawer"])
+        verdicts = {d["id"]: assign_bucket(d, pico.sesoi, pico.effectType) for d in studies}
+        question = {
+            "idea": request.idea,
+            "intervention": pico.intervention,
+            "comparator": pico.comparator,
+            "outcome": pico.outcome,
+        }
+        outcome_groups = await self.group_outcomes(question, studies, verdicts, usage, warnings)
+        stats = await asyncio.to_thread(
+            analyze_studies, studies, plan, aggregation["fileDrawer"], outcome_groups
+        )
         warnings.extend(stats.get("warnings", []))
+        effect_trend = await self.effect_trend(
+            request.idea, studies, verdicts, aggregation, stats, usage, warnings
+        )
         if mode == "bm25" and not any("BM25" in warning for warning in warnings):
             warnings.append(
                 "This deployment is configured for BM25 retrieval; enable local embeddings for hybrid search."
@@ -481,6 +608,7 @@ class SearchPipeline:
             "costs": usage.summary([d.get("abstract", "") for d in targets], self.config),
             "warnings": list(dict.fromkeys(warnings)),
             "alternativeRoutes": alternatives,
+            "effectTrend": effect_trend,
             "retrieval": {
                 "mode": mode,
                 "expanded": len(expanded),

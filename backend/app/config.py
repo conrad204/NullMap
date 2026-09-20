@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     compression_validated: bool = False
     ttc_input_price: float = 0.0
     request_timeout: float = 45.0
-    extraction_cache_version: str = "v3-arm-summaries"
+    extraction_cache_version: str = "v4-result-direction"
     # Query-time full text from Europe PMC for papers with a PMCID; abstract otherwise.
     fulltext_enabled: bool = True
     europepmc_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"

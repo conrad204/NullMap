@@ -372,3 +372,43 @@ def test_out_of_range_sentence_drops_a_droppable_fact_but_still_rejects_an_estim
         {**fields, "estimate": {"value": 0.3, "sentence_index": 7}})
     with pytest.raises(ValueError, match="Invalid evidence sentence"):
         indexed_to_extraction(fatal, ["The difference was 0.3."])
+
+
+def test_outcome_groups_ignore_unknown_repeated_and_lone_ids():
+    from app.models import OutcomeGroups
+
+    async def exercise():
+        service = LLMService(Settings(_env_file=None, openai_api_key=""))
+
+        async def structured(schema, prompt, data, purpose, usage, large=False):
+            assert purpose == "group" and large and "question" in json.loads(data)
+            return OutcomeGroups.model_validate({"groups": [
+                {"label": " Systolic  BP ", "study_ids": ["A", "B", "B", "ZZ"]},
+                {"label": "Second claim on A", "study_ids": ["A", "C"]},
+                {"label": "", "study_ids": ["D", "E"]},
+            ]})
+
+        service.structured = structured
+        rows = [{"id": x} for x in "ABCDE"]
+        return await service.group_outcomes({"idea": "question"}, rows, Usage())
+
+    # A stays in its first group; C is then alone and dropped; an unlabelled group is dropped.
+    assert asyncio.run(exercise()) == {"A": "Systolic BP", "B": "Systolic BP"}
+
+
+def test_trend_prose_may_only_repeat_numbers_from_its_table():
+    from app.models import EffectTrend
+
+    async def exercise(summary):
+        service = LLMService(Settings(_env_file=None, openai_api_key=""))
+
+        async def structured(schema, prompt, data, purpose, usage, large=False):
+            return EffectTrend(summary=summary, patterns=["Reductions near 5.2 mmHg", " "])
+
+        service.structured = structured
+        return await service.trend({"rows": [{"estimate": 5.2, "n": 1200}]}, Usage())
+
+    kept = asyncio.run(exercise("Reports describe falls of 5.2 mmHg among 1,200 adults."))
+    assert kept.patterns == ["Reductions near 5.2 mmHg"]
+    with pytest.raises(ValueError, match="absent from the table: 9.8"):
+        asyncio.run(exercise("Reports describe falls of 9.8 mmHg."))

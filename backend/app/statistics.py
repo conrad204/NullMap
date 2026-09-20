@@ -664,8 +664,19 @@ def _file_drawer(studies: list[dict], supplied: dict | None) -> dict:
     }
 
 
-def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = None) -> dict:
+def analyze_studies(
+    studies: list[dict],
+    plan: dict,
+    file_drawer: dict | None = None,
+    outcome_groups: dict[str, str] | None = None,
+) -> dict:
     """Analyze retrieved studies; caller supplies corpus-wide file-drawer counts.
+
+    ``outcome_groups`` maps study id to a shared outcome label for studies a language
+    model judged comparable (same construct, same kind of comparison). It replaces only
+    the exact-text match on outcome and comparison wording; scale, units for mean
+    differences and every number are still checked and computed here, and such pools
+    are marked so the judgement can be reviewed.
 
     Pools require >=3 independent primary studies with the same normalized effect
     type, outcome, outcome unit, intervention/comparator orientation and explicit
@@ -698,6 +709,7 @@ def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = 
         ),
     ]
     warnings: list[str] = []
+    labels: dict[str, str] = {}
     groups: dict[tuple, list] = defaultdict(list)
     seen: set[str] = set()
     unique_studies = []
@@ -744,6 +756,13 @@ def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = 
             )
         direction = _text(study.get("effect_direction") or study.get("outcome_direction"))
         comparison = (_text(study.get("intervention")), _text(study.get("comparator")))
+        label = (outcome_groups or {}).get(sid)
+        if label:
+            # Different instruments for one construct share SD units, never raw units.
+            if kind == "SMD":
+                unit = "SD"
+            outcome, comparison = f"group:{_text(label)}", ("", "")
+            labels[outcome] = label
         if not direction:
             assumptions.append(
                 "Within each comparison, effects retain their reported signs; "
@@ -754,11 +773,19 @@ def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = 
 
     pools = []
     for key, group in groups.items():
+        name = labels.get(key[1], key[1])
         if len(group) >= 3:
-            pools.append(_pool(group, key))
+            pool = _pool(group, key)
+            if key[1] in labels:
+                pool.update(outcome=name, grouping="model")
+                warnings.append(
+                    f"Studies pooled under “{name}” were judged comparable by a language model "
+                    "from their outcome and comparison wording; check the grouped studies."
+                )
+            pools.append(pool)
         else:
             warnings.append(
-                f"Only {len(group)} compatible numeric studies for {key[1]} ({key[0]}); "
+                f"Only {len(group)} compatible numeric studies for {name} ({key[0]}); "
                 "at least 3 are required for pooling."
             )
     pools.sort(key=lambda pool: (-pool["k"], pool["outcome"], pool["effectType"]))

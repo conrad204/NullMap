@@ -575,3 +575,43 @@ def test_every_inconclusive_verdict_says_why_and_other_buckets_carry_no_reason(r
     assert verdict["rationale"]
     for other in ({"result_label": "null"}, {"result_label": "positive"}, {"is_retracted": True}):
         assert assign_bucket(other)["inconclusive_reason"] is None
+
+
+def _trial(identifier, outcome, estimate, **extra):
+    return {"id": identifier, "outcome": outcome, "effect_type": "SMD", "estimate": estimate,
+            "ci_low": estimate - 0.2, "ci_high": estimate + 0.2, "intervention": f"Drug {identifier}",
+            "comparator": "Placebo", **extra}
+
+
+def test_model_judged_outcome_groups_pool_differently_worded_studies_and_are_flagged():
+    rows = [_trial("A", "Systolic blood pressure at 12 weeks", -0.30, outcome_unit="mmHg"),
+            _trial("B", "SBP, week 12", -0.20),
+            _trial("C", "Office systolic BP", -0.25, outcome_unit="mm Hg"),
+            _trial("D", "Quality of life", 0.40)]
+    plan = {"sesoi": 0.2, "effectType": "SMD", "plannedN": 400}
+    assert analyze_studies(rows, plan)["pools"] == []
+    groups = {"A": "Systolic blood pressure", "B": "Systolic blood pressure",
+              "C": "Systolic blood pressure"}
+    stats = analyze_studies(rows, plan, None, groups)
+    [pool] = stats["pools"]
+    assert pool["k"] == 3 and sorted(pool["studyIds"]) == ["A", "B", "C"]
+    assert (pool["outcome"], pool["unit"], pool["grouping"]) == ("Systolic blood pressure", "SD",
+                                                                 "model")
+    # The numbers are the ordinary random-effects pool of those three studies.
+    exact = analyze_studies([{**row, "outcome": "x", "intervention": "i", "outcome_unit": ""}
+                             for row in rows[:3]], plan)["pools"][0]
+    assert pool["estimate"] == pytest.approx(exact["estimate"])
+    assert pool["se"] == pytest.approx(exact["se"])
+    assert stats["assurance"] is not None
+    assert any("judged comparable by a language model" in w for w in stats["warnings"])
+
+
+def test_a_model_group_never_overrides_scale_or_mean_difference_units():
+    groups = dict.fromkeys("ABC", "Systolic blood pressure")
+    mixed_scale = [_trial("A", "SBP", -0.3), _trial("B", "SBP", -0.2),
+                   _trial("C", "SBP", 0.8, effect_type="OR", ci_low=0.6, ci_high=1.0)]
+    assert analyze_studies(mixed_scale, {"effectType": "SMD"}, None, groups)["pools"] == []
+    mixed_units = [_trial(x, "SBP", -3.0, effect_type="MD", outcome_unit=unit)
+                   for x, unit in zip("ABC", ["mmHg", "mmHg", "kPa"])]
+    assert analyze_studies(mixed_units, {"effectType": "MD", "outcomeSd": 10}, None,
+                           groups)["pools"] == []

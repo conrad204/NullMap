@@ -188,6 +188,16 @@ class FakeLLM:
         self.narrations.append(deepcopy(table))
         return SimpleNamespace(summary="The structured evidence remains uncertain.", drivers=[])
 
+    async def group_outcomes(self, question, rows, usage):
+        self.grouping_rows = deepcopy(rows)
+        return dict(getattr(self, "groups", {}))
+
+    async def trend(self, table, usage):
+        self.trend_table = deepcopy(table)
+        if getattr(self, "trend_error", None):
+            raise self.trend_error
+        return SimpleNamespace(summary="Most favour the intervention.", patterns=["BP fell"])
+
 
 def test_empty_no_key_search_returns_coverage_gap_without_fabricated_probability():
     async def exercise():
@@ -787,3 +797,61 @@ def test_inconclusive_is_summarised_with_the_reasons_it_could_not_be_classified(
     assert sentence.startswith("A further 7 are inconclusive: 2 had an interval too wide")
     assert "5 had no readable comparative result" in sentence and "review" not in sentence
     assert inconclusive_sentence(3, None) == "A further 3 are inconclusive. "
+
+
+def _effect(identifier, outcome, estimate, direction):
+    return paper(identifier, outcome=outcome, effect_type="SMD", estimate=estimate,
+                 ci_low=estimate - 0.15, ci_high=estimate + 0.15, ci_level=0.95,
+                 result_label="positive", result_direction=direction,
+                 intervention=f"Vitamin D {identifier}",
+                 extraction_evidence={"reported_result": f"{identifier} improved significantly."})
+
+
+def test_effect_trend_counts_directions_in_code_and_pools_model_grouped_outcomes():
+    async def exercise():
+        rows = [_effect("A", "Depression score at 12 weeks", 0.5, "favours_intervention"),
+                _effect("B", "PHQ-9 total", 0.45, "favours_intervention"),
+                _effect("C", "Depressive symptoms", -0.5, "favours_comparator"),
+                paper("D", result_label="null")]
+        repo, llm = MemoryRepository(rows), FakeLLM()
+        llm.groups = dict.fromkeys("ABC", "Depressive symptoms")
+        settings = config(extraction_limit=0)
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(repo, llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        trend = result["effectTrend"]
+        assert (trend["favoursIntervention"], trend["favoursComparator"], trend["unclear"]) == (
+            2, 1, 0)
+        assert trend["studied"] == 3 and trend["summary"] == "Most favour the intervention."
+        # The model is told about the nulls and sees quotes, never raw abstracts.
+        assert llm.trend_table["context"]["reportedNulls"] == 1
+        assert all("abstract" not in row and row["quote"] for row in llm.trend_table["rows"])
+        assert {row["id"] for row in llm.grouping_rows} == {"A", "B", "C"}
+        [pool] = result["statistics"]["pools"]
+        assert pool["grouping"] == "model" and pool["k"] == 3
+        assert llm.trend_table["pools"][0]["outcome"] == "Depressive symptoms"
+        assert result["papers"][0]["resultDirection"] in {"favours_intervention",
+                                                           "favours_comparator"}
+
+    asyncio.run(exercise())
+
+
+def test_effect_trend_keeps_counts_when_the_model_fails_and_is_absent_without_effects():
+    async def exercise():
+        rows = [_effect("A", "Depression", 0.5, "favours_intervention"),
+                _effect("B", "Depression", 0.4, None)]
+        llm = FakeLLM()
+        llm.trend_error = RuntimeError("model down")
+        settings = config(extraction_limit=0)
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        trend = result["effectTrend"]
+        assert trend["summary"] is None and (trend["favoursIntervention"], trend["unclear"]) == (
+            1, 1)
+        assert any("effect-trend summary was unavailable" in w for w in result["warnings"])
+        none = await SearchPipeline(MemoryRepository([paper("N")]), FakeLLM(), settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert none["effectTrend"] is None
+
+    asyncio.run(exercise())
