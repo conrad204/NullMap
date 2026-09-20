@@ -1,12 +1,17 @@
 /**
- * Concept tags: the state and the reading of it, with no React in sight.
+ * Concept tags: the reading of one typed line, with no React in sight.
+ *
+ * There is one box and one search. The line the user types is the research
+ * question, and any signed terms trailing it are tags:
+ *
+ *   Does renal artery stenting improve kidney function? +blood pressure −stroke
  *
  * A tag is a concept the search should move towards (positive) or away from
- * (negative). They ride along on the one literature search: the backend adds
+ * (negative). They ride along on that same literature search: the backend adds
  * and subtracts their embeddings from the question's own vector, the way
  * "king − man + woman" lands near queen, so they reorder the question's matches
- * and never decide which papers match. Everything here is pure so the same tags
- * can be built by a form today and by another feature later.
+ * and never decide which papers match. The typed line is the only source of
+ * truth: chips are a reading of it, and editing a chip rewrites the line.
  */
 import type { Concept, ConceptSign, ConceptSteer } from "../types";
 
@@ -60,27 +65,46 @@ export function parseConceptInput(raw: string): string[] {
     .filter(Boolean);
 }
 
-const SIGN_PREFIX = /^([+\-−–])\s*/;
-
 /**
- * A typed term carries its own sign when it starts with + or −, so one field can
- * hold both sides of the steer: "SGLT2, −diabetes".
+ * A tag begins where a sign begins a term: the sign opens the term (start of
+ * the line or after a space) and the term follows it immediately. That single
+ * rule is what keeps prose prose — "renal-artery" has no space before its
+ * hyphen and "a - b" has one after it, so neither is a tag.
  */
-export function parseSignedInput(raw: string, fallback: ConceptSign): { text: string; sign: ConceptSign }[] {
-  const signed: { text: string; sign: ConceptSign }[] = [];
-  for (const term of parseConceptInput(raw)) {
-    const prefix = SIGN_PREFIX.exec(term);
-    const text = prefix ? term.slice(prefix[0].length).trim() : term;
-    if (!text) continue;
-    signed.push({ text, sign: prefix && prefix[1] !== "+" ? "negative" : prefix ? "positive" : fallback });
-  }
-  return signed;
+const TAG_START = /(^|\s)([+\-−–])(?=[\p{L}\p{N}("'“])/gu;
+
+/** Tags are typed inside a sentence, so they arrive wearing its punctuation. */
+function cleanTerm(raw: string): string {
+  return raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[(["'“‘]+/, "")
+    .replace(/[)\]"'”’.,;:!?]+$/, "")
+    .trim();
 }
 
-export function addSignedConcepts(concepts: Concept[], raw: string, fallback: ConceptSign): Concept[] {
-  let next = concepts;
-  for (const { text, sign } of parseSignedInput(raw, fallback)) next = addConcepts(next, text, sign);
-  return next;
+/**
+ * Read one typed line as the question plus its tags. Everything before the
+ * first signed term is the question; each signed term after it runs until the
+ * next one. Tags never shorten the question the search runs: they only aim it.
+ */
+export function parseLine(raw: string): { question: string; concepts: Concept[] } {
+  const starts = [...raw.matchAll(TAG_START)];
+  if (!starts.length) return { question: raw.trim(), concepts: [] };
+  let concepts: Concept[] = [];
+  starts.forEach((start, index) => {
+    const from = start.index + start[1].length + start[2].length;
+    const to = index + 1 < starts.length ? starts[index + 1].index : raw.length;
+    const text = cleanTerm(raw.slice(from, to));
+    if (text) concepts = addConcepts(concepts, text, start[2] === "+" ? "positive" : "negative");
+  });
+  return { question: raw.slice(0, starts[0].index).trim(), concepts };
+}
+
+/** The line that reads back as exactly this question and these tags. */
+export function composeLine(question: string, concepts: Concept[]): string {
+  const tags = concepts.map((concept) => `${SIGN_META[concept.sign].symbol}${concept.text}`);
+  return [question.trim(), ...tags].filter(Boolean).join(" ");
 }
 
 export function bySign(concepts: Concept[], sign: ConceptSign): Concept[] {

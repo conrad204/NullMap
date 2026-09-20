@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ArrowRight, Minus, Plus, X } from "@phosphor-icons/react";
-import type { Concept, ConceptSign, SearchRequest } from "../types";
+import type { Concept, SearchRequest } from "../types";
 import type { GlideOrigin } from "./QuestionHeader";
 import FilterControls from "./FilterControls";
 import {
-  SIGN_META, addSignedConcepts, conceptError, flipConcept, removeConcept, toSteer,
+  SIGN_META, composeLine, conceptError, flipConcept, parseLine, removeConcept, toSteer,
 } from "../lib/concepts";
 import { filterError, parseFilters, type FilterState } from "../lib/filters";
 import { cx } from "../lib/format";
@@ -21,11 +21,7 @@ const QUESTIONS = [
   "Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis?",
   "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease?",
 ];
-const TAG_EXAMPLES: { label: string; terms: string }[] = [
-  { label: "+kidney outcomes −type 2 diabetes", terms: "+kidney outcomes, −type 2 diabetes" },
-  { label: "+quality of life −mortality", terms: "+quality of life, −mortality" },
-  { label: "−animal model", terms: "−animal model" },
-];
+const TAG_EXAMPLES = ["+kidney outcomes −type 2 diabetes", "+quality of life −mortality", "−animal model"];
 const DEFAULTS = { plannedN: 200, alpha: 0.05, valueSuccess: 100, valueNull: 20, studyCost: 30 };
 
 // Where the first typed character sits on screen, so the question header can start its glide there.
@@ -40,22 +36,26 @@ function textOrigin(field: HTMLTextAreaElement): GlideOrigin {
 }
 
 /**
- * One search. The box is the research question, as it always was; the concept
- * tags below it are an optional add-on that rides on the same request and only
- * steers the ranking of that question's matches. There is nothing to switch
- * between: without tags this is the original search, with them it is the same
- * search read in a different order.
+ * One search, one box. The line is the research question, as it always was,
+ * and any signed terms trailing it — "…in adults? +blood pressure −stroke" —
+ * are optional tags that ride on the same request and only steer the ranking
+ * of that question's matches. The chips under the box are a reading of the
+ * line, never a second field: editing one rewrites what was typed.
  */
 export default function Composer({ hidden, onSubmit, filters, onFiltersChange }: Props) {
   const [text, setText] = useState("");
-  const [tag, setTag] = useState("");
-  const [concepts, setConcepts] = useState<Concept[]>([]);
-  const [nextSign, setNextSign] = useState<ConceptSign>("positive");
   const [error, setError] = useState<string | null>(null);
   const [tagProblem, setTagProblem] = useState<string | null>(null);
   const [filterProblem, setFilterProblem] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
-  const tagRef = useRef<HTMLInputElement>(null);
+  const { question, concepts } = useMemo(() => parseLine(text), [text]);
+
+  /** A chip is the line, read back, so changing one can only mean rewriting the line. */
+  const rewrite = (next: Concept[]) => {
+    setText(composeLine(question, next));
+    setTagProblem(null);
+    fieldRef.current?.focus();
+  };
 
   // The form stays mounted while a search runs so the draft survives; focus it again on return.
   const wasHidden = useRef(hidden);
@@ -64,28 +64,16 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
     wasHidden.current = hidden;
   }, [hidden]);
 
-  /** Turn what is typed into chips. Returns the resulting list so a submit can send it at once. */
-  const commit = (raw: string) => {
-    if (!raw.trim()) return concepts;
-    const next = addSignedConcepts(concepts, raw, nextSign);
-    setConcepts(next);
-    setTag("");
-    setNextSign("positive");
-    setTagProblem(null);
-    return next;
-  };
-
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (hidden) return;
-    // A tag still being typed is on screen as part of the search, so it is sent too.
-    const tags = commit(tag);
-    if (text.trim().length < 20) {
+    // The tags are part of the line, so what is left of it is what gets searched.
+    if (question.length < 20) {
       setError("Describe your question in at least 20 characters, including the intervention and outcome.");
       return;
     }
     setError(null);
-    const tagged = conceptError(tags);
+    const tagged = conceptError(concepts);
     setTagProblem(tagged);
     if (tagged) return;
     if (!event.currentTarget.reportValidity()) return;
@@ -94,8 +82,8 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
     if (problem) return;
     onSubmit(
       {
-        idea: text.trim(), field: "Medicine and health", ...DEFAULTS,
-        filters: parseFilters(filters.draft), concepts: toSteer(tags) ?? undefined,
+        idea: question, field: "Medicine and health", ...DEFAULTS,
+        filters: parseFilters(filters.draft), concepts: toSteer(concepts) ?? undefined,
       },
       fieldRef.current ? textOrigin(fieldRef.current) : null,
     );
@@ -109,20 +97,12 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
     }
   }
 
-  function onTagKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.nativeEvent.isComposing) return;
-    if ((event.key === "Enter" || event.key === ",") && tag.trim()) {
-      event.preventDefault();
-      commit(tag);
-    } else if (event.key === "Backspace" && !tag && concepts.length) {
-      setConcepts(concepts.slice(0, -1));
-    } else if ((event.key === "-" || event.key === "−") && !tag) {
-      event.preventDefault();
-      setNextSign("negative");
-    }
-  }
-
-  const meta = SIGN_META[nextSign];
+  /** Examples type themselves into the same line, because there is nowhere else to type. */
+  const append = (addition: string) => {
+    setText((current) => `${current.trimEnd()}${current.trim() ? " " : ""}${addition} `);
+    setError(null);
+    fieldRef.current?.focus();
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,7 +110,8 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
         <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-4xl">Check the file drawer before you run the study.</h1>
         <p className="mx-auto mt-3 max-w-[58ch] text-balance leading-relaxed text-ink-2">
           Ask a research question to map prior studies and separate confirmed no-difference results
-          from uncertain ones. Add concept tags to steer which of those studies rank highest.
+          from uncertain ones. End the question with <span className="font-mono">+</span> or{" "}
+          <span className="font-mono">−</span> concepts to steer which of those studies rank highest.
         </p>
       </div>
 
@@ -140,7 +121,7 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
             <label htmlFor="idea" className="sr-only">Your research question</label>
             <textarea ref={fieldRef} id="idea" name="idea" rows={3} value={text} maxLength={10000} autoFocus
               onChange={(event) => setText(event.target.value)} onKeyDown={onQuestionKeyDown}
-              placeholder="Does X change Y in population Z?"
+              placeholder="Does X change Y in population Z? +concept −concept"
               aria-invalid={error ? "true" : undefined} aria-describedby="idea-help"
               className="block w-full resize-none bg-transparent px-4 pt-3.5 text-base leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none" />
             <div className="flex items-center justify-between gap-3 px-3 pb-3 pt-1">
@@ -155,67 +136,54 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
           {error && <p role="alert" className="text-sm text-v-failed">{error}</p>}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className={cx("flex flex-wrap items-center gap-1.5 rounded-control border border-line bg-surface-2 px-2.5 py-2", tagProblem && "border-v-failed")}>
-            {concepts.map((concept) => {
-              const chip = SIGN_META[concept.sign];
-              return (
-                <span key={concept.id} className={cx("flex max-w-full items-center gap-1 rounded-control py-1 pl-2 pr-1 text-sm text-ink", chip.tint)}>
-                  <span aria-hidden className={cx("font-mono text-xs", chip.text)}>{chip.symbol}</span>
-                  <span className="max-w-[24ch] truncate">{concept.text}</span>
-                  <button type="button" onClick={() => setConcepts((current) => flipConcept(current, concept.id))}
-                    title={concept.sign === "positive" ? "Rank work about this lower instead" : "Rank work about this higher instead"}
-                    aria-label={`Move "${concept.text}" to ${concept.sign === "positive" ? "negative" : "positive"} concepts`}
-                    className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-accent">
-                    {concept.sign === "positive" ? <Minus size={13} weight="bold" aria-hidden /> : <Plus size={13} weight="bold" aria-hidden />}
-                  </button>
-                  <button type="button" onClick={() => setConcepts((current) => removeConcept(current, concept.id))} aria-label={`Remove "${concept.text}"`}
-                    className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-v-failed">
-                    <X size={13} weight="bold" aria-hidden />
-                  </button>
-                </span>
-              );
-            })}
-            <button type="button" onClick={() => { setNextSign(nextSign === "positive" ? "negative" : "positive"); tagRef.current?.focus(); }}
-              title={nextSign === "positive" ? "Next tag ranks its concept higher. Click to rank it lower instead." : "Next tag ranks its concept lower. Click to rank it higher instead."}
-              aria-label={`Next tag: ${meta.label}`}
-              className={cx("flex h-5 w-5 shrink-0 items-center justify-center rounded-mark text-xs font-semibold text-[var(--on-accent)]", meta.bg)}>
-              {meta.symbol}
-            </button>
-            <label htmlFor="concept-tag" className="sr-only">Concept tags that steer the ranking</label>
-            <input ref={tagRef} id="concept-tag" name="concept-tag" type="text" value={tag} maxLength={200} autoComplete="off"
-              onChange={(event) => setTag(event.target.value)} onKeyDown={onTagKeyDown}
-              placeholder={concepts.length ? "another concept…" : "Steer the ranking: +kidney outcomes, −diabetes"}
-              aria-invalid={tagProblem ? "true" : undefined} aria-describedby="concept-help"
-              className="min-w-[18ch] flex-1 bg-transparent px-1 py-0.5 text-sm text-ink placeholder:text-ink-3 focus:outline-none" />
+        {(concepts.length > 0 || tagProblem) && (
+          <div className="-mt-3 flex flex-col gap-2">
+            {/* A reading of the line, so the user can see how it was split before searching. */}
+            <div className="flex flex-wrap items-center gap-1.5 pl-1">
+              <span className="text-xs text-ink-3">Steering this search:</span>
+              {concepts.map((concept) => {
+                const chip = SIGN_META[concept.sign];
+                return (
+                  <span key={concept.id} className={cx("flex max-w-full items-center gap-1 rounded-control py-1 pl-2 pr-1 text-sm text-ink", chip.tint)}>
+                    <span aria-hidden className={cx("font-mono text-xs", chip.text)}>{chip.symbol}</span>
+                    <span className="max-w-[24ch] truncate">{concept.text}</span>
+                    <button type="button" onClick={() => rewrite(flipConcept(concepts, concept.id))}
+                      title={concept.sign === "positive" ? "Rank work about this lower instead" : "Rank work about this higher instead"}
+                      aria-label={`Move "${concept.text}" to ${concept.sign === "positive" ? "negative" : "positive"} concepts`}
+                      className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-accent">
+                      {concept.sign === "positive" ? <Minus size={13} weight="bold" aria-hidden /> : <Plus size={13} weight="bold" aria-hidden />}
+                    </button>
+                    <button type="button" onClick={() => rewrite(removeConcept(concepts, concept.id))} aria-label={`Remove "${concept.text}"`}
+                      className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-v-failed">
+                      <X size={13} weight="bold" aria-hidden />
+                    </button>
+                  </span>
+                );
+              })}
+              <span className="text-xs text-ink-3">· ranking only, no paper is removed</span>
+            </div>
+            {tagProblem && <p role="alert" className="text-sm text-v-failed">{tagProblem}</p>}
           </div>
-          <p id="concept-help" className="pl-1 text-xs text-ink-3">
-            Optional. Tags nudge the ranking of the same results towards <span className="font-mono">+</span> concepts and away
-            from <span className="font-mono">−</span> ones — they never remove papers. Enter or a comma adds one.
-          </p>
-          {tagProblem && <p role="alert" className="text-sm text-v-failed">{tagProblem}</p>}
-        </div>
+        )}
 
         {!text.trim() && (
           <div className="flex flex-col gap-4">
             <div>
               <p className="mb-2 text-sm text-ink-3">Or start from a clinical question</p>
               <ul className="flex flex-col gap-1.5">{QUESTIONS.map((example) => <li key={example}>
-                <button type="button" onClick={() => { setText(example); setError(null); fieldRef.current?.focus(); }}
+                <button type="button" onClick={() => append(example)}
                   className="text-left text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">{example}</button>
               </li>)}</ul>
             </div>
-            {!concepts.length && (
-              <div>
-                <p className="mb-2 text-sm text-ink-3">Steering tags to try alongside it</p>
-                <ul className="flex flex-col gap-1.5">{TAG_EXAMPLES.map((example) => <li key={example.label}>
-                  <button type="button" className="text-left font-mono text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline"
-                    onClick={() => { setConcepts(addSignedConcepts(concepts, example.terms, "positive")); setTagProblem(null); tagRef.current?.focus(); }}>
-                    {example.label}
-                  </button>
-                </li>)}</ul>
-              </div>
-            )}
+            <div>
+              <p className="mb-2 text-sm text-ink-3">Then end the line with tags to steer it</p>
+              <ul className="flex flex-col gap-1.5">{TAG_EXAMPLES.map((example) => <li key={example}>
+                <button type="button" onClick={() => append(example)}
+                  className="text-left font-mono text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">
+                  {example}
+                </button>
+              </li>)}</ul>
+            </div>
           </div>
         )}
 
