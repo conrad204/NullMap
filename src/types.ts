@@ -264,3 +264,109 @@ export interface SearchResult {
   retrieval?: { mode: string; expanded: number };
   spin?: { eligible: number; disagreements: number };
 }
+/** Gap map: regions of the embedded corpus, described by what happened in them. */
+export type RegionLabel =
+  | "active"
+  | "contested"
+  | "null_saturated"
+  | "dark"
+  | "unread"
+  | "thin";
+export interface MapExemplar {
+  id: string;
+  title: string;
+  year: number | null;
+  bucket: Verdict | string;
+}
+export interface MapRegion {
+  id: number;
+  size: number;
+  attempts: number;
+  label: RegionLabel;
+  bucketCounts: Partial<Record<Verdict, number>>;
+  medianYear: number | null;
+  medianCitations: number | null;
+  coherence: number;
+  exemplars: MapExemplar[];
+  /** Present only on the region an idea was placed in. */
+  cosine?: number;
+  /** Centroid projected into the map's 2-D plane. */
+  x: number;
+  y: number;
+}
+/** One sampled study's position in the map's 2-D plane. */
+export interface MapPoint {
+  id: string;
+  x: number;
+  y: number;
+  /** Id of the region this study was assigned to. */
+  region: number;
+  bucket: Verdict | string;
+  title: string;
+  year: number | null;
+}
+export interface MapNeighbour extends MapExemplar {
+  cosine: number;
+}
+export interface MapGap {
+  regions: number[];
+  parentLabels: RegionLabel[];
+  openness: number;
+  support: number;
+  band: number;
+  separation: number;
+  nearest: MapNeighbour;
+  exemplars: MapExemplar[][];
+  discouraged: boolean;
+  /** Present only when an idea was placed against the gaps. */
+  cosine?: number;
+}
+export interface MapArithmetic {
+  start: string;
+  remove: string[];
+  add: string[];
+}
+export interface MapPlacement {
+  redundancy: number | null;
+  nearest: MapNeighbour | null;
+  /** The next-closest papers after `nearest`, so closeness can be judged by reading. */
+  neighbors?: MapNeighbour[];
+  region: MapRegion | null;
+  nearestGap: MapGap | null;
+  /** The idea projected into the map's 2-D plane. */
+  point?: { x: number; y: number } | null;
+  /** Echoed back when the placement came from an arithmetic expression. */
+  expression?: MapArithmetic;
+}
+export interface MapCalibrationRow {
+  label: RegionLabel;
+  regions: number;
+  priorAttempts: number;
+  laterPapers: number;
+  laterNull: number;
+  laterEffect: number;
+  laterNullShare: number | null;
+}
+export interface GapMap {
+  version: string;
+  coverage: { sampled: number; corpus: number; regions: number };
+  regions: MapRegion[];
+  gaps: MapGap[];
+  points: MapPoint[];
+  placement: MapPlacement | null;
+  calibration: {
+    version: string;
+    cutoffYear: number;
+    past: number;
+    future: number;
+    labels: MapCalibrationRow[];
+  } | null;
+  warnings: string[];
+}
+export interface MapRequest {
+  idea?: string;
+  /** start − remove + add over embeddings; placed on the map like an idea. */
+  arithmetic?: MapArithmetic;
+  cutoffYear?: number;
+  refresh?: boolean;
+}
