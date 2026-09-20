@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GapMap, MapGap, MapRegion, Verdict } from "../types";
 import { streamMap } from "../api/client";
 import { cx, formatCount } from "../lib/format";
-import { useSettlingMap } from "../lib/mapAnimation";
 import { advanceMap, coverageLine, mapWarnings, type PartialMap } from "../lib/mapStream";
 import {
   CLUSTER_META,
@@ -125,13 +124,8 @@ export default function MapPanel({ idea }: { idea: string }) {
 
   const map = state.kind === "ready" ? state.map : null;
   const partial = state.kind === "loading" ? state.partial : null;
-  const frame = useSettlingMap(
-    useMemo(
-      () => ({ points: partial?.points ?? [], centroids: partial?.centroids ?? [] }),
-      [partial],
-    ),
-    partial !== null,
-  );
+  const drawnPoints = useMemo(() => map?.points ?? partial?.points ?? [], [map, partial]);
+  const drawnEdges = useMemo(() => map?.edges ?? partial?.edges ?? [], [map, partial]);
   const placement = map?.placement ?? null;
   const regions = map
     ? [...map.regions].sort((a, b) => REGION_ORDER.indexOf(a.label) - REGION_ORDER.indexOf(b.label) || b.attempts - a.attempts)
@@ -150,11 +144,9 @@ export default function MapPanel({ idea }: { idea: string }) {
         and the reader's pan and zoom would die with the old one.
       */}
       {(state.kind === "loading" || map) && <MapCanvas
-        points={map ? map.points : frame.points}
-        regions={map ? map.regions : []}
-        gaps={map ? map.gaps : []}
+        points={drawnPoints}
+        edges={drawnEdges}
         placementPoint={map ? placement?.point ?? null : partial?.placement ?? null}
-        provisionalRegions={map ? [] : frame.centroids}
         building={!map}
       />}
       {state.kind === "loading" && <div className="text-xs text-ink-3">
