@@ -47,7 +47,12 @@ class Settings(BaseSettings):
     europepmc_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
     fulltext_timeout: float = 20.0
     fulltext_max_lines: int = Field(default=160, ge=20, le=600)
-    # Gap map: every embedded study, scanned in pages and clustered once.
+    # Gap map: the studies nearest the question, fetched by kNN and clustered per
+    # question. A few hundred nodes is what a reader can take in and what a force
+    # layout can settle in a second; the full-index scan below only runs when
+    # there is no question to center on.
+    gapmap_neighborhood: int = Field(default=800, ge=50, le=5000)
+    # Whole-index build (no question): every embedded study, scanned in pages.
     # The region count is a resolution, and what counts as an empty band depends on
     # it: measured on 6000 documents of the live index, 24 regions leave the corpus
     # continuous (no band under the occupancy threshold) while 80 keep a median of
@@ -68,6 +73,12 @@ class Settings(BaseSettings):
     # regions; a browser cannot paint two million marks, so the drawn subset is
     # thinned by a hash of the document id.
     gapmap_points: int = Field(default=6000, ge=100, le=50000)
+    # Edges the canvas draws between drawn studies: each study joins its most
+    # similar few, and only when the cosine reaches the floor. The cap is what
+    # keeps a dense literature from becoming one hub; the floor is what leaves an
+    # isolated paper isolated instead of tethered to its nearest stranger.
+    gapmap_edge_neighbors: int = Field(default=3, ge=1, le=12)
+    gapmap_edge_floor: float = Field(default=0.8, ge=-1.0, le=1.0)
     # Rows the 2-D projection is fitted on. The basis is a drawing choice, and a
     # full-corpus SVD would stall the build for minutes to move points by pixels.
     # Nothing can be drawn before it exists, so it is fitted on the first pages
