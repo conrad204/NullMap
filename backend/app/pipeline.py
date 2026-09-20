@@ -356,7 +356,9 @@ class SearchPipeline:
                 "outcome": (d.get("outcome") or "")[:120],
                 "abstract": (d.get("abstract") or "")[:280],
             }
-            for d in head
+            # Batch by id, not by rank: a study's verdict should not depend on which
+            # neighbours the ranking happened to put beside it. `kept` restores rank order.
+            for d in sorted(head, key=lambda d: d["id"])
         ]
         slots = asyncio.Semaphore(SCREEN_CONCURRENCY)
 

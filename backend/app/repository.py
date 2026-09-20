@@ -123,9 +123,13 @@ change changes changing increase increased increasing decrease decreased decreas
 reducing reduction improvement improved improving improve decline severity symptoms symptom
 outcome outcomes measure measures measured score scores level levels rate rates global function
 functional study studies trial trials controlled randomized randomised placebo control group groups
+expression expressed elevated elevation higher lower associated association status presence
 """.split()
 )
 _QUERY_STEMS = ("depress", "cognit", "arthroscop", "osteoarthrit", "hypertens")
+# Two or more letters then digits (kim1, il6, covid19). A single letter is left alone
+# so the vitamin d3/d2 handling keeps its own tokens.
+_JOINED_DESIGNATOR = re.compile(r"([a-z]{2,})(\d+)")
 
 
 def _search_normalize(value: str) -> str:
@@ -162,6 +166,21 @@ def _concept_query(terms: list[str], fields: list[str], *, require_all: bool) ->
                     "bool": {
                         "should": [
                             {"prefix": {field.split("^")[0]: {"value": term}}} for field in fields
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            )
+        elif joined := _JOINED_DESIGNATOR.fullmatch(term):
+            # The standard analyzer indexes "KIM-1" as kim + 1, so a typed "kim1" would
+            # otherwise match only the few documents that spell it without the hyphen.
+            spaced = " ".join(joined.groups())
+            clauses.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"multi_match": {"query": term, "fields": fields}},
+                            {"multi_match": {"query": spaced, "fields": fields, "type": "phrase"}},
                         ],
                         "minimum_should_match": 1,
                     }
