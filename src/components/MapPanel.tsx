@@ -3,7 +3,7 @@ import type { GapMap, MapGap, MapRegion, Verdict } from "../types";
 import { streamMap } from "../api/client";
 import { cx, formatCount } from "../lib/format";
 import { useSettlingMap } from "../lib/mapAnimation";
-import { advanceMap, coverageLine, type PartialMap } from "../lib/mapStream";
+import { advanceMap, coverageLine, mapWarnings, type PartialMap } from "../lib/mapStream";
 import {
   CLUSTER_META,
   CLUSTER_ORDER,
@@ -156,7 +156,7 @@ export default function MapPanel({ idea }: { idea: string }) {
         {map.points.length > 0 && <MapCanvas points={map.points} regions={map.regions} gaps={map.gaps} placementPoint={placement?.point ?? null} />}
         <div className="text-xs text-ink-3">
           <p>{coverageLine(map.coverage)} · {map.version}</p>
-          {map.warnings.map((warning) => <p key={warning} className="mt-1">{warning}</p>)}
+          {mapWarnings(map.warnings, map.coverage).map((warning) => <p key={warning} className="mt-1">{warning}</p>)}
         </div>
         {placement?.nearest && placement.redundancy !== null && <div className="rounded-control border border-line bg-surface p-5">
           <p className="text-sm text-ink-2">Closest paper in the index</p>

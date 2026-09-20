@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { advanceMap, coverageLine } from './mapStream.ts';
+import { advanceMap, coverageLine, mapWarnings, normalizeCoverage } from './mapStream.ts';
 
 const point = (id, region) => ({ id, x: 0, y: 0, region, bucket: 'unreported', title: id, year: null });
 const progress = (over) => ({
@@ -39,7 +39,10 @@ test('a partial map says it is partial, and a finished one states the coverage i
   assert.match(building, /250,000 of 2,078,515 embedded studies read/);
 
   const done = coverageLine({ clustered: 2078515, corpus: 2078515, regions: 80, drawn: 6000, complete: true });
-  assert.equal(done, '2,078,515 embedded studies of 2,078,515 in the index (100%), in 80 regions');
+  assert.equal(
+    done,
+    '2,078,515 embedded studies of 2,078,515 in the index (100%), in 80 regions, 6,000 of them drawn',
+  );
   assert.doesNotMatch(done, /building|partial/i);
 });
 
@@ -50,4 +53,31 @@ test('a build that will not read the whole corpus counts against the corpus, not
   );
   assert.match(capped, /100,000 of 200,000 embedded studies read \(5%\)/);
   assert.match(capped, /regions settling/);
+});
+
+test('counts a payload does not carry are never rendered as arithmetic on nothing', () => {
+  // A server older than the streaming build reports what it sampled.
+  const legacy = { sampled: 6000, corpus: 2128219, regions: 80 };
+  assert.deepEqual(normalizeCoverage(legacy), {
+    clustered: 6000, corpus: 2128219, regions: 80, drawn: 0, complete: false,
+  });
+  const line = coverageLine(legacy);
+  assert.doesNotMatch(line, /NaN/);
+  assert.match(line, /6,000 embedded studies of 2,128,219 in the index \(0%\)/);
+  assert.match(line, /not the whole index/);
+
+  const partial = coverageLine({ corpus: 2128219, regions: 80 }, 'scanning');
+  assert.doesNotMatch(partial, /NaN/);
+  assert.match(partial, /0 of 2,128,219 embedded studies read/);
+});
+
+test('a map that covered the whole corpus does not also warn that it sampled it', () => {
+  const whole = { clustered: 2128219, corpus: 2128219, regions: 80, drawn: 6000, complete: true };
+  const warnings = [
+    'The map describes a random sample of 6000 of 2128219 embedded studies, not the whole index.',
+    'All 2128219 clustered studies shape the regions; the canvas draws 6000 of them.',
+  ];
+  assert.deepEqual(mapWarnings(warnings, whole), [warnings[1]]);
+  // A map that did not cover the corpus keeps every warning it was given.
+  assert.deepEqual(mapWarnings(warnings, { ...whole, clustered: 6000, complete: false }), warnings);
 });

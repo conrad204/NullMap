@@ -437,14 +437,14 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         means, and how to move the map. The dashed band is named here and
         explained where it is drawn, on hover.
       */}
-      <figcaption className="mt-2.5 space-y-2 text-xs text-ink-3">
+      <figcaption className="mt-2.5 space-y-1.5 text-xs text-ink-3">
         {presentClusters.length > 0 && (
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-            <span className="text-ink-2">Clusters</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="shrink-0 text-ink-2">Clusters:</span>
             {presentClusters.map((cluster) => (
               <span
                 key={cluster}
-                className="inline-flex items-center gap-1.5"
+                className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap"
                 title={`${CLUSTER_META[cluster].description} In this map: ${clusterDetail(cluster, presentLabels)}.`}
               >
                 <span
@@ -458,10 +458,10 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
           </div>
         )}
         {(gaps.length > 0 || placementPoint) && (
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-            <span className="text-ink-2">Markers</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="shrink-0 text-ink-2">Markers:</span>
             {gaps.length > 0 && (
-              <span className="inline-flex items-center gap-1.5" title={GAP_CAPTION}>
+              <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap" title={GAP_CAPTION}>
                 <span
                   className="w-3.5"
                   style={{ borderTop: "2px dashed var(--line-strong)" }}
@@ -471,17 +471,17 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
               </span>
             )}
             {gaps.some((gap) => gap.discouraged) && (
-              <span className="inline-flex items-center gap-1.5" title={DISCOURAGED_CAPTION}>
+              <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap" title={DISCOURAGED_CAPTION}>
                 <span
                   className="w-3.5"
                   style={{ borderTop: "2px dashed var(--v-failed)" }}
                   aria-hidden
                 />
-                Sparse band with nulls either side
+                Nulls either side
               </span>
             )}
             {placementPoint && (
-              <span className="inline-flex items-center gap-1.5" title="Where your idea sits among the clustered studies.">
+              <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap" title="Where your idea sits among the clustered studies.">
                 <span
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ border: "2px solid var(--accent)" }}
@@ -492,7 +492,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
             )}
           </div>
         )}
-        <p className="text-ink-3/90">
+        <p className="text-ink-3/70">
           Drag to pan · scroll to zoom · double-click to reset
           {transform.k > 1 ? ` · showing ${transform.k.toFixed(1)}×` : ""}
           {gaps.length > 0 ? " · hover a dashed band to see what it means" : ""}

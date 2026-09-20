@@ -195,7 +195,9 @@ class GapMapService:
             )
             await asyncio.to_thread(clusters.update, build.vectors[start:])
             if basis is None and len(build) >= self.config.gapmap_projection_sample:
-                basis = await asyncio.to_thread(fit_projection, build.vectors)
+                basis = await asyncio.to_thread(
+                    fit_projection, build.vectors[: self.config.gapmap_projection_sample]
+                )
             # One frame per interval, not one per page: at eleven thousand
             # documents a second the pages are far faster than anything a canvas
             # can show, and every frame resends where each drawn point now sits.
@@ -210,7 +212,9 @@ class GapMapService:
                 )
 
         if basis is None and len(build):
-            basis = await asyncio.to_thread(fit_projection, build.vectors)
+            basis = await asyncio.to_thread(
+                fit_projection, build.vectors[: self.config.gapmap_projection_sample]
+            )
 
         centroids = clusters.centroids
         labels = np.zeros(len(build), dtype=np.int64)
