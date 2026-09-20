@@ -49,7 +49,12 @@ From top to bottom:
 | Made no difference | confirmed + claimed | **Confirmed** means a confidence interval sits entirely inside the equivalence bounds: any effect is too small to matter. **Claimed** means the abstract says "no significant difference" without an interval to back it — that is a claim, not evidence of equivalence, and often just an underpowered study. |
 | No answer | stopped/flawed + never reported | Trials stopped early, retracted, or completed more than a year ago with no posted results and no linked publication. **Outcomes here are unknown, not negative.** |
 
-A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found. Click any bucket to filter the study list below.
+A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found.
+
+Each answer is also a filter. Click "Made a difference", "Made no difference", "No answer", or the inconclusive count, and the study rows further down narrow to reports with that verdict — the list header changes to "X of Y displayed studies · [answer]". Click the same answer again, or "Show all displayed studies" next to the list header, to clear it. Two details worth knowing:
+
+- Filtering happens per answer, not per sub-bucket: selecting "Made no difference" shows confirmed **and** claimed nulls together (the split is visible in the counts under the answer and on each study row's own verdict tag), and "No answer" shows stopped/flawed and never-reported studies together.
+- The bar's counts cover the **full match set** in the index, while the study rows are the displayed page only. A selected answer can therefore legitimately show few or no rows — the list says so ("No studies from this bucket are on the displayed page") rather than pretending the count was wrong.
 
 **What the reported effects have in common** (or, when too few studies reported an effect, an overview of what the matches are and why none settles the question). Direction counts — how many effects favour the intervention versus the comparator — are computed in code; the accompanying prose is generated from extracted facts and quotes and is rejected if it introduces numbers not in its table.
 
