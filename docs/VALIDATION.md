@@ -53,6 +53,22 @@ checked against human judgement, at least two quoted sentences were weak support
 label, and the sample included animal studies, which nothing in the pipeline excludes. About
 70% of these abstracts stayed text-only on every pass.
 
+**Effect direction, trend and outcome grouping** (real models, same 25 abstracts plus 23 numeric
+blood-pressure trials from the registry sample). Quoted `result_direction` came back as 15
+favours-intervention, 2 favours-comparator, 7 unclear, 1 absent; not checked against human
+reading. The first trend paragraph was coherent and mentioned the reported nulls, but said
+"among 7 studies" when its table held 14, so the prompt now forbids counting and prose with a
+number absent from its table is rejected. Outcome grouping with `gpt-4.1-mini` and a looser
+prompt produced three groups from the 23 trials, two of them wrong: it combined a text-message
+reminder, dapagliflozin, a smartphone app and local heat stress on a shared systolic-BP outcome,
+and combined three different active-versus-active comparisons while mixing "reduction in" with
+"change in" diastolic BP. With the question-anchored prompt and `gpt-4.1` it returned one group
+of two (MK-0736 and nebivolol versus placebo, change in diastolic BP), correctly leaving out a
+trial reporting a BP level, and 21 of 23 ungrouped, so no pool formed. **No model-grouped pool
+has yet been observed on real data with the final prompt**; the pooled arithmetic for such
+groups is covered by unit tests only. About $0.005 per grouping call and $0.008 per trend call
+at configured prices.
+
 The Painless bucket script was checked for parity with `assign_bucket` on real Elasticsearch
 9.1.4 across 8 scale/margin requests and 21 documents, including derived effects, a reported
 HR alongside arm counts, and lexicon-versus-stated text labels. 311 backend tests (5 of them

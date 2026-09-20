@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { ArrowUpRight } from "@phosphor-icons/react";
-import type { InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
+import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
 import { BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
+import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
 
 type Filter = Verdict | "all";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", user: "Contribution", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
+const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
 const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
@@ -22,9 +24,13 @@ function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, numbe
 
 export default function ResultsView({ result }: { result: SearchResult }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const counts = result.bucketCounts ?? countByVerdict(result.papers);
+  // An API that predates a bucket omits its key; a missing count is zero, never NaN.
+  const counts = { ...countByVerdict([]), ...(result.bucketCounts ?? countByVerdict(result.papers)) };
   // Without a server breakdown (mock data, older API), count the reasons on the displayed studies.
   const reasons = result.inconclusiveReasons ?? countReasons(result.papers);
+  // Provisional when no displayed effect is backed by numbers.
+  const effects = result.papers.filter((paper) => paper.verdict === "effect");
+  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"));
   const shown = filter === "all" ? result.papers : result.papers.filter((paper) => paper.verdict === filter);
   return (
     <div className="fade-up flex flex-col gap-10">
@@ -35,6 +41,11 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
       </header>
+      <section aria-label="Has this been tested before?">
+        <h2 className="text-2xl leading-tight tracking-tight text-ink sm:text-3xl">{answer.title}</h2>
+        <p className="mt-2 max-w-[65ch] leading-relaxed text-ink-2">{answer.detail}</p>
+      </section>
+      {result.effectTrend && <EffectTrendPanel trend={result.effectTrend} />}
       {result.pico && <section className="border-l-2 border-accent pl-4">
         <h2 className="text-sm font-medium text-ink">Meaningful-effect threshold: {result.pico.sesoi} {result.pico.effectType}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-2">{result.pico.sesoiRationale}</p>
@@ -51,6 +62,23 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
     </div>
   );
+}
+function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
+  const split = [
+    { label: "favour the intervention", count: trend.favoursIntervention, tone: "text-v-effect" },
+    { label: "favour the comparator", count: trend.favoursComparator, tone: "text-v-failed" },
+    { label: "direction not stated", count: trend.unclear, tone: "text-ink-2" },
+  ];
+  return <section className="border-l-2 border-v-effect pl-4">
+    <h2 className="text-sm font-medium text-ink">What the reported effects have in common</h2>
+    <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-3">{split.map(({ label, count, tone }) => <div key={label} className="flex items-baseline gap-2">
+      <dt className="order-2 text-sm text-ink-2">{label}</dt>
+      <dd className={cx("order-1 font-mono text-2xl tabular-nums leading-none tracking-tight", count > 0 ? tone : "text-ink-3")}>{formatCount(count)}</dd>
+    </div>)}</dl>
+    {trend.summary && <p className="mt-4 max-w-[65ch] leading-relaxed text-ink">{trend.summary}</p>}
+    {trend.patterns.length > 0 && <ul className="mt-3 max-w-[65ch] list-disc space-y-1 pl-4 text-sm leading-relaxed text-ink-2">{trend.patterns.map((pattern) => <li key={pattern}>{pattern}</li>)}</ul>}
+    <p className="mt-3 max-w-[70ch] text-xs leading-relaxed text-ink-3">{trend.scope} An “effect” is a significant difference in either direction, so the split matters. {trend.summary ? "The counts are computed; the paragraph is a generated reading of the studies’ extracted facts and quotes, and introduces no numbers of its own." : "A written summary needs at least two such studies."}</p>
+  </section>;
 }
 function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
@@ -121,7 +149,7 @@ function PaperRow({ paper }: { paper: Paper }) {
     <div className="min-w-0">
       {url ? <a href={url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-1.5 font-medium leading-snug text-ink transition-colors hover:text-accent"><span>{paper.title}</span><ArrowUpRight size={14} className="mt-1 shrink-0 text-ink-3 group-hover:text-accent" aria-hidden /></a> : <p className="font-medium leading-snug text-ink">{paper.title}</p>}
       <p className="mt-1 text-sm text-ink-2">{formatAuthors(paper.authors)}{paper.year ? `, ${paper.year}` : ""}{paper.venue ? `, ${paper.venue}` : ""}</p>
-      <p className="mt-1 text-xs text-ink-3">{SOURCES[paper.source] ?? paper.source} · {TIERS[paper.evidenceTier ?? "text_only"]}{paper.extractionSource ? ` · ${EXTRACTION_SOURCES[paper.extractionSource]}` : ""}</p>
+      <p className="mt-1 text-xs text-ink-3">{SOURCES[paper.source] ?? paper.source} · {TIERS[paper.evidenceTier ?? "text_only"]}{paper.verdict === "effect" && paper.resultDirection && DIRECTIONS[paper.resultDirection] ? ` · ${DIRECTIONS[paper.resultDirection]}` : ""}{paper.extractionSource ? ` · ${EXTRACTION_SOURCES[paper.extractionSource]}` : ""}</p>
       {paper.pmcid && <a href={`https://europepmc.org/article/PMC/${encodeURIComponent(paper.pmcid)}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-accent underline underline-offset-2">Open-access full text ({paper.pmcid})</a>}
       {paper.abstractAvailable === false && <p className="mt-1 text-xs text-ink-3">Bibliographic record · abstract unavailable</p>}
       {paper.snapshotDate && <p className="mt-1 text-xs text-ink-3">Literature snapshot: {paper.snapshotDate}</p>}

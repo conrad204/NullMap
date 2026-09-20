@@ -51,7 +51,7 @@ function ForestPlot({ pool, papers, sesoi }: { pool: EvidencePool; papers: Paper
   const height = rows.length * 30 + 38;
   return <div>
     <h3 className="text-sm font-medium text-ink">{pool.outcome || "Compatible outcome"}</h3>
-    <p className="mt-1 text-xs leading-relaxed text-ink-3">{pool.k} studies · {pool.effectType}{pool.unit ? ` (${pool.unit})` : ""} · random effects (DerSimonian–Laird)</p>
+    <p className="mt-1 text-xs leading-relaxed text-ink-3">{pool.k} studies · {pool.effectType}{pool.unit ? ` (${pool.unit})` : ""} · random effects (DerSimonian–Laird){pool.grouping === "model" ? " · outcomes matched by a language model, numbers computed from the studies" : ""}</p>
     <svg viewBox={`0 0 540 ${height}`} role="img" aria-label={`Pooled ${pool.effectType} ${pool.estimate.toFixed(3)}, 95% interval ${pool.ci[0].toFixed(3)} to ${pool.ci[1].toFixed(3)}. Individual study intervals and pooled interval.`} className="mt-3 w-full text-ink-2">
       {sesoi !== undefined && <rect x={x(-sesoi)} y="0" width={x(sesoi) - x(-sesoi)} height={height - 24} fill="var(--accent-soft)" opacity="0.65" />}
       <line x1={x(0)} x2={x(0)} y1="0" y2={height - 24} stroke="var(--ink-3)" strokeDasharray="3 3" />

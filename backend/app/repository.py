@@ -33,7 +33,8 @@ _CACHE_FIELDS = set(
         "mean_intervention mean_comparator sd_intervention sd_comparator "
         "events_intervention events_comparator "
         "estimate ci_low ci_high p_value effect_type ci_level ci_sides p_value_operator has_control "
-        "design primary_outcome_met reported_result effect_direction outcome_direction"
+        "design primary_outcome_met reported_result result_direction effect_direction "
+        "outcome_direction"
     ).split()
 )
 _LINK_FIELDS = set(
@@ -57,7 +58,7 @@ def index_mapping(dimensions: int = 384) -> dict:
         "pmids nct_ids referenced_works result_pmids canonical_id canonical_ids outcome_unit "
         "p_value_operator ci_sides extraction_version extraction_status embedding_model "
         "analysis_effect_type effect_direction outcome_direction work_type "
-        "pmcid extraction_source fulltext_status reported_result"
+        "pmcid extraction_source fulltext_status reported_result result_direction"
     ).split():
         properties[name] = {"type": "keyword"}
     for name in "title abstract population intervention comparator outcome".split():

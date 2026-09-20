@@ -57,6 +57,16 @@ class ResultEvidence(BaseModel):
     quote: str
 
 
+Direction = Literal["favours_intervention", "favours_comparator", "unclear"]
+
+
+class DirectionEvidence(BaseModel):
+    """Which arm the reported primary result favours; significance is a separate fact."""
+
+    value: Direction
+    quote: str
+
+
 class BoolEvidence(BaseModel):
     value: bool
     quote: str
@@ -89,7 +99,24 @@ class Extraction(BaseModel):
     effect_type: TextEvidence | None
     primary_outcome_met: BoolEvidence | None
     reported_result: ResultEvidence | None
+    result_direction: DirectionEvidence | None
     has_control: BoolEvidence | None
+
+
+class OutcomeGroup(BaseModel):
+    label: str
+    study_ids: list[str]
+
+
+class OutcomeGroups(BaseModel):
+    """Studies judged to measure the same outcome for the same kind of comparison."""
+
+    groups: list[OutcomeGroup]
+
+
+class EffectTrend(BaseModel):
+    summary: str
+    patterns: list[str]
 
 
 class Narrative(BaseModel):
@@ -109,6 +136,11 @@ class IndexedTextEvidence(BaseModel):
 
 class IndexedResultEvidence(BaseModel):
     value: Literal["positive", "null", "mixed"]
+    sentence_index: int = Field(ge=0)
+
+
+class IndexedDirectionEvidence(BaseModel):
+    value: Direction
     sentence_index: int = Field(ge=0)
 
 
@@ -144,4 +176,5 @@ class IndexedExtraction(BaseModel):
     effect_type: IndexedTextEvidence | None
     primary_outcome_met: IndexedBoolEvidence | None
     reported_result: IndexedResultEvidence | None
+    result_direction: IndexedDirectionEvidence | None
     has_control: IndexedBoolEvidence | None

@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { headline } from './headline.ts';
+
+const counts = (values) => ({ effect: 0, credible_null: 0, reported_null: 0, inconclusive: 0, failed: 0, unreported: 0, ...values });
+
+test('no matches is reported as unknown, never as a new idea', () => {
+  const result = headline(counts({}), false);
+  assert.equal(result.title, 'No prior studies found');
+  assert.match(result.detail, /not evidence either way/);
+});
+
+test('prior results are stated with what the silent studies were', () => {
+  const result = headline(counts({ effect: 17, failed: 6, unreported: 3 }), true);
+  assert.equal(result.title, 'This has been tested before');
+  assert.match(result.detail, /^17 of 26 matching studies report a result\. All 17 report an effect\./);
+  assert.match(result.detail, /size is unverified/);
+  assert.match(result.detail, /3 completed trials never reported results, 6 failed or stopped early/);
+});
+
+test('split and all-null evidence are described as such', () => {
+  assert.match(headline(counts({ effect: 2, reported_null: 3 }), false).detail, /Results are split: 2 report an effect, 3 report no difference\./);
+  const nulls = headline(counts({ credible_null: 2 }), false).detail;
+  assert.match(nulls, /All 2 found no significant difference, with intervals tight enough/);
+  assert.doesNotMatch(headline(counts({ credible_null: 1, reported_null: 1 }), false).detail, /tight enough/);
+});
+
+test('studies without any readable result are not called results', () => {
+  const result = headline(counts({ unreported: 4, inconclusive: 1 }), false);
+  assert.equal(result.title, 'This has been tried before, but no results are available');
+  assert.match(result.detail, /^5 matching studies, none with a readable result: 4 completed trials never reported results, 1 had no clear result\.$/);
+});

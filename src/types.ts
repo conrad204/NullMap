@@ -37,6 +37,8 @@ export interface Paper {
   rationale: string;
   /** Set only when verdict is "inconclusive". */
   inconclusiveReason?: InconclusiveReason | null;
+  /** Which arm the reported primary result favours; a significant result is not always a benefit. */
+  resultDirection?: ResultDirection | null;
   sampleSize: number | null;
   effectSize: EffectSize | null;
   evidenceSpan?: string;
@@ -112,6 +114,20 @@ export interface EvidencePool {
   ci: [number, number];
   tau2: number;
   studyIds: string[];
+  /** "model" when a language model judged these outcomes comparable; the numbers are still computed. */
+  grouping?: "model";
+}
+export type ResultDirection = "favours_intervention" | "favours_comparator" | "unclear";
+/** What the effect-reporting studies have in common. Counts are computed; only the prose is generated. */
+export interface EffectTrend {
+  studied: number;
+  totalEffects: number;
+  favoursIntervention: number;
+  favoursComparator: number;
+  unclear: number;
+  summary: string | null;
+  patterns: string[];
+  scope: string;
 }
 export interface Statistics {
   pools: EvidencePool[];
@@ -157,6 +173,7 @@ export interface SearchResult {
   statistics?: Statistics;
   costs?: QueryCosts;
   warnings?: string[];
+  effectTrend?: EffectTrend | null;
   alternativeRoutes?: { label: string; reason: string; evidenceCount: number }[];
   retrieval?: { mode: string; expanded: number };
   spin?: { eligible: number; disagreements: number };
