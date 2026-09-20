@@ -9,6 +9,11 @@ interface MapCanvasProps {
   regions: MapRegion[];
   gaps: MapGap[];
   placementPoint?: { x: number; y: number } | null;
+  /**
+   * Region centres of a map that is still being built. They are drawn without a
+   * colour because a region is only labelled once the corpus behind it is read.
+   */
+  provisionalRegions?: { id: number; x: number; y: number }[];
 }
 
 const HOVER_RADIUS = 6;
@@ -32,15 +37,44 @@ interface View {
   toY: (y: number) => number;
 }
 
-interface Hover {
+interface HoverBase {
   left: number;
   top: number;
   below: boolean;
+}
+interface PointHover extends HoverBase {
+  kind: "point";
   point: MapPoint;
   region: MapRegion | undefined;
 }
+interface GapHover extends HoverBase {
+  kind: "gap";
+  gap: MapGap;
+}
+type Hover = PointHover | GapHover;
 
-export default function MapCanvas({ points, regions, gaps, placementPoint = null }: MapCanvasProps) {
+/** What a dashed line means, said once, next to the thing it describes. */
+const GAP_CAPTION = "A stretch where the index holds almost no papers between these two literatures.";
+const DISCOURAGED_CAPTION =
+  "Almost no papers between these two literatures, and the work on either side reported nulls or never reported at all.";
+
+/** Distance in canvas pixels from a point to a line segment, for hit-testing gaps. */
+function segmentDistance(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const length = dx * dx + dy * dy;
+  const t = length ? Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / length)) : 0;
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+export default function MapCanvas({ points, regions, gaps, placementPoint = null, provisionalRegions = [] }: MapCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View | null>(null);
@@ -80,6 +114,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       };
       for (const point of points) include(point.x, point.y);
       for (const region of regions) include(region.x, region.y);
+      for (const region of provisionalRegions) include(region.x, region.y);
       if (placementPoint) include(placementPoint.x, placementPoint.y);
       if (!isFinite(minX)) {
         viewRef.current = null;
@@ -152,6 +187,14 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         ctx.stroke();
       }
 
+      for (const region of provisionalRegions) {
+        ctx.beginPath();
+        ctx.arc(view.toX(region.x), view.toY(region.y), 4.5 * mark, 0, Math.PI * 2);
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = grey;
+        ctx.stroke();
+      }
+
       if (placementPoint) {
         const x = view.toX(placementPoint.x);
         const y = view.toY(placementPoint.y);
@@ -182,7 +225,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       observer.disconnect();
       media.removeEventListener("change", draw);
     };
-  }, [points, regions, gaps, placementPoint, transform]);
+  }, [points, regions, gaps, placementPoint, provisionalRegions, transform]);
 
   /** Zoom about a point in canvas pixels, so whatever is under the cursor stays under it. */
   const zoomAt = useCallback((factor: number, px: number, py: number) => {
@@ -253,27 +296,61 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         best = point;
       }
     }
-    if (!best) {
+    if (best) {
+      const x = view.toX(best.x);
+      const y = view.toY(best.y);
+      setHover({
+        kind: "point",
+        left: Math.min(Math.max(x, 96), rect.width - 96),
+        top: y,
+        below: y < 70,
+        point: best,
+        region: regions.find((region) => region.id === best.region),
+      });
+      return;
+    }
+    // Nothing under the cursor: the dashed bands explain themselves on hover, so the
+    // legend does not have to carry a sentence about them.
+    const regionById = new Map(regions.map((region) => [region.id, region]));
+    let gapHit: MapGap | null = null;
+    let gapDist = HOVER_RADIUS;
+    let gapX = 0;
+    let gapY = 0;
+    for (const gap of gaps) {
+      const left = regionById.get(gap.regions[0]);
+      const right = regionById.get(gap.regions[1]);
+      if (!left || !right) continue;
+      const ax = view.toX(left.x);
+      const ay = view.toY(left.y);
+      const bx = view.toX(right.x);
+      const by = view.toY(right.y);
+      const dist = segmentDistance(mx, my, ax, ay, bx, by);
+      if (dist < gapDist) {
+        gapDist = dist;
+        gapHit = gap;
+        gapX = (ax + bx) / 2;
+        gapY = (ay + by) / 2;
+      }
+    }
+    if (!gapHit) {
       setHover(null);
       return;
     }
-    const x = view.toX(best.x);
-    const y = view.toY(best.y);
     setHover({
-      left: Math.min(Math.max(x, 96), rect.width - 96),
-      top: y,
-      below: y < 70,
-      point: best,
-      region: regions.find((region) => region.id === best.region),
+      kind: "gap",
+      left: Math.min(Math.max(gapX, 110), rect.width - 110),
+      top: gapY,
+      below: gapY < 90,
+      gap: gapHit,
     });
   }
 
   const presentLabels = regions.map((region) => region.label);
   const presentClusters = CLUSTER_ORDER.filter((cluster) => clusterDetail(cluster, presentLabels));
   const ariaLabel =
-    `Scatter map of ${points.length} sampled studies in ${regions.length} regions` +
+    `Scatter map of ${points.length} drawn studies in ${regions.length} regions` +
     (gaps.length
-      ? ", with dashed lines marking stretches between two neighbouring literatures where the sample holds almost no papers"
+      ? ", with dashed lines marking stretches between two neighbouring literatures where the index holds almost no papers"
       : "") +
     ". Each region is described in the list below.";
 
@@ -288,7 +365,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
           role="img"
           aria-label={ariaLabel}
           className="block h-full w-full touch-none"
-          style={{ cursor: dragRef.current ? "grabbing" : hover ? "pointer" : "grab" }}
+          style={{ cursor: dragRef.current ? "grabbing" : hover?.kind === "point" ? "pointer" : "grab" }}
           onMouseMove={handleMove}
           onMouseLeave={() => setHover(null)}
           onPointerDown={handlePointerDown}
@@ -317,7 +394,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         </div>
         {hover && (
           <div
-            className="pointer-events-none absolute z-10 w-52 rounded-control border border-line bg-surface px-2.5 py-1.5 shadow-panel"
+            className={`pointer-events-none absolute z-10 rounded-control border border-line bg-surface px-2.5 py-1.5 shadow-panel ${hover.kind === "gap" ? "w-60" : "w-52"}`}
             style={{
               left: hover.left,
               top: hover.top,
@@ -326,58 +403,100 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
                 : "translate(-50%, calc(-100% - 14px))",
             }}
           >
-            <p className="text-xs font-medium leading-snug text-ink">{hover.point.title}</p>
-            <p className="mt-0.5 text-xs text-ink-3">
-              {hover.point.year ?? "year unknown"} ·{" "}
-              {VERDICT_META[hover.point.bucket as Verdict]?.label ?? hover.point.bucket}
-            </p>
-            {hover.region && (
-              <p className="mt-0.5 text-xs text-ink-3">
-                {clusterMetaOf(hover.region.label).label} · {REGION_META[hover.region.label].label.toLowerCase()}
-              </p>
+            {hover.kind === "point" ? (
+              <>
+                <p className="text-xs font-medium leading-snug text-ink">{hover.point.title}</p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {hover.point.year ?? "year unknown"} ·{" "}
+                  {VERDICT_META[hover.point.bucket as Verdict]?.label ?? hover.point.bucket}
+                </p>
+                {hover.region && (
+                  <p className="mt-0.5 text-xs text-ink-3">
+                    {clusterMetaOf(hover.region.label).label} ·{" "}
+                    {REGION_META[hover.region.label].label.toLowerCase()}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium leading-snug text-ink">
+                  {hover.gap.parentLabels
+                    .map((label) => REGION_META[label]?.label ?? label)
+                    .join(" ↔ ")}
+                </p>
+                <p className="mt-0.5 text-xs leading-snug text-ink-3">
+                  {hover.gap.discouraged ? DISCOURAGED_CAPTION : GAP_CAPTION}
+                </p>
+              </>
             )}
           </div>
         )}
       </div>
-      <figcaption className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-3">
-        <span>Drag to pan, scroll to zoom{transform.k > 1 ? ` · ${transform.k.toFixed(1)}×` : ""}</span>
-        {presentClusters.map((cluster) => (
-          <span
-            key={cluster}
-            className="inline-flex items-center gap-1.5"
-            title={`${CLUSTER_META[cluster].description} In this map: ${clusterDetail(cluster, presentLabels)}.`}
-          >
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: `var(${CLUSTER_META[cluster].colorVar})` }}
-              aria-hidden
-            />
-            {CLUSTER_META[cluster].label}
-          </span>
-        ))}
-        {gaps.length > 0 && (
-          <span
-            className="inline-flex items-center gap-1.5"
-            title="A stretch between two neighbouring literatures where the sample holds almost no papers."
-          >
-            <span
-              className="w-3.5"
-              style={{ borderTop: "2px dashed var(--line-strong)" }}
-              aria-hidden
-            />
-            almost no papers between two literatures
-          </span>
+      {/*
+        Three separate things, kept apart: what a dot means, what a line or ring
+        means, and how to move the map. The dashed band is named here and
+        explained where it is drawn, on hover.
+      */}
+      <figcaption className="mt-2.5 space-y-2 text-xs text-ink-3">
+        {presentClusters.length > 0 && (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+            <span className="text-ink-2">Clusters</span>
+            {presentClusters.map((cluster) => (
+              <span
+                key={cluster}
+                className="inline-flex items-center gap-1.5"
+                title={`${CLUSTER_META[cluster].description} In this map: ${clusterDetail(cluster, presentLabels)}.`}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: `var(${CLUSTER_META[cluster].colorVar})` }}
+                  aria-hidden
+                />
+                {CLUSTER_META[cluster].label}
+              </span>
+            ))}
+          </div>
         )}
-        {placementPoint && (
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ border: "2px solid var(--accent)" }}
-              aria-hidden
-            />
-            your idea
-          </span>
+        {(gaps.length > 0 || placementPoint) && (
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+            <span className="text-ink-2">Markers</span>
+            {gaps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5" title={GAP_CAPTION}>
+                <span
+                  className="w-3.5"
+                  style={{ borderTop: "2px dashed var(--line-strong)" }}
+                  aria-hidden
+                />
+                Sparse band
+              </span>
+            )}
+            {gaps.some((gap) => gap.discouraged) && (
+              <span className="inline-flex items-center gap-1.5" title={DISCOURAGED_CAPTION}>
+                <span
+                  className="w-3.5"
+                  style={{ borderTop: "2px dashed var(--v-failed)" }}
+                  aria-hidden
+                />
+                Sparse band with nulls either side
+              </span>
+            )}
+            {placementPoint && (
+              <span className="inline-flex items-center gap-1.5" title="Where your idea sits among the clustered studies.">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ border: "2px solid var(--accent)" }}
+                  aria-hidden
+                />
+                Your idea
+              </span>
+            )}
+          </div>
         )}
+        <p className="text-ink-3/90">
+          Drag to pan · scroll to zoom · double-click to reset
+          {transform.k > 1 ? ` · showing ${transform.k.toFixed(1)}×` : ""}
+          {gaps.length > 0 ? " · hover a dashed band to see what it means" : ""}
+        </p>
       </figcaption>
     </figure>
   );

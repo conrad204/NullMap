@@ -47,14 +47,36 @@ class Settings(BaseSettings):
     europepmc_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
     fulltext_timeout: float = 20.0
     fulltext_max_lines: int = Field(default=160, ge=20, le=600)
-    # Gap map: a deterministic random sample of embedded studies, clustered once.
+    # Gap map: every embedded study, scanned in pages and clustered once.
     # The region count is a resolution, and what counts as an empty band depends on
     # it: measured on 6000 documents of the live index, 24 regions leave the corpus
     # continuous (no band under the occupancy threshold) while 80 keep a median of
     # 64 primary attempts per region and still expose bands.
-    gapmap_sample: int = Field(default=6000, ge=100, le=10000)
     gapmap_regions: int = Field(default=80, ge=2, le=200)
     gapmap_seed: int = 0
+    # A cap on how much of the embedded corpus one build reads; 0 is no cap, and
+    # the coverage line and the warning always report what was actually read.
+    # Measured on the live index (2,078,515 embedded studies, 384 dimensions):
+    # the scan runs at ~11k documents/s and the vectors weigh ~3.0 GiB, so an
+    # uncapped build is ~3 minutes and needs a host with several GB to spare.
+    gapmap_scan_limit: int = Field(default=0, ge=0)
+    # Page size and concurrent point-in-time slices for that scan. Sixteen slices
+    # measured ~11k docs/s against ~3.2k for a single unsliced walk.
+    gapmap_batch: int = Field(default=2000, ge=100, le=10000)
+    gapmap_slices: int = Field(default=16, ge=1, le=64)
+    # How many of the clustered studies the canvas draws. Every study shapes the
+    # regions; a browser cannot paint two million marks, so the drawn subset is
+    # thinned by a hash of the document id.
+    gapmap_points: int = Field(default=6000, ge=100, le=50000)
+    # Rows the 2-D projection is fitted on. The basis is a drawing choice, and a
+    # full-corpus SVD would stall the build for minutes to move points by pixels.
+    gapmap_projection_sample: int = Field(default=50000, ge=1000, le=500000)
+    # Bound on the full-corpus k-means. Measured at 200k documents and 80
+    # regions: 10 iterations ~3.2 s, 40 ~7.7 s; the assignment usually settles
+    # first and the loop stops when it does.
+    gapmap_iterations: int = Field(default=25, ge=1, le=200)
+    # Minimum seconds between two streamed frames while the corpus is scanning.
+    gapmap_tick_seconds: float = Field(default=0.4, ge=0.0, le=10.0)
     max_concurrent_searches: int = 4
     frontend_dist: str = str(Path(__file__).resolve().parents[2] / "dist")
     cors_origins: list[str] = ["http://localhost:5173"]

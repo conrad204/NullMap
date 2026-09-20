@@ -1158,3 +1158,44 @@ def test_real_elasticsearch_embedded_sample_returns_vectors_and_the_corpus_size(
             await repo.close()
 
     asyncio.run(exercise())
+
+
+@pytest.mark.skipif(
+    not os.getenv("NULLMAP_TEST_ELASTIC_URL"), reason="Opt-in real Elasticsearch test"
+)
+def test_real_elasticsearch_scan_walks_every_embedded_study_exactly_once():
+    """The map is only the whole index if the scan is: no duplicates, nothing missed."""
+
+    async def exercise():
+        config = Settings(
+            _env_file=None,
+            elastic_url=os.environ["NULLMAP_TEST_ELASTIC_URL"],
+            elastic_local=True,
+            elastic_index=f"nullmap-test-{uuid4().hex}",
+            embedding_dimensions=3,
+        )
+        repo = ElasticRepository(config)
+        try:
+            await repo.bulk_upsert(
+                [
+                    document(f"work{index}", embedding=[1.0, float(index) / 50, 0.0])
+                    for index in range(40)
+                ]
+                + [document("no_vector"), document("draft", record_kind="draft")]
+            )
+            await repo.client.indices.refresh(index=config.elastic_index)
+            assert await repo.count_embedded() == 40
+            seen = []
+            async for batch in repo.scan_embedded(batch_size=7, slices=3):
+                seen.extend(doc["id"] for doc in batch)
+            assert sorted(seen) == sorted(f"work{index}" for index in range(40))
+            capped = []
+            async for batch in repo.scan_embedded(batch_size=5, slices=2, limit=12):
+                capped.extend(batch)
+            assert len(capped) == 12
+            assert all(len(doc["embedding"]) == 3 for doc in capped)
+        finally:
+            await repo.client.indices.delete(index=config.elastic_index, ignore_unavailable=True)
+            await repo.close()
+
+    asyncio.run(exercise())
