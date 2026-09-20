@@ -16,6 +16,7 @@ from app.repository import (
     ElasticRepository,
     _prepare_document,
     bucket_runtime,
+    filter_clauses,
     index_mapping,
     lexical_query,
     population_query,
@@ -748,6 +749,80 @@ def test_population_screen_skips_network_for_unconstrained_demographics():
     client.search.assert_not_called()
 
 
+def test_date_bounds_cover_whole_years_and_citation_bounds_exempt_registry_rows():
+    clauses = filter_clauses(
+        {"yearFrom": 2010, "yearTo": 2020, "minCitations": 5, "maxCitations": 50}
+    )
+    assert clauses[0] == {
+        "range": {"publication_date": {"gte": "2010-01-01", "lte": "2020-12-31"}}
+    }
+    citations = clauses[1]["bool"]
+    assert citations["minimum_should_match"] == 1
+    assert {"range": {"cited_by_count": {"gte": 5, "lte": 50}}} in citations["should"]
+    # A registry row has no citation count; dropping it would delete the unreported trials.
+    assert {"terms": {"source": ["ctgov", "merged"]}} in citations["should"]
+
+
+@pytest.mark.parametrize(
+    ("filters", "expected"),
+    [
+        (None, []),
+        ({}, []),
+        ({"yearFrom": None, "yearTo": None, "minCitations": None, "maxCitations": None}, []),
+        ({"yearFrom": 2015}, [{"range": {"publication_date": {"gte": "2015-01-01"}}}]),
+        ({"yearTo": 1999}, [{"range": {"publication_date": {"lte": "1999-12-31"}}}]),
+    ],
+)
+def test_each_bound_is_independent_and_an_empty_filter_set_is_not_a_filter(filters, expected):
+    assert filter_clauses(filters) == expected
+
+
+def test_a_zero_citation_floor_is_a_bound_and_not_an_absent_one():
+    # 0 is falsy but meaningful: it excludes papers with no stored citation count.
+    clause = filter_clauses({"minCitations": 0})[0]["bool"]["should"][0]
+    assert clause == {"range": {"cited_by_count": {"gte": 0}}}
+
+
+def test_filters_are_mandatory_clauses_that_expanded_references_cannot_escape():
+    pico = {"intervention": "Vitamin D", "outcome": "Depression severity"}
+    filters = {"yearFrom": 2015, "minCitations": 5}
+    query = lexical_query(pico, "Does vitamin D reduce depression?", ["review-reference"], filters)
+    # Expanded ids are an alternative way to match, so the bounds must be filters, not shoulds.
+    assert {"ids": {"values": ["review-reference"]}} in query["bool"]["should"]
+    for clause in filter_clauses(filters):
+        assert clause in query["bool"]["filter"]
+    unfiltered = lexical_query(pico, "Does vitamin D reduce depression?", ["review-reference"])
+    assert "publication_date" not in str(unfiltered)
+    assert "cited_by_count" not in str(unfiltered)
+
+
+def test_expanded_reference_screening_applies_filters_without_a_population():
+    captured = {}
+
+    async def search(**kwargs):
+        captured.update(kwargs)
+        return {"hits": {"hits": [{"_id": "recent"}]}}
+
+    repo = ElasticRepository(Settings(_env_file=None), client=SimpleNamespace(search=search))
+    kept = asyncio.run(repo.screen_population(["recent", "old"], {}, {"yearFrom": 2015}))
+    assert kept == {"recent"}
+    assert {"range": {"publication_date": {"gte": "2015-01-01"}}} in (
+        captured["query"]["bool"]["filter"]
+    )
+
+
+def test_unfiltered_count_uses_the_same_match_set_predicate_as_the_aggregation():
+    client = SimpleNamespace(
+        count=AsyncMock(return_value={"count": 812}),
+        indices=SimpleNamespace(exists=AsyncMock(return_value=True), put_mapping=AsyncMock()),
+    )
+    repo = ElasticRepository(Settings(_env_file=None), client=client)
+    assert asyncio.run(repo.count_studies({"match_all": {}})) == 812
+    assert client.count.call_args.kwargs["query"] == ElasticRepository.match_set(
+        {"match_all": {}}
+    )
+
+
 @pytest.mark.skipif(
     not os.getenv("NULLMAP_TEST_ELASTIC_URL"), reason="Opt-in real Elasticsearch test"
 )
@@ -835,6 +910,57 @@ def test_real_elasticsearch_population_guard_scopes_lexical_and_expanded_candida
                 "knee",
                 "hip",
             }
+        finally:
+            await repo.client.indices.delete(index=repo.index, ignore_unavailable=True)
+            await repo.close()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.skipif(
+    not os.getenv("NULLMAP_TEST_ELASTIC_URL"), reason="Opt-in real Elasticsearch test"
+)
+def test_real_elasticsearch_filters_agree_across_retrieval_registry_sweep_and_counts():
+    async def exercise():
+        settings = Settings(
+            _env_file=None,
+            elastic_url=os.environ["NULLMAP_TEST_ELASTIC_URL"],
+            elastic_local=True,
+            elastic_index=f"nullmap-test-{uuid4().hex}",
+            embedding_dimensions=3,
+        )
+        repo = ElasticRepository(settings)
+        try:
+            rows = [
+                document("recent_cited", year=2020, cited_by_count=40),
+                document("recent_obscure", year=2020, cited_by_count=1),
+                document("old_cited", year=1998, cited_by_count=400),
+                document("undated", year=None, cited_by_count=40),
+                document(
+                    "trial",
+                    source="ctgov",
+                    year=2020,
+                    nct_ids=["NCT00000001"],
+                    overall_status="COMPLETED",
+                ),
+            ]
+            await repo.bulk_upsert(rows)
+            pico = {"intervention": "Vitamin D", "outcome": "Depression severity"}
+            idea = "Does vitamin D reduce depression?"
+            filters = {"yearFrom": 2010, "minCitations": 5}
+            query = lexical_query(pico, idea, None, filters)
+            hits, _ = await repo.retrieve(query, None)
+            # The registry row has no citation count and is exempt; the obscure paper is not.
+            assert {row["id"] for row in hits} == {"recent_cited", "trial"}
+            assert {row["id"] for row in await repo.registry_sweep(query)} == {"trial"}
+            aggregate = await repo.aggregate(query, 0.2, "SMD")
+            assert aggregate["total"] == 2
+            assert [row["year"] for row in aggregate["yearCounts"]] == [2020]
+            assert await repo.count_studies(lexical_query(pico, idea)) == len(rows)
+            # Expanded review references are screened against the same bounds.
+            assert await repo.screen_population(
+                ["recent_cited", "recent_obscure", "old_cited", "undated"], pico, filters
+            ) == {"recent_cited"}
         finally:
             await repo.client.indices.delete(index=repo.index, ignore_unavailable=True)
             await repo.close()

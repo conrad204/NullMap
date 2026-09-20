@@ -9,9 +9,9 @@ import pytest
 
 from app.config import Settings
 from app.llm import Usage, indexed_to_extraction, validate_extraction
-from app.models import Extraction, IndexedExtraction, Pico, SearchRequest
+from app.models import Extraction, IndexedExtraction, Pico, SearchFilters, SearchRequest
 from app.pipeline import SearchPipeline
-from app.repository import BUCKETS
+from app.repository import BUCKETS, filter_clauses
 from app.statistics import INCONCLUSIVE_REASONS, assign_bucket
 
 
@@ -79,6 +79,12 @@ class MemoryRepository:
         self.aggregate_query = None
         self.aggregate_parameters = None
         self.read_batches = []
+        self.retrieve_query = None
+        self.registry_query = None
+        self.count_queries = []
+        # What the same match set contains without the request's filters.
+        self.unfiltered_total = 0
+        self.count_error = None
 
     async def ensure_index(self):
         pass
@@ -96,10 +102,18 @@ class MemoryRepository:
         ]
 
     async def retrieve(self, query, vector):
+        self.retrieve_query = deepcopy(query)
         return [deepcopy(self.documents[identifier]) for identifier in self.hit_ids], "bm25"
 
     async def registry_sweep(self, query):
+        self.registry_query = deepcopy(query)
         return [deepcopy(row) for row in self.documents.values() if row.get("source") == "ctgov"]
+
+    async def count_studies(self, query):
+        self.count_queries.append(deepcopy(query))
+        if self.count_error:
+            raise self.count_error
+        return self.unfiltered_total
 
     async def cache_extraction(self, identifier, extraction):
         self.cache_writes.append((identifier, deepcopy(extraction)))
@@ -265,6 +279,84 @@ def test_full_match_counts_are_not_replaced_by_retrieved_page_counts():
     assert result["statistics"]["fileDrawer"] == aggregate["fileDrawer"]
     assert result["estimate"]["pSuccess"] is None
     assert "120 primary studies" in result["summary"]
+
+
+def test_corpus_filters_constrain_retrieval_the_registry_sweep_and_the_counts():
+    repo = MemoryRepository([paper(), paper("trial", source="ctgov", nct_ids=["NCT00000001"])])
+    repo.unfiltered_total = 9
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(
+                idea="Does vitamin D reduce depression?",
+                filters=SearchFilters(yearFrom=2015, minCitations=5),
+            )
+        )
+    )
+    expected = filter_clauses({"yearFrom": 2015, "minCitations": 5})
+    # The same bounds have to reach every leg, or the counts would describe a different
+    # corpus from the study list.
+    for query in (repo.retrieve_query, repo.registry_query, repo.aggregate_query):
+        for clause in expected:
+            assert clause in query["bool"]["filter"]
+    # The comparison count deliberately drops the bounds; otherwise nothing is attributable.
+    assert len(repo.count_queries) == 1
+    assert "publication_date" not in str(repo.count_queries[0])
+    applied = result["filters"]
+    assert (applied["yearFrom"], applied["minCitations"]) == (2015, 5)
+    assert applied["yearTo"] is None and applied["maxCitations"] is None
+    assert applied["matchedBeforeFilters"] == 9
+    assert applied["excluded"] == 9 - result["totalScanned"]
+    assert applied["registryCitationExemption"] is True
+    assert any("filtered subset" in warning for warning in result["warnings"])
+    assert any("no citation count" in warning for warning in result["warnings"])
+    assert any("no publication date" in warning for warning in result["warnings"])
+    assert "Restricted before searching" in result["countScope"]
+
+
+def test_an_empty_filter_object_never_claims_a_narrowed_corpus():
+    repo = MemoryRepository([paper()])
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(idea="Does vitamin D reduce depression?", filters=SearchFilters())
+        )
+    )
+    assert result["filters"] is None
+    assert repo.count_queries == []
+    assert not any("corpus filters" in warning.lower() for warning in result["warnings"])
+    assert "Restricted before searching" not in result["countScope"]
+
+
+def test_a_filtered_search_admits_when_it_cannot_count_what_was_excluded():
+    repo = MemoryRepository([paper()])
+    repo.count_error = RuntimeError("count unavailable")
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(
+                idea="Does vitamin D reduce depression?",
+                filters=SearchFilters(maxCitations=10),
+            )
+        )
+    )
+    assert result["filters"]["matchedBeforeFilters"] is None
+    assert result["filters"]["excluded"] is None
+    assert any("could not be counted" in warning for warning in result["warnings"])
+
+
+def test_filters_screen_expanded_review_references_without_a_population():
+    async def exercise():
+        review = paper("review", is_review=True, referenced_works=["recent", "old"])
+        repo = MemoryRepository(
+            [review, paper("recent", embedding=[1.0, 0.0]), paper("old", embedding=[0.9, 0.1])]
+        )
+        repo.screen_population = AsyncMock(return_value={"recent"})
+        filters = {"yearFrom": 2015, "yearTo": None, "minCitations": None, "maxCitations": None}
+        result = await SearchPipeline(repo, FakeLLM(), config()).expand(
+            [review], [1.0, 0.0], [], {}, filters
+        )
+        assert [row["id"] for row in result] == ["recent"]
+        repo.screen_population.assert_awaited_once_with(["recent", "old"], {}, filters)
+
+    asyncio.run(exercise())
 
 
 def test_review_only_retrieval_does_not_deny_primary_matches_beyond_the_page():
@@ -554,7 +646,7 @@ def test_reference_expansion_preserves_condition_screening_after_vector_ranking(
             [review], [1.0, 0.0], [], query_pico
         )
         assert [row["id"] for row in result] == ["knee"]
-        repo.screen_population.assert_awaited_once_with(["knee", "ankle"], query_pico)
+        repo.screen_population.assert_awaited_once_with(["knee", "ankle"], query_pico, None)
 
     asyncio.run(exercise())
 

@@ -15,6 +15,7 @@ from app.models import Pico, SearchRequest
 from app.repository import (
     BUCKETS,
     ElasticRepository,
+    filter_clauses,
     lexical_query,
     population_query,
     rrf_fuse,
@@ -44,6 +45,26 @@ def inconclusive_sentence(count: int, reasons: dict | None) -> str:
     ]
     detail = f": {'; '.join(parts)}" if parts else ""
     return f"A further {count} are inconclusive{detail}. "
+
+
+def filter_phrases(filters: dict) -> list[str]:
+    """Plain descriptions of the active corpus filters, for warnings and scope text."""
+    phrases = []
+    year_from, year_to = filters.get("yearFrom"), filters.get("yearTo")
+    if year_from is not None and year_to is not None:
+        phrases.append(f"published {year_from}–{year_to}")
+    elif year_from is not None:
+        phrases.append(f"published in {year_from} or later")
+    elif year_to is not None:
+        phrases.append(f"published in {year_to} or earlier")
+    low, high = filters.get("minCitations"), filters.get("maxCitations")
+    if low is not None and high is not None:
+        phrases.append(f"cited {low} to {high} times")
+    elif low is not None:
+        phrases.append(f"cited at least {low} times")
+    elif high is not None:
+        phrases.append(f"cited at most {high} times")
+    return phrases
 
 
 # The registry sweep can fill the first several dozen ranks with trials, so the screen has to
@@ -157,6 +178,7 @@ class SearchPipeline:
         vector: list[float] | None,
         warnings: list[str],
         pico: dict | None = None,
+        filters: dict | None = None,
     ) -> list[dict]:
         if vector is None:
             return []
@@ -205,9 +227,12 @@ class SearchPipeline:
                 similarity = sum(a * b for a, b in zip(vector, embedding)) / denom if denom else 0
                 if similarity >= self.config.reference_min_similarity:
                     ranked.append((similarity, doc))
-        if ranked and population_query(pico or {}) is not None:
+        # Expanded references skip the lexical query, so the population guard and the
+        # corpus filters have to be reapplied here or the study list would show rows
+        # the aggregation over the same query already excluded.
+        if ranked and (population_query(pico or {}) is not None or filter_clauses(filters)):
             eligible_ids = await self.repo.screen_population(
-                [doc["id"] for _, doc in ranked], pico or {}
+                [doc["id"] for _, doc in ranked], pico or {}, filters
             )
             ranked = [(score, doc) for score, doc in ranked if doc["id"] in eligible_ids]
         return [doc for _, doc in sorted(ranked, key=lambda pair: -pair[0])]
@@ -504,6 +529,53 @@ class SearchPipeline:
             warnings.append("The effect-trend summary was unavailable; direction counts are shown.")
         return trend
 
+    async def corpus_filters(
+        self, filters: dict, unfiltered_query: dict, matched: int, warnings: list[str]
+    ) -> dict:
+        """Report what the pre-search filters removed, and that the counts are a subset.
+
+        The excluded figure is one Elasticsearch count over the same match-set
+        predicate without the filter clauses; when it is unavailable the report
+        says so rather than implying nothing was removed.
+        """
+        phrases = filter_phrases(filters)
+        total = None
+        try:
+            total = await self.repo.count_studies(unfiltered_query)
+        except Exception as exc:
+            logger.warning("Unfiltered match count unavailable: %s", type(exc).__name__)
+        excluded = max(total - matched, 0) if total is not None else None
+        detail = (
+            f" They excluded {excluded} of {total} otherwise-matching indexed studies."
+            if excluded is not None
+            else " How many records they excluded could not be counted."
+        )
+        warnings.append(
+            f"Your corpus filters ({'; '.join(phrases)}) were applied before the search, so every "
+            "count, bucket share, histogram and file-drawer figure here describes that filtered "
+            f"subset of the index rather than all matching evidence.{detail}"
+        )
+        if filters.get("minCitations") is not None or filters.get("maxCitations") is not None:
+            warnings.append(
+                "ClinicalTrials.gov records carry no citation count, so registry rows are exempt "
+                "from the citation bounds. Filtering on citations would otherwise remove the "
+                "terminated and never-reported trials this search exists to surface."
+            )
+        if filters.get("yearFrom") is not None or filters.get("yearTo") is not None:
+            warnings.append(
+                "Records with no publication date cannot satisfy a publication-year filter and "
+                "were excluded; for registry rows that date is the trial's primary completion date."
+            )
+        bounds = ("yearFrom", "yearTo", "minCitations", "maxCitations")
+        return {
+            **{key: filters.get(key) for key in bounds},
+            "description": phrases,
+            "registryCitationExemption": filters.get("minCitations") is not None
+            or filters.get("maxCitations") is not None,
+            "matchedBeforeFilters": total,
+            "excluded": excluded,
+        }
+
     async def search(self, request: SearchRequest, progress=None) -> dict:
         async with self.active:
             return await self._search(request, progress)
@@ -544,7 +616,13 @@ class SearchPipeline:
                 "PICO parsing was unavailable. Search uses your original wording and selected planning values."
             )
         await emit("searching", "Retrieving indexed papers and registered trials")
-        query = lexical_query(pico.model_dump(), request.idea)
+        # A filter set with no bound is not a filter: it must not warn or cost a count.
+        filters = (
+            request.filters.model_dump()
+            if request.filters is not None and request.filters.active
+            else None
+        )
+        query = lexical_query(pico.model_dump(), request.idea, filters=filters)
         try:
             vector = await self.embed(request.idea)
         except Exception as exc:
@@ -552,9 +630,10 @@ class SearchPipeline:
             logger.warning("Local embeddings unavailable: %s", type(exc).__name__)
             warnings.append("Local embeddings are unavailable; retrieval used BM25 keyword search.")
         hits, mode = await self.repo.retrieve(query, vector)
-        expanded = await self.expand(hits, vector, warnings, pico.model_dump())
+        expanded = await self.expand(hits, vector, warnings, pico.model_dump(), filters)
+        expansion_ids = [d["id"] for d in expanded]
         if expanded:
-            query = lexical_query(pico.model_dump(), request.idea, [d["id"] for d in expanded])
+            query = lexical_query(pico.model_dump(), request.idea, expansion_ids, filters=filters)
             hits = rrf_fuse(hits, expanded)
         registry = await self.repo.registry_sweep(query)
         hits = rrf_fuse(hits, registry)
@@ -566,10 +645,12 @@ class SearchPipeline:
         merged = [d for d in hits if d.get("source") == "merged"]
         if merged:
             await self.repo.persist_links(merged)
+            expansion_ids = expansion_ids + [d["id"] for d in merged]
             query = lexical_query(
                 pico.model_dump(),
                 request.idea,
-                [d["id"] for d in expanded] + [d["id"] for d in merged],
+                expansion_ids,
+                filters=filters,
             )
         studies = [d for d in hits if not d.get("is_review")]
         question = {
@@ -616,6 +697,17 @@ class SearchPipeline:
                 f"Counts cover all {aggregation['total']} keyword matches, but only the top "
                 f"{screening['screened']} were screened for relevance ({screening['relevant']} "
                 "judged relevant), so the counts include studies that may not address the question."
+            )
+        applied_filters = None
+        if filters:
+            applied_filters = await self.corpus_filters(
+                filters,
+                lexical_query(pico.model_dump(), request.idea, expansion_ids or None),
+                aggregation["total"],
+                warnings,
+            )
+            count_scope += (
+                f" Restricted before searching to studies {'; '.join(filter_phrases(filters))}."
             )
         plan = request.model_dump()
         plan.update(sesoi=pico.sesoi, effectType=pico.effectType)
@@ -741,6 +833,8 @@ class SearchPipeline:
             "inconclusiveReasons": aggregation.get("inconclusiveReasons"),
             "yearCounts": aggregation["yearCounts"],
             "countScope": count_scope,
+            # Null unless a bound was set, so a result can never look filtered when it is not.
+            "filters": applied_filters,
             "screening": screening,
             "nullTerms": aggregation["nullTerms"],
             "statistics": stats,

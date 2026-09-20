@@ -279,7 +279,59 @@ def population_query(pico: dict) -> dict | None:
     return {"bool": {"should": [primary, *alternatives], "minimum_should_match": 1}}
 
 
-def lexical_query(pico: dict, idea: str, expanded_ids: list[str] | None = None) -> dict:
+# ClinicalTrials.gov records have no citation count: ingestion writes 0 for every
+# registry row. A citation bound applied to them would delete exactly the
+# terminated and never-reported trials this tool exists to surface, so registry
+# rows are exempt from citation bounds and the pipeline warns that they are.
+# Publication dates do exist for registry rows (the primary completion date), so
+# a date bound applies to papers and trials alike.
+CITATION_EXEMPT_SOURCES = ("ctgov", "merged")
+
+
+def filter_clauses(filters: dict | None) -> list[dict]:
+    """Pre-search corpus restrictions, as filter clauses over the full match set.
+
+    These belong in the query's ``filter``, never in ``should``: the caller's
+    expanded review references and every aggregation share that clause list, so a
+    filtered-out record cannot re-enter the study list while the counts exclude it.
+    A record with no ``publication_date`` cannot satisfy a date bound and drops out.
+    """
+    if not filters:
+        return []
+    clauses: list[dict] = []
+    dates = {}
+    if filters.get("yearFrom") is not None:
+        dates["gte"] = f"{int(filters['yearFrom']):04d}-01-01"
+    if filters.get("yearTo") is not None:
+        dates["lte"] = f"{int(filters['yearTo']):04d}-12-31"
+    if dates:
+        clauses.append({"range": {"publication_date": dates}})
+    citations = {}
+    if filters.get("minCitations") is not None:
+        citations["gte"] = int(filters["minCitations"])
+    if filters.get("maxCitations") is not None:
+        citations["lte"] = int(filters["maxCitations"])
+    if citations:
+        clauses.append(
+            {
+                "bool": {
+                    "should": [
+                        {"range": {"cited_by_count": citations}},
+                        {"terms": {"source": list(CITATION_EXEMPT_SOURCES)}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+        )
+    return clauses
+
+
+def lexical_query(
+    pico: dict,
+    idea: str,
+    expanded_ids: list[str] | None = None,
+    filters: dict | None = None,
+) -> dict:
     """Require intervention/outcome plus explicit disease or anatomical scope.
 
     Untyped model synonyms are boosts, not alternative mandatory concepts: a mood
@@ -405,13 +457,14 @@ def lexical_query(pico: dict, idea: str, expanded_ids: list[str] | None = None) 
     should = [candidate]
     if expanded_ids:
         should.append({"ids": {"values": list(dict.fromkeys(expanded_ids))}})
-    filters = [{"term": {"record_kind": "study"}}]
+    required = [{"term": {"record_kind": "study"}}]
     population = population_query(pico)
     if population is not None:
-        filters.append(population)
+        required.append(population)
+    required.extend(filter_clauses(filters))
     return {
         "bool": {
-            "filter": filters,
+            "filter": required,
             "should": should,
             "minimum_should_match": 1,
         }
@@ -832,25 +885,31 @@ class ElasticRepository:
                 "hybrid_client_rrf",
             )
 
-    async def screen_population(self, ids: list[str], pico: dict) -> set[str]:
-        """Apply the same population guard to expanded rows and aggregate counts."""
+    async def screen_population(
+        self, ids: list[str], pico: dict, filters: dict | None = None
+    ) -> set[str]:
+        """Apply the population guard and the corpus filters to expanded rows.
+
+        Review references enter the study list without passing the lexical query,
+        so they are screened here against the same conditions the aggregation uses.
+        """
         identifiers = list(dict.fromkeys(ids))
         population = population_query(pico)
-        if not identifiers or population is None:
+        restrictions = filter_clauses(filters)
+        if not identifiers or (population is None and not restrictions):
             return set(identifiers)
+        clauses = [
+            {"ids": {"values": identifiers}},
+            {"term": {"record_kind": "study"}},
+        ]
+        if population is not None:
+            clauses.append(population)
+        clauses.extend(restrictions)
         result = await self.client.search(
             index=self.index,
             size=len(identifiers),
             source=False,
-            query={
-                "bool": {
-                    "filter": [
-                        {"ids": {"values": identifiers}},
-                        {"term": {"record_kind": "study"}},
-                        population,
-                    ]
-                }
-            },
+            query={"bool": {"filter": clauses}},
         )
         return {hit["_id"] for hit in result["hits"]["hits"]}
 
@@ -936,16 +995,31 @@ class ElasticRepository:
         if actions:
             await async_bulk(self.client, actions, refresh="wait_for")
 
-    async def aggregate(self, query: dict, sesoi: float, effect_type: str) -> dict:
-        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        runtime = bucket_runtime(sesoi, effect_type, today)
-        q = {
+    @staticmethod
+    def match_set(query: dict) -> dict:
+        """The counted population: primary study records matching the query."""
+        return {
             "bool": {
                 "must": [query],
                 "filter": [{"term": {"record_kind": "study"}}],
                 "must_not": [{"term": {"is_review": True}}],
             }
         }
+
+    async def count_studies(self, query: dict) -> int:
+        """Size of one match set, so a filtered search can say what it removed.
+
+        Uses the same predicate as ``aggregate``; otherwise the difference between
+        a filtered and an unfiltered count would not be attributable to the filters.
+        """
+        await self.ensure_index()
+        result = await self.client.count(index=self.index, query=self.match_set(query))
+        return result["count"]
+
+    async def aggregate(self, query: dict, sesoi: float, effect_type: str) -> dict:
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        runtime = bucket_runtime(sesoi, effect_type, today)
+        q = self.match_set(query)
         completed = {
             "bool": {
                 "filter": [
