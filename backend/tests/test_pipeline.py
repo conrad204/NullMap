@@ -1,6 +1,7 @@
 """Scientific integration contracts across retrieval, linking, extraction and reporting."""
 
 import asyncio
+import math
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -9,7 +10,14 @@ import pytest
 
 from app.config import Settings
 from app.llm import Usage, indexed_to_extraction, validate_extraction
-from app.models import Extraction, IndexedExtraction, Pico, SearchFilters, SearchRequest
+from app.models import (
+    ConceptSteer,
+    Extraction,
+    IndexedExtraction,
+    Pico,
+    SearchFilters,
+    SearchRequest,
+)
 from app.pipeline import SearchPipeline
 from app.repository import BUCKETS, EFFECT_DIRECTIONS, filter_clauses
 from app.statistics import INCONCLUSIVE_REASONS, assign_bucket
@@ -80,6 +88,7 @@ class MemoryRepository:
         self.aggregate_parameters = None
         self.read_batches = []
         self.retrieve_query = None
+        self.retrieve_vector = None
         self.registry_query = None
         self.count_queries = []
         # What the same match set contains without the request's filters.
@@ -104,6 +113,7 @@ class MemoryRepository:
 
     async def retrieve(self, query, vector):
         self.retrieve_query = deepcopy(query)
+        self.retrieve_vector = None if vector is None else list(vector)
         return [deepcopy(self.documents[identifier]) for identifier in self.hit_ids], "bm25"
 
     async def registry_sweep(self, query):
@@ -1179,3 +1189,104 @@ def test_overview_is_skipped_when_a_trend_was_written_and_degrades_to_a_warning(
         assert any("overview of matched studies was unavailable" in w for w in failed["warnings"])
 
     asyncio.run(exercise())
+
+
+class FakeEmbedder:
+    """Embeds by lookup, so every direction a steering test relies on is exact."""
+
+    def __init__(self, vectors):
+        self.vectors, self.calls = vectors, []
+
+    def embed_query(self, text):
+        self.calls.append(text)
+        return list(self.vectors[text])
+
+
+QUESTION = "Does vitamin D reduce depression?"
+DIALYSIS, DIABETES = [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]
+STEER_VECTORS = {
+    QUESTION: [1.0, 0.0, 0.0],
+    # The same direction as the question, so subtracting it cancels the search out.
+    "vitamin D": [1.0, 0.0, 0.0],
+    "dialysis": DIALYSIS,
+    "diabetes": DIABETES,
+}
+
+
+def cosine(left, right):
+    dot = sum(a * b for a, b in zip(left, right))
+    return dot / (math.dist(left, [0] * len(left)) * math.dist(right, [0] * len(right)))
+
+
+def steering_pipeline(repo=None):
+    repo = repo if repo is not None else MemoryRepository([paper()])
+    embedder = FakeEmbedder(STEER_VECTORS)
+    embedding_config = Settings(_env_file=None, openai_api_key="", embeddings_enabled=True)
+    return repo, SearchPipeline(repo, FakeLLM(), embedding_config, embedder=embedder)
+
+
+def test_concept_tags_reorder_the_questions_matches_without_changing_the_match_set():
+    plain_repo, plain = steering_pipeline()
+    untagged = asyncio.run(plain.search(SearchRequest(idea=QUESTION, concepts=ConceptSteer())))
+    tagged_repo, tagged = steering_pipeline()
+    result = asyncio.run(
+        tagged.search(
+            SearchRequest(
+                idea=QUESTION, concepts=ConceptSteer(positive=["dialysis"], negative=["diabetes"])
+            )
+        )
+    )
+    # Same keyword query means the same papers matched; only their order can differ.
+    assert tagged_repo.retrieve_query == plain_repo.retrieve_query
+    assert tagged_repo.registry_query == plain_repo.registry_query
+    assert tagged_repo.aggregate_query == plain_repo.aggregate_query
+    assert tagged_repo.retrieve_vector != plain_repo.retrieve_vector
+    assert cosine(tagged_repo.retrieve_vector, DIALYSIS) > cosine(
+        plain_repo.retrieve_vector, DIALYSIS
+    )
+    assert cosine(tagged_repo.retrieve_vector, DIABETES) < cosine(
+        plain_repo.retrieve_vector, DIABETES
+    )
+    # The question is still what is being searched, not one voice among the tags.
+    assert cosine(tagged_repo.retrieve_vector, STEER_VECTORS[QUESTION]) > 0.5
+    assert result["retrieval"]["concepts"] == {
+        "positive": ["dialysis"],
+        "negative": ["diabetes"],
+    }
+    # An empty tag set is not a tagged search, and must not look like one.
+    assert untagged["retrieval"]["concepts"] is None
+
+
+def test_positive_tags_pull_towards_and_negative_tags_push_away_on_their_own():
+    _, pipeline = steering_pipeline()
+    warnings = []
+    question = STEER_VECTORS[QUESTION]
+    towards = asyncio.run(pipeline.aim(question, ConceptSteer(positive=["dialysis"]), warnings))
+    away = asyncio.run(pipeline.aim(question, ConceptSteer(negative=["diabetes"]), warnings))
+    assert cosine(towards, DIALYSIS) > cosine(question, DIALYSIS)
+    assert cosine(away, DIABETES) < 0
+    # Neither one-sided set loses the question: it keeps its own weight in the sum.
+    assert cosine(towards, question) > 0.5 and cosine(away, question) > 0.5
+    assert warnings == []
+
+
+def test_tags_that_cancel_the_question_out_warn_and_leave_the_ranking_unsteered():
+    _, pipeline = steering_pipeline()
+    warnings = []
+    question = STEER_VECTORS[QUESTION]
+    unsteered = asyncio.run(pipeline.aim(question, ConceptSteer(negative=["vitamin D"]), warnings))
+    assert unsteered == question
+    assert any("cancelled the question out" in warning for warning in warnings)
+
+
+def test_concept_tags_without_embeddings_are_reported_rather_than_silently_dropped():
+    repo = MemoryRepository([paper()])
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(idea=QUESTION, concepts=ConceptSteer(positive=["dialysis"]))
+        )
+    )
+    assert repo.retrieve_vector is None
+    assert any("embeddings are unavailable" in warning for warning in result["warnings"])
+    # The tags are still echoed: the reader is told what was asked for and ignored.
+    assert result["retrieval"]["concepts"] == {"positive": ["dialysis"], "negative": []}

@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from app.concepts import aim
 from app.config import Settings, settings
 from app.fulltext import FullTextClient
 from app.llm import LLMService, Usage
-from app.models import Pico, SearchRequest
+from app.models import ConceptSteer, Pico, SearchRequest
 from app.repository import (
     BUCKETS,
     EFFECT_DIRECTIONS,
@@ -220,6 +221,45 @@ class SearchPipeline:
 
             self.embedder = get_embedder(self.config.embedding_model, self.config.embedding_device)
         return await asyncio.to_thread(self.embedder.embed_query, text)
+
+    async def aim(
+        self, vector: list[float] | None, steer: ConceptSteer, warnings: list[str]
+    ) -> list[float] | None:
+        """Move the question's vector towards the kept concepts and away from the pushed ones.
+
+        The tags change ranking, never the match set: the lexical query is
+        untouched, so a search with tags returns the question's studies in a
+        different order rather than a different search's studies.
+        """
+        if vector is None:
+            warnings.append(
+                "Concept tags need embeddings to steer ranking, and embeddings are "
+                "unavailable here, so the tags were ignored."
+            )
+            return None
+        terms = list(dict.fromkeys([*steer.positive, *steer.negative]))
+        try:
+            embedded = await asyncio.gather(*(self.embed(term) for term in terms))
+        except Exception as exc:
+            logger.warning("Concept embedding unavailable: %s", type(exc).__name__)
+            warnings.append("The concept tags could not be embedded, so ranking was not steered.")
+            return vector
+        by_term = dict(zip(terms, embedded))
+        if any(by_term[term] is None for term in terms):
+            warnings.append("The concept tags could not be embedded, so ranking was not steered.")
+            return vector
+        steered = aim(
+            vector,
+            [by_term[term] for term in steer.positive],
+            [by_term[term] for term in steer.negative],
+        )
+        if steered is None:
+            warnings.append(
+                "The concept tags cancelled the question out, leaving no direction to "
+                "search in, so ranking was not steered."
+            )
+            return vector
+        return steered
 
     async def expand(
         self,
@@ -767,6 +807,9 @@ class SearchPipeline:
             vector = None
             logger.warning("Local embeddings unavailable: %s", type(exc).__name__)
             warnings.append("Local embeddings are unavailable; retrieval used BM25 keyword search.")
+        steer = request.concepts if request.concepts and request.concepts.active else None
+        if steer:
+            vector = await self.aim(vector, steer, warnings)
         hits, mode = await self.repo.retrieve(query, vector)
         expanded = await self.expand(hits, vector, warnings, pico.model_dump(), filters)
         expansion_ids = [d["id"] for d in expanded]
@@ -993,6 +1036,8 @@ class SearchPipeline:
             "retrieval": {
                 "mode": mode,
                 "expanded": len(expanded),
+                # Echoed so a reordered page can say what reordered it.
+                "concepts": steer.model_dump() if steer else None,
                 "durationMs": round((perf_counter() - started) * 1000),
             },
             "spin": aggregation["spin"],

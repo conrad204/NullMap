@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import type { ConceptSteer, EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import { SIGN_META, fromSteer } from "../lib/concepts";
 import { BAR_GROUPS, BAR_VERDICTS, FILTER_GROUPS, INCONCLUSIVE_REASONS, UNSTATED_DIRECTION_GROUP, VERDICT_META, VERDICT_ORDER, countByVerdict, directionsFromPapers, type BarGroup, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
@@ -21,6 +22,23 @@ const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: 
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
   catch { return undefined; }
+}
+
+/** Why this page is in this order. The tags moved papers up and down; they never removed any. */
+function ConceptSteerNote({ steer }: { steer: ConceptSteer }) {
+  const tags = fromSteer(steer);
+  if (!tags.length) return null;
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-ink-3">
+      Ranked towards
+      {tags.map((tag) => (
+        <span key={tag.id} className={cx("rounded-mark px-1.5 py-0.5 text-ink", SIGN_META[tag.sign].tint)}>
+          <span aria-hidden className={cx("font-mono", SIGN_META[tag.sign].text)}>{SIGN_META[tag.sign].symbol}</span> {tag.text}
+        </span>
+      ))}
+      <span>· ordering only, no study was added or removed</span>
+    </p>
+  );
 }
 
 function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, number>> {
@@ -54,6 +72,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
+        {result.retrieval?.concepts && <ConceptSteerNote steer={result.retrieval.concepts} />}
         {result.filters && <AppliedFilterNote filters={result.filters} />}
         {exemption && <p className="mt-2 max-w-[78ch] rounded-control border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2"><Info size={14} className="mr-1.5 inline align-[-2px] text-ink-3" aria-hidden />{exemption}</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>

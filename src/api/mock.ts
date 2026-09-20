@@ -14,7 +14,22 @@ export async function mockSearch(req: SearchRequest, onProgress?: (progress: Sea
     onProgress?.({ stage, message: "Illustrative demo — simulating a search; no sources are being queried." });
     await wait(300, signal);
   }
-  return { ...SAMPLE_RESULT, idea: req.idea, field: req.field ?? null, queryId: `demo_${Date.now()}`, completedAt: new Date().toISOString(), filters: mockFilters(req.filters) };
+  return {
+    ...SAMPLE_RESULT, idea: req.idea, field: req.field ?? null, queryId: `demo_${Date.now()}`,
+    completedAt: new Date().toISOString(), filters: mockFilters(req.filters),
+    papers: steerPapers(SAMPLE_RESULT.papers, req.concepts),
+    retrieval: { mode: "hybrid", expanded: 0, concepts: req.concepts ?? null },
+  };
+}
+/** The demo of the semantics: tags reorder the same fictional studies, and remove none. */
+function steerPapers(papers: SearchResult["papers"], concepts: SearchRequest["concepts"]): SearchResult["papers"] {
+  if (!concepts) return papers;
+  const mentions = (paper: SearchResult["papers"][number], term: string) =>
+    `${paper.title} ${paper.rationale}`.toLowerCase().includes(term.trim().toLowerCase());
+  const pull = (paper: SearchResult["papers"][number]) =>
+    concepts.positive.filter((term) => mentions(paper, term)).length -
+    concepts.negative.filter((term) => mentions(paper, term)).length;
+  return papers.map((paper, index) => ({ paper, index })).sort((a, b) => pull(b.paper) - pull(a.paper) || a.index - b.index).map((entry) => entry.paper);
 }
 /** Echoes the requested bounds so the filtered-corpus notices are visible in the demo.
  *  The counts are as fictional as the rest of this file; the 2 registry rows are its own. */
