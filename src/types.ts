@@ -68,11 +68,26 @@ export type Recommendation = "pursue" | "pursue_with_changes" | "deprioritize";
 export interface PursuitEstimate {
   /** Bayesian expected power, not probability of meaningful benefit. */
   pSuccess: number | null;
+  /** Chance the study should be pursued: how unsettled the record is times the planned design's power. */
+  pPursue?: number;
   /** Raw expected utility, in the units supplied by the user. */
   expectedValue: number | null;
   confidence: "low" | "medium" | "high";
   recommendation: Recommendation;
   drivers: string[];
+}
+export type PicoField = "population" | "intervention" | "comparator" | "outcome";
+export interface PicoChange {
+  field: PicoField;
+  to: string;
+  reason: string;
+}
+/** The PICO a new study should ask, given the record; `changes` is empty when the question is worth asking as posed. */
+export interface RecommendedPico {
+  pico: Record<PicoField, string>;
+  changes: PicoChange[];
+  rationale: string;
+  source: "model" | "rules";
 }
 /** Pre-search corpus restrictions. Every bound is independently optional. */
 export interface SearchFilters {
@@ -168,6 +183,14 @@ export interface Pursuit {
   prior: [number, number];
   posterior: [number, number];
   pEffect: number;
+  /** Twice the smaller posterior tail around even odds: 1 when nothing (or a balanced conflict) settles it, near 0 when the record leans hard. */
+  pOpen: number;
+  /** Two-sided power of the planned design against the SESOI; null when no usable plan. */
+  power: number | null;
+  /** pOpen x power (pOpen alone when power is null). */
+  pPursue: number;
+  recommendation: Recommendation;
+  reasons: string[];
   ci: [number, number];
   successes: number;
   failures: number;
@@ -226,6 +249,7 @@ export interface SearchResult {
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];
   pico?: Pico;
+  recommendedPico?: RecommendedPico | null;
   statistics?: Statistics;
   costs?: QueryCosts;
   warnings?: string[];

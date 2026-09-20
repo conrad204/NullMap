@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { EvidencePool, Paper, Pursuit, PursuitState, QueryCosts, SearchResult } from "../types";
+import type { EvidencePool, Paper, Pursuit, PursuitState, Recommendation, QueryCosts, SearchResult } from "../types";
 import { cx, formatCount, percent, signed } from "../lib/format";
 import { effectForPool } from "../lib/effects";
 
@@ -46,16 +46,30 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
     {result.costs && <Costs costs={result.costs} />}
   </>;
 }
+const RECOMMENDATIONS: Record<Recommendation, { label: string; tone: string }> = {
+  pursue: { label: "Worth pursuing as posed", tone: "text-v-effect" },
+  pursue_with_changes: { label: "Worth pursuing with changes", tone: "text-v-unreported" },
+  deprioritize: { label: "Deprioritise", tone: "text-v-null" },
+};
 function PursuitPanel({ pursuit, sesoi }: { pursuit: Pursuit; sesoi?: number }) {
   const state = PURSUIT_STATES[pursuit.state];
   const [alpha, beta] = pursuit.posterior;
   const counted = [
     [pursuit.counted.effect, "effect"], [pursuit.counted.credible_null, "confirmed null"], [pursuit.counted.reported_null, "claimed null"],
   ].filter(([count]) => (count as number) > 0).map(([count, label]) => `${formatCount(count as number)} ${label}`).join(" · ");
+  const verdict = RECOMMENDATIONS[pursuit.recommendation];
   return <div className="mt-4 rounded-control border border-line p-4">
-    <h3 className="text-sm font-medium text-ink">Chance a real effect exists</h3>
+    <h3 className="text-sm font-medium text-ink">Chance you should pursue this study</h3>
     <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
-      <span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pEffect)}</span>
+      <span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pPursue)}</span>
+      <span className={cx("text-sm font-medium", verdict.tone)}>{verdict.label}</span>
+      <span className="font-mono text-xs text-ink-3">{percent(pursuit.pOpen)} unsettled{pursuit.power !== null ? ` × ${percent(pursuit.power)} power against the SESOI` : " · power not factored in"}</span>
+    </div>
+    <ul className="mt-3 max-w-[70ch] list-disc space-y-1 pl-4 text-sm leading-relaxed text-ink-2">{pursuit.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+    <p className="mt-2 text-xs leading-relaxed text-ink-3">This is the chance a new study would change the answer, not the chance the intervention works: how far the record is from settled (twice the smaller posterior tail around even odds) times the chance the planned design would detect the SESOI if the effect is real. A contested record scores high but calls for a different design, not a repeat.</p>
+    <h4 className="mt-5 text-sm font-medium text-ink">Chance a real effect exists, as the record stands</h4>
+    <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pEffect)}</span>
       <span className="font-mono text-xs text-ink-3">95% credible interval {percent(pursuit.ci[0])} – {percent(pursuit.ci[1])} · Beta({alpha.toFixed(2).replace(/\.?0+$/, "")}, {beta.toFixed(2).replace(/\.?0+$/, "")})</span>
     </div>
     <PosteriorStrip ci={pursuit.ci} mean={pursuit.pEffect} />
