@@ -201,6 +201,14 @@
   }
 }
 
+/* Hides the scrollbar chrome only: wheel, trackpad, touch and keyboard scrolling all remain. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
