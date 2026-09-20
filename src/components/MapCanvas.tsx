@@ -198,7 +198,11 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      const current = fit(width, height);
+      // Once the reader has panned, zoomed, or grabbed a paper, the base fit is
+      // theirs: the simulation spreading past the held bounds must not rescale
+      // the view under their pointer.
+      const held = fitRef.current !== null && (movedRef.current || dragRef.current !== null);
+      const current = held ? fitRef.current : fit(width, height);
       fitRef.current = current;
       if (!current) return;
       const { scale, midX, midY } = current;
@@ -393,12 +397,12 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
       drag.x = event.clientX;
       drag.y = event.clientY;
       drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
+      movedRef.current = movedRef.current || drag.moved;
       if (drag.node >= 0) {
         const plane = toPlane(mx, my);
         if (plane) layoutRef.current!.pin(drag.node, plane.x, plane.y);
         dirtyRef.current = true;
       } else {
-        movedRef.current = movedRef.current || drag.moved;
         setTransform((current) => ({ ...current, tx: current.tx + dx, ty: current.ty + dy }));
       }
       setHover(null);
