@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectTrend, InconclusiveReason, Paper, SearchResult, Source, Verdict } from "../types";
+import type { EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
 import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
@@ -60,6 +60,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         : result.overview ? <OverviewPanel overview={result.overview} />
         : matched > 0 && <p className="max-w-[65ch] border-l-2 border-line pl-4 text-sm leading-relaxed text-ink-2">No summary of effects is shown because none of the {formatCount(matched)} matching {matched === 1 ? "study" : "studies"} reported an effect, so there is no trend to describe. What each one did report is listed under the studies below.</p>}
       {result.pico && <details className="text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>}
+      {result.recommendedPico && <RecommendedPicoPanel recommended={result.recommendedPico} />}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
@@ -69,6 +70,29 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} sort={sort} onSort={setSort} />
       </aside>
     </div>
+  );
+}
+/** The PICO a new study should ask. Changed fields are marked; unchanged ones are the question as posed. */
+function RecommendedPicoPanel({ recommended }: { recommended: RecommendedPico }) {
+  const changed = new Map(recommended.changes.map((change) => [change.field, change]));
+  return (
+    <section className="rounded-control border border-line p-4">
+      <h2 className="text-sm font-medium text-ink">Recommended PICO</h2>
+      <p className="mt-1 max-w-[65ch] text-sm leading-relaxed text-ink-2">{recommended.rationale}</p>
+      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+        {(["population", "intervention", "comparator", "outcome"] as const).map((key) => {
+          const change = changed.get(key);
+          return (
+            <div key={key}>
+              <dt className="flex items-baseline gap-2 text-xs capitalize text-ink-3">{key}{change && <span className="rounded-mark bg-accent/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">changed</span>}</dt>
+              <dd className="mt-0.5 text-sm text-ink">{recommended.pico[key] || "Not specified"}</dd>
+              {change && <dd className="mt-0.5 text-xs leading-relaxed text-ink-3">{change.reason}</dd>}
+            </div>
+          );
+        })}
+      </dl>
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">{recommended.changes.length === 0 ? "No change to the question is indicated. " : ""}{recommended.source === "model" ? "Wording suggested by a language model from the extracted fields, verdicts and the pursuit decision above; it introduces no findings of its own. Check the studies it points to before adopting it." : "Suggested by fixed rules from the pursuit decision and the populations represented among the matches; no language model was used."}</p>
+    </section>
   );
 }
 /** A filtered report describes a subset of the index, so say which subset and what it cost. */

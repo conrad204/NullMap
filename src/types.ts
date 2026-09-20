@@ -68,11 +68,26 @@ export type Recommendation = "pursue" | "pursue_with_changes" | "deprioritize";
 export interface PursuitEstimate {
   /** Bayesian expected power, not probability of meaningful benefit. */
   pSuccess: number | null;
+  /** Chance the study should be pursued: how unsettled the record is times the planned design's power. */
+  pPursue?: number;
   /** Raw expected utility, in the units supplied by the user. */
   expectedValue: number | null;
   confidence: "low" | "medium" | "high";
   recommendation: Recommendation;
   drivers: string[];
+}
+export type PicoField = "population" | "intervention" | "comparator" | "outcome";
+export interface PicoChange {
+  field: PicoField;
+  to: string;
+  reason: string;
+}
+/** The PICO a new study should ask, given the record; `changes` is empty when the question is worth asking as posed. */
+export interface RecommendedPico {
+  pico: Record<PicoField, string>;
+  changes: PicoChange[];
+  rationale: string;
+  source: "model" | "rules";
 }
 /** Pre-search corpus restrictions. Every bound is independently optional. */
 export interface SearchFilters {
@@ -162,8 +177,37 @@ export interface EffectTrend {
   patterns: string[];
   scope: string;
 }
+export type PursuitState = "unknown" | "open" | "contested" | "favours_effect" | "favours_null";
+/** Beta(1, 1) prior updated by tier-weighted verdicts: the chance a real effect exists, as the record stands. */
+export interface Pursuit {
+  prior: [number, number];
+  posterior: [number, number];
+  pEffect: number;
+  /** Twice the smaller posterior tail around even odds: 1 when nothing (or a balanced conflict) settles it, near 0 when the record leans hard. */
+  pOpen: number;
+  /** Two-sided power of the planned design against the SESOI; null when no usable plan. */
+  power: number | null;
+  /** pOpen x power (pOpen alone when power is null). */
+  pPursue: number;
+  recommendation: Recommendation;
+  reasons: string[];
+  ci: [number, number];
+  successes: number;
+  failures: number;
+  counted: { effect: number; credible_null: number; reported_null: number };
+  uninformative: number;
+  /** Share of the informative weight on the minority side; 0.5 is a perfect split. */
+  conflict: number;
+  state: PursuitState;
+  /** Predictive probability that the pooled true effect reaches the SESOI in either direction; null without one matching pool. */
+  pMeaningful: number | null;
+  pFavours: number | null;
+  poolStudyIds: string[];
+  method: string;
+}
 export interface Statistics {
   pools: EvidencePool[];
+  pursuit?: Pursuit;
   assurance: number | null;
   requiredN: number | null;
   expectedValue: number | null;
@@ -205,6 +249,7 @@ export interface SearchResult {
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];
   pico?: Pico;
+  recommendedPico?: RecommendedPico | null;
   statistics?: Statistics;
   costs?: QueryCosts;
   warnings?: string[];
