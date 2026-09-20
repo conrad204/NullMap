@@ -124,7 +124,7 @@ export default function MapPanel({ idea }: { idea: string }) {
               <span className="shrink-0 text-xs text-ink-3">{paper.year ?? "year unknown"} · {VERDICT_META[paper.bucket as Verdict]?.label ?? paper.bucket} · {paper.cosine.toFixed(2)}</span>
             </li>)}
           </ul>
-          {placement.region && <p className="mt-3 text-sm text-ink-2">It lands in a <span className={clusterMetaOf(placement.region.label).text}>{clusterMetaOf(placement.region.label).label.toLowerCase()}</span> region ({REGION_META[placement.region.label].label.toLowerCase()}): {bucketSummary(placement.region.bucketCounts)}.</p>}
+          {placement.region && <p className="mt-3 text-sm text-ink-2">It lands in a region the map reads as <span className={clusterMetaOf(placement.region.label).text}>{clusterMetaOf(placement.region.label).label.toLowerCase()}</span> ({REGION_META[placement.region.label].label.toLowerCase()}): {bucketSummary(placement.region.bucketCounts)}.</p>}
           {placement.nearestGap && <p className="mt-1.5 text-sm text-ink-2">The nearest stretch between two neighbouring literatures holds {formatCount(placement.nearestGap.band)} sampled papers against {formatCount(placement.nearestGap.support)} in each neighbour{placement.nearestGap.discouraged ? ", but those neighbours reported nulls." : "."}</p>}
         </div>}
         {map.gaps.length > 0 && <details>

@@ -74,7 +74,6 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       {!!result.yearCounts?.length && <YearBreakdown counts={result.yearCounts} />}
       {result.costs && <Costs costs={result.costs} />}
       </div>
-      {/* Focusable because the scrollbar is hidden: the panel must still be reachable and scrollable by keyboard. */}
       <aside tabIndex={0} aria-label="Matching studies" className="scrollbar-none min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
         <PaperList papers={shown} allDisplayed={result.papers.length} displayedCounts={countByVerdict(result.papers)} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} />
       </aside>
