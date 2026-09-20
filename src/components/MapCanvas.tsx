@@ -172,10 +172,20 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       };
       viewRef.current = view;
 
-      // Resolved per draw so a theme change repaints in the new palette.
-      const styles = getComputedStyle(document.documentElement);
-      const color = (name: string, fallback: string) =>
-        styles.getPropertyValue(name).trim() || fallback;
+      // Resolved per draw so a theme change repaints in the new palette, and
+      // resolved through an element rather than read off the custom property:
+      // the palette is written as `light-dark(...)`, which a custom property
+      // hands back verbatim. A canvas rejects that and silently keeps the
+      // previous fill, which is how the whole map came out black. Computing
+      // `color` on a probe picks the branch for the active scheme.
+      const probe = document.createElement("span");
+      probe.style.display = "none";
+      wrap.appendChild(probe);
+      const color = (name: string, fallback: string) => {
+        probe.style.color = fallback;
+        probe.style.color = `var(${name}, ${fallback})`;
+        return getComputedStyle(probe).color || fallback;
+      };
       const ink = color("--ink", "#16161a");
       const faint = color("--line-strong", "#c6c6ce");
       const accent = color("--accent", "#2a55c2");
@@ -187,6 +197,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         regionColor.set(region.id, color(clusterMetaOf(region.label).colorVar, grey));
         regionById.set(region.id, region);
       }
+      probe.remove();
 
       ctx.setLineDash([4, 4]);
       for (const gap of gaps) {
@@ -281,8 +292,13 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
     observer.observe(wrap);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", draw);
+    // The top-bar toggle sets data-theme rather than changing the OS setting,
+    // and the canvas holds pixels, not styles, so it has to be told to repaint.
+    const theme = new MutationObserver(draw);
+    theme.observe(document.documentElement, { attributeFilter: ["data-theme"] });
     return () => {
       observer.disconnect();
+      theme.disconnect();
       media.removeEventListener("change", draw);
     };
   }, [points, regions, gaps, placementPoint, provisionalRegions, transform, building]);
