@@ -41,6 +41,8 @@ export interface PartialMap {
   centroids: { id: number; size: number; x: number; y: number }[];
   coverage: MapCoverage;
   stage: MapProgress["stage"];
+  /** The question's place on the plane being drawn, kept from the last state that had one. */
+  placement: { x: number; y: number } | null;
 }
 
 /**
@@ -61,6 +63,7 @@ export function advanceMap(previous: PartialMap | null, progress: MapProgress): 
     centroids: progress.regions ?? [],
     coverage: normalizeCoverage(progress.coverage),
     stage: progress.stage,
+    placement: progress.placement ?? previous?.placement ?? null,
   };
 }
 

@@ -92,6 +92,17 @@ class MapBuild:
             grown[: self._rows] = self._buffer[: self._rows]
             self._buffer = grown
 
+    def plan(self, rows: int) -> None:
+        """Grow to the size the scan expects, in one step rather than by doubling."""
+        self._capacity = max(self._capacity, rows)
+        if self.dimensions is None or rows <= 0:
+            return
+        if self._buffer is None or len(self._buffer) < rows:
+            grown = np.empty((rows, self.dimensions), dtype=np.float32)
+            if self._buffer is not None:
+                grown[: self._rows] = self._buffer[: self._rows]
+            self._buffer = grown
+
     def add(self, documents: list[dict]) -> int:
         """Append a page's vectors to the matrix; returns how many were usable."""
         rows, kept = [], []
@@ -136,6 +147,9 @@ class GapMapService:
         self._lock = asyncio.Lock()
         self._subscribers: set[asyncio.Queue] = set()
         self._task: asyncio.Task | None = None
+        # The plane the current build is drawing on, so a streamed question can be
+        # placed on the same one before the build finishes.
+        self._basis: tuple[np.ndarray, np.ndarray] | None = None
 
     async def embed(self, text: str) -> list[float] | None:
         return await self.embedder.embed(text)
@@ -169,11 +183,18 @@ class GapMapService:
 
     async def _build(self) -> dict:
         """Scan the embedded corpus, cluster it, and describe the result."""
-        corpus = await self.repo.count_embedded()
+        # Counted beside the scan rather than before it: the count is a query of
+        # its own over two million documents, and nothing can be drawn while it
+        # is the only thing running.
+        counting = asyncio.create_task(self.repo.count_embedded())
         limit = max(0, self.config.gapmap_scan_limit)
-        target = min(corpus, limit) if limit else corpus
-        stride = max(1, target // max(1, self.config.gapmap_points))
-        build = MapBuild(corpus, capacity=target)
+        # Until the corpus size is known the scan cannot thin the drawn subset to
+        # fit the canvas, so the first pages are drawn whole up to half the point
+        # budget; the stride is set properly as soon as the count lands.
+        stride = max(1, limit // max(1, self.config.gapmap_points)) if limit else 1
+        early = self.config.gapmap_points // 2
+        build = MapBuild(0, capacity=limit)
+        target = limit
         clusters = RunningClusters(self.config.gapmap_regions, self.config.gapmap_seed)
         drawn: list[int] = []  # row indices of the documents the canvas shows
         basis: tuple[np.ndarray, np.ndarray] | None = None
@@ -188,16 +209,23 @@ class GapMapService:
         ):
             start = len(build)
             build.add(batch)
-            drawn.extend(
-                row
-                for row in range(start, len(build))
-                if _drawn(str(build.documents[row].get("id", row)), stride)
-            )
+            for row in range(start, len(build)):
+                if not build.corpus and len(drawn) >= early:
+                    break
+                if _drawn(str(build.documents[row].get("id", row)), stride):
+                    drawn.append(row)
+            if not build.corpus and counting.done():
+                corpus = max(0, counting.result())
+                build.corpus = corpus
+                target = min(corpus, limit) if limit else corpus
+                stride = max(1, target // max(1, self.config.gapmap_points))
+                build.plan(target)
             await asyncio.to_thread(clusters.update, build.vectors[start:])
             if basis is None and len(build) >= self.config.gapmap_projection_sample:
                 basis = await asyncio.to_thread(
                     fit_projection, build.vectors[: self.config.gapmap_projection_sample]
                 )
+                self._basis = basis
             # One frame per interval, not one per page: at eleven thousand
             # documents a second the pages are far faster than anything a canvas
             # can show, and every frame resends where each drawn point now sits.
@@ -211,10 +239,17 @@ class GapMapService:
                     build, clusters.centroids, basis, drawn, emitted, target
                 )
 
+        corpus = max(0, await counting)
+        # A live index grows while it is read, so a scan can finish holding more
+        # documents than the count taken at its start. The number actually read
+        # is the one that was measured; the count is only the older of the two.
+        corpus = max(corpus, len(build))
+        build.corpus = corpus
         if basis is None and len(build):
             basis = await asyncio.to_thread(
                 fit_projection, build.vectors[: self.config.gapmap_projection_sample]
             )
+            self._basis = basis
 
         centroids = clusters.centroids
         labels = np.zeros(len(build), dtype=np.int64)
@@ -532,19 +567,56 @@ class GapMapService:
             return await self.assess(idea, arithmetic, cutoff_year, refresh)
         queue: asyncio.Queue = asyncio.Queue(maxsize=64)
         self._subscribers.add(queue)
-        pump = asyncio.create_task(self._pump(queue, progress))
+        # Embedded here rather than in the build: the build describes the corpus
+        # and is shared by every viewer, while the question belongs to this one.
+        asking = asyncio.create_task(self._ask(idea, arithmetic))
+        pump = asyncio.create_task(self._pump(queue, progress, asking))
         try:
             return await self.assess(idea, arithmetic, cutoff_year, refresh)
         finally:
             self._subscribers.discard(queue)
+            asking.cancel()
             queue.put_nowait(None)
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await pump
 
-    @staticmethod
-    async def _pump(queue: asyncio.Queue, progress: Progress) -> None:
+    async def _ask(
+        self, idea: str | None, arithmetic: MapArithmetic | None
+    ) -> np.ndarray | None:
+        """The unit vector of this viewer's question, if there is one to embed."""
+        if arithmetic is not None or not idea:
+            return None
+        vector = await self.embed(idea)
+        if vector is None:
+            return None
+        return normalize(np.asarray(vector, dtype=np.float32)[None, :])[0]
+
+    async def _pump(
+        self,
+        queue: asyncio.Queue,
+        progress: Progress,
+        asking: asyncio.Task | None = None,
+    ) -> None:
         while True:
             payload = await queue.get()
             if payload is None or payload.get("event") == "built":
                 return
+            # The question is placed on the plane the build is drawing on, so it
+            # is on the map from the first frame instead of only at the end. It
+            # is where the question sits, not a claim about what surrounds it.
+            if (
+                asking is not None
+                and asking.done()
+                and not asking.cancelled()
+                and asking.exception() is None
+                and self._basis is not None
+            ):
+                vector = asking.result()
+                if vector is not None:
+                    centre, plane = self._basis
+                    coords = project_with(centre, plane, vector[None, :])
+                    payload = {
+                        **payload,
+                        "placement": {"x": float(coords[0, 0]), "y": float(coords[0, 1])},
+                    }
             await progress({key: value for key, value in payload.items() if key != "event"})
