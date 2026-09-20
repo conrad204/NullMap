@@ -37,6 +37,7 @@ export const SAMPLE_RESULT: SearchResult = {
   keywords: ["illustrative intervention", "example outcome"],
   searchedSources: ["openalex", "clinicaltrials"],
   totalScanned: 7,
+  yearCounts: [{ year: 2021, count: 2 }, { year: 2022, count: 1 }, { year: 2023, count: 2 }, { year: 2024, count: 2 }],
   effectTrend: { studied: 1, totalEffects: 1, favoursIntervention: 1, favoursComparator: 0, unclear: 0, summary: null, patterns: [], scope: "Fictional example: based on the 1 effect-reporting study shown." },
   bucketCounts: { effect: 1, credible_null: 3, reported_null: 0, inconclusive: 1, failed: 1, unreported: 1 },
   countScope: "Fictional example counts. No actual literature search was performed.",
