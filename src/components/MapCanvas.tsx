@@ -9,11 +9,10 @@ interface MapCanvasProps {
   regions: MapRegion[];
   gaps: MapGap[];
   placementPoint?: { x: number; y: number } | null;
-  /**
-   * Region centres of a map that is still being built. They are drawn without a
-   * colour because a region is only labelled once the corpus behind it is read.
-   */
-  provisionalRegions?: { id: number; x: number; y: number }[];
+  /** Region centres of a map that is still being built. */
+  provisionalRegions?: { id: number; size?: number; x: number; y: number }[];
+  /** True while the stream is still building this map, which changes what can be said about it. */
+  building?: boolean;
 }
 
 const HOVER_RADIUS = 6;
@@ -28,6 +27,23 @@ interface Transform {
 }
 const IDENTITY: Transform = { k: 1, tx: 0, ty: 0 };
 const clampZoom = (k: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));
+
+/**
+ * A colour per forming region, spaced around the wheel by the golden angle.
+ *
+ * It says which points the build currently groups together and nothing else: a
+ * region earns one of the three labelled colours only once its studies have
+ * been read, so these are identities, not verdicts.
+ */
+const formingColor = (id: number) => `hsl(${(id * 137.508) % 360} 52% 55%)`;
+
+/** The extent of everything drawn, which only ever grows while a map streams in. */
+interface Bounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
 
 /** The fitted map-to-canvas transform, kept for hover hit-testing. */
 interface View {
@@ -74,16 +90,25 @@ function segmentDistance(
   return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
-export default function MapCanvas({ points, regions, gaps, placementPoint = null, provisionalRegions = [] }: MapCanvasProps) {
+export default function MapCanvas({ points, regions, gaps, placementPoint = null, provisionalRegions = [], building = false }: MapCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<View | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [transform, setTransform] = useState<Transform>(IDENTITY);
   const dragRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean } | null>(null);
+  const boundsRef = useRef<Bounds | null>(null);
+  const movedRef = useRef(false);
 
-  // A new map is a new picture, so it starts framed rather than wherever the last one was left.
-  useEffect(() => setTransform(IDENTITY), [points, regions, gaps]);
+  // The camera belongs to whoever is looking through it. A streaming map arrives
+  // as hundreds of states, and reframing on each one would pull the ground from
+  // under a reader who has zoomed in, so the view is only reset when the picture
+  // itself is replaced — the finished map for the building one — and not then if
+  // it has been moved by hand.
+  useEffect(() => {
+    boundsRef.current = null;
+    if (!movedRef.current) setTransform(IDENTITY);
+  }, [building]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -120,6 +145,16 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         viewRef.current = null;
         return;
       }
+      // Widened, never narrowed: a fit recomputed from scratch on every state
+      // would breathe in and out as the stream fills the plane in.
+      const held = boundsRef.current;
+      if (held) {
+        minX = Math.min(minX, held.minX);
+        maxX = Math.max(maxX, held.maxX);
+        minY = Math.min(minY, held.minY);
+        maxY = Math.max(maxY, held.maxY);
+      }
+      boundsRef.current = { minX, maxX, minY, maxY };
       const pad = 28;
       // One scale for both axes: stretching would invent distances the PCA did not find.
       const scale = Math.min(
@@ -170,8 +205,31 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       // Marks grow with the zoom, but far more slowly than the distances between them.
       const mark = Math.min(3, Math.pow(k, 0.35));
 
+      // While the map is building, each point is drawn in the colour of the
+      // region it currently belongs to and tied to that region's centre, so the
+      // clustering is visible as it happens instead of a grey field that turns
+      // into an answer at the end.
+      const centre = new Map<number, { x: number; y: number }>();
+      for (const region of provisionalRegions) centre.set(region.id, region);
+      if (building) {
+        ctx.lineWidth = 0.6;
+        for (const point of points) {
+          const home = centre.get(point.region);
+          if (!home) continue;
+          ctx.strokeStyle = formingColor(point.region);
+          ctx.globalAlpha = 0.16;
+          ctx.beginPath();
+          ctx.moveTo(view.toX(point.x), view.toY(point.y));
+          ctx.lineTo(view.toX(home.x), view.toY(home.y));
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       for (const point of points) {
-        ctx.fillStyle = regionColor.get(point.region) ?? grey;
+        ctx.fillStyle = building
+          ? formingColor(point.region)
+          : regionColor.get(point.region) ?? grey;
         ctx.beginPath();
         ctx.arc(view.toX(point.x), view.toY(point.y), 1.3 * mark, 0, Math.PI * 2);
         ctx.fill();
@@ -190,8 +248,10 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       for (const region of provisionalRegions) {
         ctx.beginPath();
         ctx.arc(view.toX(region.x), view.toY(region.y), 4.5 * mark, 0, Math.PI * 2);
+        ctx.fillStyle = formingColor(region.id);
+        ctx.fill();
         ctx.lineWidth = 1.4;
-        ctx.strokeStyle = grey;
+        ctx.strokeStyle = ink;
         ctx.stroke();
       }
 
@@ -225,10 +285,11 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       observer.disconnect();
       media.removeEventListener("change", draw);
     };
-  }, [points, regions, gaps, placementPoint, provisionalRegions, transform]);
+  }, [points, regions, gaps, placementPoint, provisionalRegions, transform, building]);
 
   /** Zoom about a point in canvas pixels, so whatever is under the cursor stays under it. */
   const zoomAt = useCallback((factor: number, px: number, py: number) => {
+    movedRef.current = true;
     setTransform(({ k, tx, ty }) => {
       const next = clampZoom(k * factor);
       const ratio = next / k;
@@ -278,6 +339,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       drag.x = event.clientX;
       drag.y = event.clientY;
       drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
+      movedRef.current = movedRef.current || drag.moved;
       setTransform((current) => ({ ...current, tx: current.tx + dx, ty: current.ty + dy }));
       setHover(null);
       return;
@@ -371,13 +433,13 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
           onPointerDown={handlePointerDown}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          onDoubleClick={() => setTransform(IDENTITY)}
+          onDoubleClick={() => { movedRef.current = false; setTransform(IDENTITY); }}
         />
         <div className="absolute right-2 top-2 flex flex-col gap-1">
           {[
             { label: "Zoom in", icon: <Plus size={14} weight="bold" />, run: () => zoomCentre(1.4), off: transform.k >= MAX_ZOOM },
             { label: "Zoom out", icon: <Minus size={14} weight="bold" />, run: () => zoomCentre(1 / 1.4), off: transform.k <= MIN_ZOOM },
-            { label: "Reset the view", icon: <ArrowsOut size={14} weight="bold" />, run: () => setTransform(IDENTITY), off: transform.k === 1 && transform.tx === 0 && transform.ty === 0 },
+            { label: "Reset the view", icon: <ArrowsOut size={14} weight="bold" />, run: () => { movedRef.current = false; setTransform(IDENTITY); }, off: transform.k === 1 && transform.tx === 0 && transform.ty === 0 },
           ].map(({ label, icon, run, off }) => (
             <button
               key={label}
@@ -438,6 +500,13 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
         explained where it is drawn, on hover.
       */}
       <figcaption className="mt-2.5 space-y-1.5 text-xs text-ink-3">
+        {building && (
+          <p className="text-ink-2">
+            Regions as they form: a colour marks the studies the build currently groups together,
+            and each dot is tied to the centre of its region. The three labelled groups appear once
+            the studies behind each region have been read.
+          </p>
+        )}
         {presentClusters.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="shrink-0 text-ink-2">Clusters:</span>
@@ -493,7 +562,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
           </div>
         )}
         <p className="text-ink-3/70">
-          Drag to pan · scroll to zoom · double-click to reset
+          Drag to pan · scroll to zoom · double-click to reset{building ? " · the view stays where you put it while the map builds" : ""}
           {transform.k > 1 ? ` · showing ${transform.k.toFixed(1)}×` : ""}
           {gaps.length > 0 ? " · hover a dashed band to see what it means" : ""}
         </p>

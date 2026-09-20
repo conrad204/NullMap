@@ -400,6 +400,8 @@ export interface MapProgress {
   /** Region per drawn point, in the order the points arrived; membership moves as centroids do. */
   pointRegions: number[];
   regions: { id: number; size: number; x: number; y: number }[];
+  /** Where this viewer's question sits on the plane being drawn, once there is one. */
+  placement?: { x: number; y: number } | null;
 }
 export interface GapMap {
   version: string;

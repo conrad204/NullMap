@@ -211,6 +211,31 @@ def test_calibration_is_returned_only_when_a_cutoff_is_given():
     assert result["calibration"]["future"] == 4
 
 
+def test_coverage_never_reports_fewer_studies_than_it_clustered():
+    """The count runs beside the scan, so ingestion can outrun it; it may not shrink coverage."""
+    result = asyncio.run(service(corpus(), corpus=4).assess())
+    assert result["coverage"]["clustered"] == 16
+    assert result["coverage"]["corpus"] == 16
+    assert result["warnings"] == []
+
+
+def test_the_question_is_placed_on_the_streamed_map_before_it_is_finished():
+    built = service(corpus())
+    built.embed = lambda text: _resolved(unit(0.01))
+    events: list[dict] = []
+
+    async def run():
+        async def progress(payload):
+            events.append(payload)
+
+        return await built.stream(idea="a new trial of the same thing", progress=progress)
+
+    asyncio.run(run())
+    placed = [event["placement"] for event in events if event.get("placement")]
+    assert placed, "the question never reached the streaming map"
+    assert all(isinstance(place["x"], float) and isinstance(place["y"], float) for place in placed)
+
+
 def _resolved(value):
     future: asyncio.Future = asyncio.Future()
     future.set_result(value)

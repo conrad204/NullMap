@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # full-corpus SVD would stall the build for minutes to move points by pixels.
     # Nothing can be drawn before it exists, so it is fitted on the first pages
     # rather than after a long silent read.
-    gapmap_projection_sample: int = Field(default=4000, ge=1000, le=500000)
+    gapmap_projection_sample: int = Field(default=1000, ge=1000, le=500000)
     # Bound on the full-corpus k-means. Measured at 200k documents and 80
     # regions: 10 iterations ~3.2 s, 40 ~7.7 s; the assignment usually settles
     # first and the loop stops when it does.

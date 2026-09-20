@@ -81,3 +81,10 @@ test('a map that covered the whole corpus does not also warn that it sampled it'
   // A map that did not cover the corpus keeps every warning it was given.
   assert.deepEqual(mapWarnings(warnings, { ...whole, clustered: 6000, complete: false }), warnings);
 });
+
+test("the question's place is kept across states that do not resend it", () => {
+  const placed = advanceMap(null, progress({ placement: { x: 0.4, y: -0.2 } }));
+  assert.deepEqual(placed.placement, { x: 0.4, y: -0.2 });
+  assert.deepEqual(advanceMap(placed, progress({})).placement, { x: 0.4, y: -0.2 });
+  assert.equal(advanceMap(null, progress({})).placement, null);
+});
