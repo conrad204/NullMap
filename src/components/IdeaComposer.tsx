@@ -2,8 +2,15 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { ArrowRight } from "@phosphor-icons/react";
 import type { SearchRequest } from "../types";
 import type { GlideOrigin } from "./QuestionHeader";
+import FilterControls from "./FilterControls";
+import { filterError, parseFilters, type FilterState } from "../lib/filters";
 
-interface Props { hidden: boolean; onSubmit: (req: SearchRequest, origin: GlideOrigin | null) => void }
+interface Props {
+  hidden: boolean;
+  onSubmit: (req: SearchRequest, origin: GlideOrigin | null) => void;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+}
 const EXAMPLES = [
   "Does intermittent fasting improve working memory in healthy adults?",
   "Does vitamin D supplementation reduce depressive symptoms in adults?",
@@ -23,10 +30,11 @@ function textOrigin(field: HTMLTextAreaElement): GlideOrigin {
   };
 }
 
-export default function IdeaComposer({ hidden, onSubmit }: Props) {
+export default function IdeaComposer({ hidden, onSubmit, filters, onFiltersChange }: Props) {
   const [idea, setIdea] = useState("");
   const [plan, setPlan] = useState(DEFAULTS);
   const [error, setError] = useState<string | null>(null);
+  const [filterProblem, setFilterProblem] = useState<string | null>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   // The form stays mounted while a search runs so the draft survives; focus it again on return.
@@ -44,9 +52,12 @@ export default function IdeaComposer({ hidden, onSubmit }: Props) {
       return;
     }
     if (!event.currentTarget.reportValidity()) return;
+    const problem = filterError(filters.draft);
+    setFilterProblem(problem);
+    if (problem) return;
     setError(null);
     const numeric = Object.fromEntries(Object.entries(plan).map(([key, value]) => [key, Number(value)]));
-    onSubmit({ idea: idea.trim(), field: "Medicine and health", ...numeric }, fieldRef.current ? textOrigin(fieldRef.current) : null);
+    onSubmit({ idea: idea.trim(), field: "Medicine and health", ...numeric, filters: parseFilters(filters.draft) }, fieldRef.current ? textOrigin(fieldRef.current) : null);
   }
   function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -87,6 +98,8 @@ export default function IdeaComposer({ hidden, onSubmit }: Props) {
           <button type="button" onClick={() => { setIdea(example); setError(null); fieldRef.current?.focus(); }} className="text-left text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">{example}</button>
         </li>)}</ul>
       </div>
+      {/* Re-validate only once a problem is on screen, so a half-typed year is not an error. */}
+      <FilterControls state={filters} onChange={(next) => { onFiltersChange(next); if (filterProblem) setFilterProblem(filterError(next.draft)); }} error={filterProblem} />
       <details className="border-t border-line pt-4">
         <summary className="cursor-pointer text-sm font-medium text-ink">Study plan & value <span className="ml-1 font-normal text-ink-3">N = {plan.plannedN}</span></summary>
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight } from "@phosphor-icons/react";
+import { ArrowUpRight, Funnel } from "@phosphor-icons/react";
 import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
 import { BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
 import { headline } from "../lib/headline";
@@ -38,6 +38,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
+        {result.filters && <AppliedFilterNote filters={result.filters} />}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
       </header>
       <section aria-label="Has this been tested before?">
@@ -64,6 +65,18 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
     </div>
   );
+}
+/** A filtered report describes a subset of the index, so say which subset and what it cost. */
+function AppliedFilterNote({ filters }: { filters: NonNullable<SearchResult["filters"]> }) {
+  const { description, excluded, matchedBeforeFilters, registryCitationExemption } = filters;
+  return <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2">
+    <Funnel size={14} className="text-ink-3" aria-hidden />
+    <span>Filtered corpus: {description.join(" · ")}.</span>
+    <span className="text-ink-3">{excluded !== null && matchedBeforeFilters !== null
+      ? `${formatCount(excluded)} of ${formatCount(matchedBeforeFilters)} otherwise-matching records were excluded before counting.`
+      : "How many records the filters excluded could not be counted."}
+      {registryCitationExemption ? " Registry trials have no citation count and are exempt from the citation bounds." : ""}</span>
+  </p>;
 }
 function OverviewPanel({ overview }: { overview: NonNullable<SearchResult["overview"]> }) {
   return <section className="border-l-2 border-line pl-4">

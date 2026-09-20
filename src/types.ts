@@ -74,6 +74,21 @@ export interface PursuitEstimate {
   recommendation: Recommendation;
   drivers: string[];
 }
+/** Pre-search corpus restrictions. Every bound is independently optional. */
+export interface SearchFilters {
+  yearFrom?: number;
+  yearTo?: number;
+  minCitations?: number;
+  maxCitations?: number;
+}
+/** What the backend actually applied, and what it cost in coverage. */
+export interface AppliedFilters extends SearchFilters {
+  description: string[];
+  /** Registry rows have no citation count, so citation bounds never apply to them. */
+  registryCitationExemption: boolean;
+  matchedBeforeFilters: number | null;
+  excluded: number | null;
+}
 export interface SearchRequest {
   idea: string;
   field?: string;
@@ -86,6 +101,7 @@ export interface SearchRequest {
   studyCost?: number;
   outcomeSd?: number;
   baselineRisk?: number;
+  filters?: SearchFilters;
 }
 export type SearchStage = "keywords" | "searching" | "classifying" | "estimating";
 export interface SearchProgress {
@@ -167,6 +183,8 @@ export interface SearchResult {
   /** Why the inconclusive matches are inconclusive, over the same full match set. */
   inconclusiveReasons?: Partial<Record<InconclusiveReason, number>> | null;
   countScope?: string;
+  /** Null unless a bound was set: a result must never look filtered when it is not. */
+  filters?: AppliedFilters | null;
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];
   pico?: Pico;
