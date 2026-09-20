@@ -2,15 +2,16 @@ import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
 import type { EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
-import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict, type BarGroupKey } from "../lib/verdicts";
+import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, VERDICT_ORDER, countByVerdict, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
 import { SORT_OPTIONS, sortPapers, type SortKey } from "../lib/sort";
 import EvidenceDetails from "./EvidenceDetails";
 
-type Filter = BarGroupKey | "inconclusive" | "all";
-const filterVerdicts = (filter: Filter): Verdict[] => filter === "inconclusive" ? ["inconclusive"] : BAR_GROUPS.find((group) => group.key === filter)?.verdicts ?? [];
-const filterLabel = (filter: Filter) => filter === "inconclusive" ? VERDICT_META.inconclusive.label : BAR_GROUPS.find((group) => group.key === filter)?.label ?? "";
+type Filter = BarGroupKey | Verdict | "all";
+const isVerdict = (filter: Filter): filter is Verdict => (VERDICT_ORDER as string[]).includes(filter);
+const filterVerdicts = (filter: Filter): Verdict[] => isVerdict(filter) ? [filter] : BAR_GROUPS.find((group) => group.key === filter)?.verdicts ?? [];
+const filterLabel = (filter: Filter) => isVerdict(filter) ? VERDICT_META[filter].label : BAR_GROUPS.find((group) => group.key === filter)?.label ?? "";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
 const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
@@ -67,7 +68,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <EvidenceDetails result={result} />
       </div>
       <aside className="min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
-        <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} sort={sort} onSort={setSort} />
+        <PaperList papers={shown} allDisplayed={result.papers.length} displayedCounts={countByVerdict(result.papers)} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} />
       </aside>
     </div>
   );
@@ -170,11 +171,15 @@ function InconclusiveNote({ count, reasons, active, onToggle }: { count: number;
     </div>)}</dl>
   </div>;
 }
-function PaperList({ papers, allDisplayed, filter, onClear, sort, onSort }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void; sort: SortKey; onSort: (sort: SortKey) => void }) {
+function PaperList({ papers, allDisplayed, displayedCounts, filter, onFilter, sort, onSort }: { papers: Paper[]; allDisplayed: number; displayedCounts: Record<Verdict, number>; filter: Filter; onFilter: (filter: Filter) => void; sort: SortKey; onSort: (sort: SortKey) => void }) {
   const inconclusive = papers.filter((paper) => paper.verdict === "inconclusive").length;
   return <section>
-    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={onClear} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
-    {papers.length > 1 && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={() => onFilter("all")} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
+    {allDisplayed > 1 && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+      <label className="flex items-center gap-2">Type<select value={isVerdict(filter) ? filter : "all"} onChange={(event) => onFilter(event.target.value as Filter)} className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong">
+        <option value="all">All types · {allDisplayed}</option>
+        {VERDICT_ORDER.map((verdict) => <option key={verdict} value={verdict} disabled={displayedCounts[verdict] === 0}>{VERDICT_META[verdict].label} · {displayedCounts[verdict]}</option>)}
+      </select></label>
       <label className="flex items-center gap-2">Sort by<select value={sort} onChange={(event) => onSort(event.target.value as SortKey)} className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong">{SORT_OPTIONS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}</select></label>
       {inconclusive > 0 && inconclusive < papers.length && <span>Inconclusive studies are listed last in every order, because they are not findings.</span>}
     </div>}
