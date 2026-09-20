@@ -101,6 +101,51 @@ export function parseLine(raw: string): { question: string; concepts: Concept[] 
   return { question: raw.slice(0, starts[0].index).trim(), concepts };
 }
 
+/** Where a tag sits in the typed line, sign included, as `[start, end)`. */
+export interface TagRange {
+  start: number;
+  end: number;
+  sign: ConceptSign;
+}
+
+const OPENING = new Set(["(", "[", '"', "'", "\u201c", "\u2018"]);
+const CLOSING = new Set([")", "]", '"', "'", "\u201d", "\u2019", ".", ",", ";", ":", "!", "?"]);
+
+/**
+ * The same reading as `parseLine`, as character ranges, so anything drawing the
+ * line can colour exactly the text that will be sent as a tag.
+ */
+export function tagRanges(raw: string): TagRange[] {
+  const starts = [...raw.matchAll(TAG_START)];
+  const ranges: TagRange[] = [];
+  starts.forEach((start, index) => {
+    const signAt = start.index + start[1].length;
+    const from = signAt + start[2].length;
+    const to = index + 1 < starts.length ? starts[index + 1].index : raw.length;
+    let first = from;
+    let last = to;
+    while (first < last && (/\s/.test(raw[first]) || OPENING.has(raw[first]))) first += 1;
+    while (last > first && (/\s/.test(raw[last - 1]) || CLOSING.has(raw[last - 1]))) last -= 1;
+    if (last > first) {
+      ranges.push({ start: signAt, end: last, sign: start[2] === "+" ? "positive" : "negative" });
+    }
+  });
+  return ranges;
+}
+
+/** The line split into prose and tag runs, in order, covering every character. */
+export function tagSegments(raw: string): { text: string; sign: ConceptSign | null }[] {
+  const segments: { text: string; sign: ConceptSign | null }[] = [];
+  let at = 0;
+  for (const range of tagRanges(raw)) {
+    if (range.start > at) segments.push({ text: raw.slice(at, range.start), sign: null });
+    segments.push({ text: raw.slice(range.start, range.end), sign: range.sign });
+    at = range.end;
+  }
+  if (at < raw.length) segments.push({ text: raw.slice(at), sign: null });
+  return segments;
+}
+
 /** The line that reads back as exactly this question and these tags. */
 export function composeLine(question: string, concepts: Concept[]): string {
   const tags = concepts.map((concept) => `${SIGN_META[concept.sign].symbol}${concept.text}`);

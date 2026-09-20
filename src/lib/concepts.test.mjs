@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   addConcepts, bySign, composeLine, conceptError, expression, flipConcept, fromSteer,
-  parseConceptInput, parseLine, removeConcept, toSteer,
+  parseConceptInput, parseLine, removeConcept, tagRanges, tagSegments, toSteer,
 } from './concepts.ts';
 
 const QUESTION = 'Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis?';
@@ -122,4 +122,46 @@ test('the line is the source of truth: editing a chip rewrites it and reads back
   const dropped = composeLine(question, removeConcept(concepts, concepts[0].id));
   assert.deepEqual(read(dropped), { question: QUESTION, positive: [], negative: ['stroke'] });
   assert.equal(composeLine(QUESTION, []), QUESTION);
+});
+
+const marked = (line) => tagRanges(line).map((range) => `${range.sign[0]}${line.slice(range.start, range.end)}`);
+
+test('the highlighted ranges are the tags the search is sent, sign included', () => {
+  const line = `${QUESTION} +kidney outcomes −type 2 diabetes`;
+  assert.deepEqual(marked(line), ['p+kidney outcomes', 'n−type 2 diabetes']);
+  const { concepts } = parseLine(line);
+  assert.deepEqual(
+    tagRanges(line).map((range) => line.slice(range.start + 1, range.end)),
+    concepts.map((concept) => concept.text),
+  );
+});
+
+test('prose is never highlighted', () => {
+  assert.deepEqual(tagRanges('Does renal-artery stenting help well-controlled adults?'), []);
+  assert.deepEqual(tagRanges('Is a - b the right comparison for these trials?'), []);
+  assert.deepEqual(tagRanges('Does it drop 5 - 10 mmHg over 12-24 weeks?'), []);
+  assert.deepEqual(tagRanges(''), []);
+});
+
+test('a highlighted tag stops short of the punctuation trailing it', () => {
+  assert.deepEqual(marked(`${QUESTION} +"kidney outcomes", −mortality!`), ['p+"kidney outcomes', 'n−mortality']);
+  assert.deepEqual(marked(`${QUESTION} +blood pressure -(something).`), ['p+blood pressure', 'n-(something']);
+  assert.deepEqual(marked(`${QUESTION} +kidney outcomes   `), ['p+kidney outcomes']);
+});
+
+test('every character of the line survives the split, tagged or not', () => {
+  for (const line of [
+    `${QUESTION} +kidney outcomes −type 2 diabetes`,
+    `${QUESTION} +"kidney outcomes", −mortality! trailing`,
+    'Does renal-artery stenting help adults with a - b comparisons?',
+    '+dialysis',
+    '',
+  ]) {
+    const segments = tagSegments(line);
+    assert.equal(segments.map((segment) => segment.text).join(''), line);
+    assert.deepEqual(
+      segments.filter((segment) => segment.sign).map((segment) => `${segment.sign[0]}${segment.text}`),
+      marked(line),
+    );
+  }
 });
