@@ -21,6 +21,23 @@ from app.models import ConceptSearchRequest
 VERSION = "concepts-v1"
 
 
+def aim(
+    query: list[float], positive: list[list[float]], negative: list[list[float]]
+) -> list[float] | None:
+    """Point a question's own vector at the concepts kept and away from those pushed off.
+
+    The question is simply one more positive term, so a tagged search is the
+    same search: retrieval still matches the question's keywords, and the tags
+    only move the vector half of the ranking. ``None`` when the terms cancel the
+    question out, which has no direction to search in.
+    """
+    combined = combine(
+        [np.asarray(query, dtype=np.float32), *(np.asarray(v, dtype=np.float32) for v in positive)],
+        [np.asarray(v, dtype=np.float32) for v in negative],
+    )
+    return None if combined is None else [float(value) for value in combined]
+
+
 class ConceptError(Exception):
     """A concept search that cannot honestly return matches."""
 

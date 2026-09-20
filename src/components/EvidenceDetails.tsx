@@ -14,8 +14,8 @@ const PURSUIT_STATES: Record<PursuitState, { label: string; detail: string; tone
 export default function EvidenceDetails({ result }: { result: SearchResult }) {
   const stats = result.statistics;
   return <>
-    {stats && <section className="border-y border-line py-5">
-      <h2 className="text-sm font-medium text-ink-2">Quantitative evidence</h2>
+    {stats && <section>
+      <h2 className="section-label">Quantitative evidence</h2>
       {stats.pursuit && <PursuitPanel pursuit={stats.pursuit} sesoi={result.pico?.sesoi} />}
       {stats.pools.length ? <div className="mt-4 space-y-6">{stats.pools.map((pool, index) => <ForestPlot key={`${pool.outcome}-${pool.effectType}-${index}`} pool={pool} papers={result.papers} sesoi={result.pico?.effectType === pool.effectType ? result.pico.sesoi : undefined} />)}</div>
         : <p className="mt-3 text-sm leading-relaxed text-ink-2">No compatible group of at least three studies was available to pool. A missing pooled estimate does not establish no effect.</p>}
@@ -30,12 +30,12 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
       </details>}
     </section>}
     {result.spin && result.spin.eligible > 0 && <section className="border-l-2 border-line-strong pl-4">
-      <h2 className="text-sm font-medium text-ink-2">Registry/abstract disagreement</h2>
+      <h2 className="section-label">Registry/abstract disagreement</h2>
       <p className="mt-2 text-sm text-ink">{result.spin.disagreements} of {result.spin.eligible} assessed linked records have disagreeing registry and abstract findings.</p>
       <p className="mt-1 text-xs leading-relaxed text-ink-3">Possible abstract spin, not proof: different outcomes, follow-up times, or reporting choices may explain the disagreement. Check the linked sources.</p>
     </section>}
     {Boolean(result.nullTerms?.length || result.alternativeRoutes?.length) && <section>
-      <h2 className="text-sm font-medium text-ink-2">Where to look next</h2>
+      <h2 className="section-label">Where to look next</h2>
       {!!result.nullTerms?.length && <><p className="mt-3 text-sm text-ink-2">Terms over-represented in credible-null abstracts</p><div className="mt-2 flex flex-wrap gap-2">{result.nullTerms.map(({ term, count }) => <span key={term} className="rounded-control bg-surface-2 px-2 py-1 text-xs text-ink">{term} <span className="font-mono text-ink-3">{formatCount(count)}</span></span>)}</div><p className="mt-2 text-xs text-ink-3">An Elasticsearch text association; this does not establish that the term causes a null result.</p></>}
       {!!result.alternativeRoutes?.length && <ul className="mt-4 space-y-4">{result.alternativeRoutes.map((route) => <li key={route.label}><h3 className="text-sm font-medium text-ink">{route.label}</h3><p className="mt-1 text-sm leading-relaxed text-ink-2">{route.reason}</p><p className="mt-1 text-xs text-ink-3">{formatCount(route.evidenceCount)} indexed studies supporting this suggestion</p></li>)}</ul>}
     </section>}

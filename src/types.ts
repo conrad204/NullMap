@@ -119,6 +119,8 @@ export interface SearchRequest {
   outcomeSd?: number;
   baselineRisk?: number;
   filters?: SearchFilters;
+  /** Optional concept tags that steer the ranking of this same search. */
+  concepts?: ConceptSteer;
 }
 export type SearchStage = "keywords" | "searching" | "classifying" | "estimating";
 export interface SearchProgress {
@@ -269,40 +271,26 @@ export interface SearchResult {
   /** Relevance screen over keyword matches; `complete` means the counts cover relevant studies only. */
   screening?: { screened: number; relevant: number; complete: boolean } | null;
   alternativeRoutes?: { label: string; reason: string; evidenceCount: number }[];
-  retrieval?: { mode: string; expanded: number };
+  /** `concepts` is null unless tags were supplied: a ranking must never look steered when it is not. */
+  retrieval?: { mode: string; expanded: number; concepts?: ConceptSteer | null };
   spin?: { eligible: number; disagreements: number };
 }
 
-/** Concept search: nearest neighbours of `sum(positive) − sum(negative)` in the embedding space. */
+/**
+ * Concept tags: terms added to and subtracted from the question's own vector
+ * before retrieval, the way `king − man + woman` lands near queen. They move
+ * papers up and down the ranking of the question's matches; they never change
+ * which papers matched.
+ */
 export type ConceptSign = "positive" | "negative";
 export interface Concept {
   id: string;
   text: string;
   sign: ConceptSign;
 }
-export interface ConceptSearchRequest {
+export interface ConceptSteer {
   positive: string[];
   negative: string[];
-  limit?: number;
-}
-export interface ConceptMatch {
-  id: string;
-  title: string;
-  year: number | null;
-  url: string;
-  source: Source;
-  verdict: Verdict;
-  citations: number;
-  /** Cosine to the combined direction, never a probability of relevance. */
-  cosine: number;
-  /** This paper's cosine to each supplied concept, positives first. */
-  concepts: { text: string; sign: ConceptSign; cosine: number }[];
-}
-export interface ConceptSearchResult {
-  version: string;
-  concepts: { text: string; sign: ConceptSign }[];
-  matches: ConceptMatch[];
-  warnings?: string[];
 }
 /** Gap map: regions of the embedded corpus, described by what happened in them. */
 export type RegionLabel =

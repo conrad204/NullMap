@@ -139,7 +139,7 @@ export default function MapPanel({ idea }: { idea: string }) {
 
   return <section ref={sectionRef}>
     <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <h2 className="text-sm font-medium text-ink-2">Where this question sits in the corpus</h2>
+      <h2 className="section-label">Where this question sits in the corpus</h2>
       {state.kind === "error" && <button type="button" onClick={() => void load()} className="text-sm text-accent underline-offset-4 hover:underline">Retry</button>}
     </div>
     <p className="mt-1 max-w-[70ch] text-xs leading-relaxed text-ink-3">The whole embedded index is clustered into regions, and each region is sorted into one of three groups: worth a look (the index reports no difference, or never reports an outcome), already crowded (plenty of reported results, agreeing or not), and nothing to judge yet (the index could not read a result, or holds too few studies). This question is then placed against them. It describes the index, not the matches above, and it fills in as it is built.</p>

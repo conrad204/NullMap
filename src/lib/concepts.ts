@@ -1,18 +1,23 @@
 /**
- * Concept search: the state and the reading of it, with no React in sight.
+ * Concept tags: the reading of one typed line, with no React in sight.
  *
- * A query is a list of concepts, each either positive ("papers should be about
- * this") or negative ("steer away from this"). The service embeds each one and
- * searches the index near `sum(positive) − sum(negative)`, which is the
- * document-level form of "king − man + woman". Everything here is pure so the
- * same query can be built by a form today and by another feature later.
+ * There is one box and one search. The line the user types is the research
+ * question, and any signed terms trailing it are tags:
+ *
+ *   Does renal artery stenting improve kidney function? +blood pressure −stroke
+ *
+ * A tag is a concept the search should move towards (positive) or away from
+ * (negative). They ride along on that same literature search: the backend adds
+ * and subtracts their embeddings from the question's own vector, the way
+ * "king − man + woman" lands near queen, so they reorder the question's matches
+ * and never decide which papers match. The typed line is the only source of
+ * truth: chips are a reading of it, and editing a chip rewrites the line.
  */
-import type { Concept, ConceptMatch, ConceptSearchRequest, ConceptSign } from "../types";
+import type { Concept, ConceptSign, ConceptSteer } from "../types";
 
 export const MAX_PER_SIGN = 8;
 export const MIN_CONCEPT_LENGTH = 2;
 export const MAX_CONCEPT_LENGTH = 200;
-export const DEFAULT_LIMIT = 20;
 
 export const SIGN_META: Record<ConceptSign, {
   /** Field label. The word "concept" is deliberate: these are not keywords, nothing is matched literally. */
@@ -29,7 +34,7 @@ export const SIGN_META: Record<ConceptSign, {
   positive: {
     label: "Positive concepts",
     symbol: "+",
-    hint: "Move towards work about these. At least one is needed.",
+    hint: "Rank work about these higher. Optional.",
     placeholder: "chronic kidney disease",
     text: "text-v-effect",
     bg: "bg-v-effect",
@@ -39,7 +44,7 @@ export const SIGN_META: Record<ConceptSign, {
   negative: {
     label: "Negative concepts",
     symbol: "−",
-    hint: "Move away from work about these. Optional.",
+    hint: "Rank work about these lower. They are never removed. Optional.",
     placeholder: "diabetes",
     text: "text-v-failed",
     bg: "bg-v-failed",
@@ -60,40 +65,46 @@ export function parseConceptInput(raw: string): string[] {
     .filter(Boolean);
 }
 
-const SIGN_PREFIX = /^([+\-−–])\s*/;
-
 /**
- * A typed term carries its own sign when it starts with + or −, so one field can
- * hold both sides of the arithmetic: "SGLT2, −diabetes".
+ * A tag begins where a sign begins a term: the sign opens the term (start of
+ * the line or after a space) and the term follows it immediately. That single
+ * rule is what keeps prose prose — "renal-artery" has no space before its
+ * hyphen and "a - b" has one after it, so neither is a tag.
  */
-export function parseSignedInput(raw: string, fallback: ConceptSign): { text: string; sign: ConceptSign }[] {
-  const signed: { text: string; sign: ConceptSign }[] = [];
-  for (const term of parseConceptInput(raw)) {
-    const prefix = SIGN_PREFIX.exec(term);
-    const text = prefix ? term.slice(prefix[0].length).trim() : term;
-    if (!text) continue;
-    signed.push({ text, sign: prefix && prefix[1] !== "+" ? "negative" : prefix ? "positive" : fallback });
-  }
-  return signed;
+const TAG_START = /(^|\s)([+\-−–])(?=[\p{L}\p{N}("'“])/gu;
+
+/** Tags are typed inside a sentence, so they arrive wearing its punctuation. */
+function cleanTerm(raw: string): string {
+  return raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[(["'“‘]+/, "")
+    .replace(/[)\]"'”’.,;:!?]+$/, "")
+    .trim();
 }
 
 /**
- * Whether what is being typed is concept arithmetic rather than a question.
- * Signing a term is the only way into the arithmetic, so one box can hold both.
+ * Read one typed line as the question plus its tags. Everything before the
+ * first signed term is the question; each signed term after it runs until the
+ * next one. Tags never shorten the question the search runs: they only aim it.
  */
-export function isSignedTerm(raw: string): boolean {
-  return raw.split(/[,\n]/).some((term) => {
-    const trimmed = term.trim();
-    const prefix = SIGN_PREFIX.exec(trimmed);
-    if (!prefix) return false;
-    return trimmed.slice(prefix[0].length).trim().length >= MIN_CONCEPT_LENGTH;
+export function parseLine(raw: string): { question: string; concepts: Concept[] } {
+  const starts = [...raw.matchAll(TAG_START)];
+  if (!starts.length) return { question: raw.trim(), concepts: [] };
+  let concepts: Concept[] = [];
+  starts.forEach((start, index) => {
+    const from = start.index + start[1].length + start[2].length;
+    const to = index + 1 < starts.length ? starts[index + 1].index : raw.length;
+    const text = cleanTerm(raw.slice(from, to));
+    if (text) concepts = addConcepts(concepts, text, start[2] === "+" ? "positive" : "negative");
   });
+  return { question: raw.slice(0, starts[0].index).trim(), concepts };
 }
 
-export function addSignedConcepts(concepts: Concept[], raw: string, fallback: ConceptSign): Concept[] {
-  let next = concepts;
-  for (const { text, sign } of parseSignedInput(raw, fallback)) next = addConcepts(next, text, sign);
-  return next;
+/** The line that reads back as exactly this question and these tags. */
+export function composeLine(question: string, concepts: Concept[]): string {
+  const tags = concepts.map((concept) => `${SIGN_META[concept.sign].symbol}${concept.text}`);
+  return [question.trim(), ...tags].filter(Boolean).join(" ");
 }
 
 export function bySign(concepts: Concept[], sign: ConceptSign): Concept[] {
@@ -102,8 +113,9 @@ export function bySign(concepts: Concept[], sign: ConceptSign): Concept[] {
 
 /**
  * Add whatever the user typed, keeping the list a set per sign. The same term
- * on both sides is allowed to cancel out: the arithmetic, not this function,
- * decides what that means, and the empty-direction case is reported honestly.
+ * on both sides is allowed to cancel out: the embedding arithmetic, not this
+ * function, decides what that means, and the backend reports it honestly when
+ * the tags cancel the question out.
  */
 export function addConcepts(concepts: Concept[], raw: string, sign: ConceptSign): Concept[] {
   const taken = new Set(bySign(concepts, sign).map((concept) => key(concept.text)));
@@ -133,7 +145,7 @@ export function flipConcept(concepts: Concept[], id: string): Concept[] {
   );
 }
 
-/** "kidney disease + SGLT2 inhibitor − diabetes", the expression as arithmetic. */
+/** "kidney disease + SGLT2 inhibitor − diabetes", the steer as arithmetic. */
 export function expression(concepts: Concept[]): string {
   const positive = bySign(concepts, "positive");
   const negative = bySign(concepts, "negative");
@@ -142,10 +154,11 @@ export function expression(concepts: Concept[]): string {
   return `${head}${tail}`;
 }
 
-/** Why a query cannot run yet, in the words the form should show. */
+/**
+ * Why the tags cannot ride along yet, in the words the form should show. Tags
+ * are optional, so no tags is never an error: the question alone is a search.
+ */
 export function conceptError(concepts: Concept[]): string | null {
-  const positive = bySign(concepts, "positive");
-  if (!positive.length) return "Add at least one positive concept — the search needs somewhere to start.";
   for (const sign of SIGNS) {
     if (bySign(concepts, sign).length > MAX_PER_SIGN) {
       return `Use at most ${MAX_PER_SIGN} ${sign} concepts; beyond that the combined direction means very little.`;
@@ -156,54 +169,19 @@ export function conceptError(concepts: Concept[]): string | null {
   return null;
 }
 
-export function toRequest(concepts: Concept[], limit: number = DEFAULT_LIMIT): ConceptSearchRequest {
+/** The tags as they ride on the search request; null when there are none to send. */
+export function toSteer(concepts: Concept[]): ConceptSteer | null {
+  if (!concepts.length) return null;
   return {
     positive: bySign(concepts, "positive").map((concept) => concept.text),
     negative: bySign(concepts, "negative").map((concept) => concept.text),
-    limit,
   };
 }
 
-export interface MatchSignals {
-  /** Closest positive concept: what pulled this paper in. */
-  nearestPositive: ConceptMatch["concepts"][number] | null;
-  /** Closest negative concept: what it was supposed to move away from. */
-  nearestNegative: ConceptMatch["concepts"][number] | null;
-  /**
-   * True when a negative concept is closer to the paper than the positive that
-   * pulled it in. The paper still matches the combined direction, so it is shown
-   * — flagged rather than dropped, because the arithmetic, not the label, is the
-   * claim being made.
-   */
-  contested: boolean;
-}
-
-/** Read one result: what pulled it in, what should have pushed it away. */
-export function matchSignals(match: ConceptMatch): MatchSignals {
-  const strongest = (sign: ConceptSign) =>
-    match.concepts
-      .filter((concept) => concept.sign === sign)
-      .reduce<ConceptMatch["concepts"][number] | null>(
-        (best, concept) => (best === null || concept.cosine > best.cosine ? concept : best),
-        null,
-      );
-  const nearestPositive = strongest("positive");
-  const nearestNegative = strongest("negative");
-  return {
-    nearestPositive,
-    nearestNegative,
-    contested:
-      nearestPositive !== null &&
-      nearestNegative !== null &&
-      nearestNegative.cosine >= nearestPositive.cosine,
-  };
-}
-
-/**
- * Cosines on this corpus live in a narrow band, so a raw 0.31 reads as "no
- * match" when it is a strong one. This scales a cosine to a bar width only; the
- * number beside it stays the measured cosine.
- */
-export function cosineWidth(cosine: number): number {
-  return Math.max(0, Math.min(1, (cosine - 0.05) / 0.55));
+/** The steer a result came back with, as chips again; empty when nothing steered it. */
+export function fromSteer(steer: ConceptSteer | null | undefined): Concept[] {
+  if (!steer) return [];
+  let concepts: Concept[] = [];
+  for (const sign of SIGNS) for (const text of steer[sign]) concepts = addConcepts(concepts, text, sign);
+  return concepts;
 }

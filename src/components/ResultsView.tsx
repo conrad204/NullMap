@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import type { ConceptSteer, EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import { SIGN_META, fromSteer } from "../lib/concepts";
 import { BAR_GROUPS, BAR_VERDICTS, FILTER_GROUPS, INCONCLUSIVE_REASONS, UNSTATED_DIRECTION_GROUP, VERDICT_META, VERDICT_ORDER, countByVerdict, directionsFromPapers, type BarGroup, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
@@ -21,6 +22,23 @@ const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: 
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
   catch { return undefined; }
+}
+
+/** Why this page is in this order. The tags moved papers up and down; they never removed any. */
+function ConceptSteerNote({ steer }: { steer: ConceptSteer }) {
+  const tags = fromSteer(steer);
+  if (!tags.length) return null;
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-ink-3">
+      Ranked towards
+      {tags.map((tag) => (
+        <span key={tag.id} className={cx("rounded-mark px-1.5 py-0.5 text-ink", SIGN_META[tag.sign].tint)}>
+          <span aria-hidden className={cx("font-mono", SIGN_META[tag.sign].text)}>{SIGN_META[tag.sign].symbol}</span> {tag.text}
+        </span>
+      ))}
+      <span>· ordering only, no study was added or removed</span>
+    </p>
+  );
 }
 
 function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, number>> {
@@ -48,10 +66,13 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const shown = sortPapers(result.papers.filter((paper) => matchesFilter(filter, paper)), sort);
   return (
     <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
-      <div className="flex min-w-0 flex-col gap-10">
+      {/* One rule between every top-level block, including the sections EvidenceDetails returns
+          as a fragment, so the report reads as separate sections rather than one column of text. */}
+      <div className="flex min-w-0 flex-col [&>*+*]:mt-8 [&>*+*]:border-t [&>*+*]:border-line [&>*+*]:pt-8">
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
+        {result.retrieval?.concepts && <ConceptSteerNote steer={result.retrieval.concepts} />}
         {result.filters && <AppliedFilterNote filters={result.filters} />}
         {exemption && <p className="mt-2 max-w-[78ch] rounded-control border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2"><Info size={14} className="mr-1.5 inline align-[-2px] text-ink-3" aria-hidden />{exemption}</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
@@ -68,7 +89,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       {result.recommendedPico && <RecommendedPicoPanel recommended={result.recommendedPico} />}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} directions={directions} directionsOverMatchSet={result.effectDirections != null} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
-      <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
+      <section><h2 className="section-label">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
       <MapPanel idea={result.idea} />
       {!!result.yearCounts?.length && <YearBreakdown counts={result.yearCounts} />}
@@ -149,7 +170,7 @@ function VerdictBreakdown({ counts, directions, directionsOverMatchSet, reasons,
   const display = (group: BarGroup, total: number) => total === 0 && group.direction && !directionsOverMatchSet ? "—" : formatCount(total);
   const unstated = UNSTATED_DIRECTION_GROUP.total(counts, directions);
   return <section>
-    <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
+    <h2 className="section-label">What prior work found <span className="font-normal">· {formatCount(classified)} classified matches</span></h2>
     <div role="img" aria-label={groups.map(({ group, total }) => `${display(group, total)} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
       {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
       {groups.filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className={cx(group.bg, "min-w-1 basis-0 rounded-mark transition-opacity duration-300", filter !== "all" && filter !== group.key && "opacity-25")} />)}

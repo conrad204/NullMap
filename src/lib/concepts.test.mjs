@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addConcepts, addSignedConcepts, bySign, conceptError, cosineWidth, expression, flipConcept,
-  isSignedTerm, matchSignals, parseConceptInput, parseSignedInput, removeConcept, toRequest,
+  addConcepts, bySign, composeLine, conceptError, expression, flipConcept, fromSteer,
+  parseConceptInput, parseLine, removeConcept, toSteer,
 } from './concepts.ts';
+
+const QUESTION = 'Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis?';
+const read = (line) => {
+  const { question, concepts } = parseLine(line);
+  return { question, positive: bySign(concepts, 'positive').map((c) => c.text), negative: bySign(concepts, 'negative').map((c) => c.text) };
+};
 
 const build = (positive = [], negative = []) => {
   let concepts = [];
@@ -26,7 +32,7 @@ test('a concept is added once per side, case insensitively', () => {
 test('the same term may sit on both sides; the arithmetic decides what that means', () => {
   const concepts = build(['dialysis'], ['dialysis']);
   assert.equal(concepts.length, 2);
-  assert.deepEqual(toRequest(concepts), { positive: ['dialysis'], negative: ['dialysis'], limit: 20 });
+  assert.deepEqual(toSteer(concepts), { positive: ['dialysis'], negative: ['dialysis'] });
 });
 
 test('flipping moves a concept to the other side, and collapses a duplicate', () => {
@@ -48,73 +54,72 @@ test('the expression reads as the arithmetic it runs', () => {
   assert.equal(expression(build(['kidney disease'])), 'kidney disease');
 });
 
-test('a query needs a positive concept and stays within the term bounds', () => {
-  assert.match(conceptError([]), /at least one positive/);
-  assert.equal(conceptError(build(['dialysis'])), null);
+test('tags are optional, and only their bounds can be wrong', () => {
+  assert.equal(conceptError([]), null, 'the question alone is a search');
+  assert.equal(conceptError(build([], ['diabetes'])), null, 'a negative tag alone still steers');
   assert.match(conceptError(build(['a'])), /too short/);
   assert.match(conceptError(build(['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9'])), /at most 8 positive/);
 });
 
-const match = (concepts) => ({
-  id: 'W1', title: 't', year: 2020, url: '', source: 'openalex', verdict: 'effect',
-  citations: 0, cosine: 0.4, concepts,
+test('tags ride on the search only when there are some', () => {
+  assert.equal(toSteer([]), null);
+  assert.deepEqual(toSteer(build(['kidney'], ['diabetes'])), { positive: ['kidney'], negative: ['diabetes'] });
+  assert.deepEqual(toSteer(build([], ['diabetes'])), { positive: [], negative: ['diabetes'] });
 });
 
-test('a result names what pulled it in and what should have pushed it away', () => {
-  const signals = matchSignals(match([
-    { text: 'kidney', sign: 'positive', cosine: 0.31 },
-    { text: 'dialysis', sign: 'positive', cosine: 0.52 },
-    { text: 'diabetes', sign: 'negative', cosine: 0.2 },
-  ]));
-  assert.equal(signals.nearestPositive.text, 'dialysis');
-  assert.equal(signals.nearestNegative.text, 'diabetes');
-  assert.equal(signals.contested, false);
+test('the tags a result was steered by read back as the same chips', () => {
+  const steered = fromSteer({ positive: ['kidney'], negative: ['diabetes'] });
+  assert.equal(expression(steered), 'kidney − diabetes');
+  assert.deepEqual(fromSteer(null), []);
+  assert.deepEqual(fromSteer({ positive: [], negative: [] }), []);
 });
 
-test('a result closer to an excluded concept is flagged, not hidden', () => {
-  const signals = matchSignals(match([
-    { text: 'kidney', sign: 'positive', cosine: 0.3 },
-    { text: 'diabetes', sign: 'negative', cosine: 0.44 },
-  ]));
-  assert.equal(signals.contested, true);
+test('a line with no signed term is all question', () => {
+  assert.deepEqual(read(QUESTION), { question: QUESTION, positive: [], negative: [] });
+  assert.deepEqual(read('  '), { question: '', positive: [], negative: [] });
 });
 
-test('with no negative concepts nothing is contested', () => {
-  const signals = matchSignals(match([{ text: 'kidney', sign: 'positive', cosine: 0.1 }]));
-  assert.equal(signals.nearestNegative, null);
-  assert.equal(signals.contested, false);
+test('signed terms trailing the question are its tags, and the question keeps its own words', () => {
+  assert.deepEqual(read(`${QUESTION} +blood pressure −stroke`), {
+    question: QUESTION, positive: ['blood pressure'], negative: ['stroke'],
+  });
+  assert.deepEqual(read(`${QUESTION} -diabetes`), { question: QUESTION, positive: [], negative: ['diabetes'] });
+  assert.deepEqual(read(`${QUESTION} +kidney outcomes +quality of life`), {
+    question: QUESTION, positive: ['kidney outcomes', 'quality of life'], negative: [],
+  });
 });
 
-test('a typed term carries its own sign, and keeps the fallback without one', () => {
-  assert.deepEqual(parseSignedInput('SGLT2, -diabetes, − obesity, +kidney', 'positive'), [
-    { text: 'SGLT2', sign: 'positive' },
-    { text: 'diabetes', sign: 'negative' },
-    { text: 'obesity', sign: 'negative' },
-    { text: 'kidney', sign: 'positive' },
-  ]);
-  assert.deepEqual(parseSignedInput('dialysis', 'negative'), [{ text: 'dialysis', sign: 'negative' }]);
-  assert.deepEqual(parseSignedInput('-', 'positive'), []);
+test('every dash spelling steers, and the tag may be all there is', () => {
+  assert.deepEqual(read(`${QUESTION} -a −b –c`).negative, ['a', 'b', 'c']);
+  assert.deepEqual(read('+dialysis'), { question: '', positive: ['dialysis'], negative: [] });
 });
 
-test('one field fills both sides of the arithmetic', () => {
-  const concepts = addSignedConcepts([], 'kidney disease, −diabetes', 'positive');
-  assert.equal(expression(concepts), 'kidney disease − diabetes');
-  assert.deepEqual(toRequest(concepts).negative, ['diabetes']);
+test('a dash inside prose stays prose', () => {
+  const hyphenated = 'Does renal-artery stenting help adults with well-controlled blood pressure?';
+  assert.deepEqual(read(hyphenated), { question: hyphenated, positive: [], negative: [] });
+  assert.deepEqual(read('Is a - b the right comparison for these trials?'), {
+    question: 'Is a - b the right comparison for these trials?', positive: [], negative: [],
+  });
+  assert.deepEqual(read('Does the trial report a 5 - 10 mmHg drop over 12-24 weeks?').negative, []);
+  assert.deepEqual(read('Dash on its own - and nothing after it').negative, []);
 });
 
-test('only a signed term turns the box into arithmetic', () => {
-  assert.equal(isSignedTerm('Does azilsartan lower blood pressure in adults?'), false);
-  assert.equal(isSignedTerm('a - b trial'), false, 'a hyphen mid-sentence is prose');
-  assert.equal(isSignedTerm('-'), false);
-  assert.equal(isSignedTerm('−diabetes'), true);
-  assert.equal(isSignedTerm('+kidney outcomes'), true);
-  assert.equal(isSignedTerm('SGLT2 inhibitor, −diabetes'), true);
+test('a tag typed into a sentence sheds the sentence\u2019s punctuation', () => {
+  assert.deepEqual(read(`${QUESTION} +blood pressure -(something).`), {
+    question: QUESTION, positive: ['blood pressure'], negative: ['something'],
+  });
+  assert.deepEqual(read(`${QUESTION} +"kidney outcomes", −mortality!`), {
+    question: QUESTION, positive: ['kidney outcomes'], negative: ['mortality'],
+  });
 });
 
-test('bar widths stay inside the track whatever the cosine', () => {
-  for (const cosine of [-1, 0, 0.3, 0.6, 1]) {
-    const width = cosineWidth(cosine);
-    assert.ok(width >= 0 && width <= 1, String(cosine));
-  }
-  assert.ok(cosineWidth(0.5) > cosineWidth(0.2));
+test('the line is the source of truth: editing a chip rewrites it and reads back the same', () => {
+  const line = `${QUESTION} +blood pressure −stroke`;
+  const { question, concepts } = parseLine(line);
+  assert.equal(composeLine(question, concepts), line);
+  const flipped = composeLine(question, flipConcept(concepts, concepts[0].id));
+  assert.deepEqual(read(flipped), { question: QUESTION, positive: [], negative: ['blood pressure', 'stroke'] });
+  const dropped = composeLine(question, removeConcept(concepts, concepts[0].id));
+  assert.deepEqual(read(dropped), { question: QUESTION, positive: [], negative: ['stroke'] });
+  assert.equal(composeLine(QUESTION, []), QUESTION);
 });
