@@ -40,7 +40,8 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const exemption = registryExemptionNotice(result.filters, result.papers);
   const shown = filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict));
   return (
-    <div className="fade-up flex flex-col gap-10">
+    <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
+      <div className="flex min-w-0 flex-col gap-10">
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
@@ -61,7 +62,10 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
-      <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
+      </div>
+      <aside className="min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
+        <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
+      </aside>
     </div>
   );
 }
@@ -150,7 +154,7 @@ function PaperRow({ paper }: { paper: Paper }) {
   const meta = VERDICT_META[paper.verdict];
   const url = safeUrl(paper.url);
   const links = [...new Set([...(paper.linkedUrls ?? []), ...(paper.nctIds ?? []).map((id) => `https://clinicaltrials.gov/study/${encodeURIComponent(id)}`), ...(paper.pmids ?? []).map((id) => `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(id)}/`)])].map((link) => safeUrl(link)).filter((link): link is string => Boolean(link) && link !== url);
-  return <li className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line py-5 sm:grid-cols-[1fr_auto]">
+  return <li className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line py-5 sm:grid-cols-[1fr_auto] xl:grid-cols-1">
     <div className="min-w-0">
       {url ? <a href={url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-1.5 font-medium leading-snug text-ink transition-colors hover:text-accent"><span>{paper.title}</span><ArrowUpRight size={14} className="mt-1 shrink-0 text-ink-3 group-hover:text-accent" aria-hidden /></a> : <p className="font-medium leading-snug text-ink">{paper.title}</p>}
       <p className="mt-1 text-sm text-ink-2">{formatAuthors(paper.authors)}{paper.year ? `, ${paper.year}` : ""}{paper.venue ? `, ${paper.venue}` : ""}</p>
@@ -168,10 +172,10 @@ function PaperRow({ paper }: { paper: Paper }) {
       {paper.significantButTrivial && <p className="mt-2 text-xs text-v-unreported">Statistically significant, but below the meaningful-effect threshold.</p>}
       {links.length > 0 && <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">{links.map((link, index) => <a key={link} href={link} target="_blank" rel="noreferrer" className="text-xs text-accent underline underline-offset-2">{link.includes("clinicaltrials.gov/study/") ? decodeURIComponent(link.split("/").pop() ?? "Trial registry") : link.includes("pubmed.ncbi.nlm.nih.gov") ? "PubMed record" : `Linked source ${index + 1}`}</a>)}</div>}
     </div>
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:max-w-[185px] sm:flex-col sm:items-end">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:max-w-[185px] sm:flex-col sm:items-end xl:max-w-none xl:flex-row xl:items-center">
       <span className={cx("rounded-control px-2 py-0.5 text-xs font-medium", meta.text, meta.tint)}>{meta.label}</span>
       <span className="font-mono tabular-nums text-ink-3">{paper.sampleSize !== null ? `n = ${formatCount(paper.sampleSize)}` : "n unknown"}</span>
-      {paper.effectSize && <span className="font-mono tabular-nums text-ink-3 sm:text-right">{paper.effectSize.metric} = {paper.effectSize.value.toFixed(3)}{paper.effectSize.ci && <span className="block">{paper.ciLevel != null ? `${Math.round(paper.ciLevel * 100)}% CI` : "CI (level unspecified)"} [{paper.effectSize.ci[0].toFixed(3)}, {paper.effectSize.ci[1].toFixed(3)}]</span>}</span>}
+      {paper.effectSize && <span className="font-mono tabular-nums text-ink-3 sm:text-right xl:text-left">{paper.effectSize.metric} = {paper.effectSize.value.toFixed(3)}{paper.effectSize.ci && <span className="block">{paper.ciLevel != null ? `${Math.round(paper.ciLevel * 100)}% CI` : "CI (level unspecified)"} [{paper.effectSize.ci[0].toFixed(3)}, {paper.effectSize.ci[1].toFixed(3)}]</span>}</span>}
       {paper.pValue != null && <span className="font-mono text-ink-3">p {paper.pValueOperator || "="} {paper.pValue.toPrecision(3)}</span>}
       {paper.citations > 0 && <span className="font-mono tabular-nums text-ink-3">{formatCount(paper.citations)} citations</span>}
     </div>

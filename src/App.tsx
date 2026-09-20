@@ -101,7 +101,7 @@ export default function App() {
         </div>
 
         {status.kind !== "idle" && (
-          <div className="mx-auto flex w-full max-w-[960px] flex-col gap-8">
+          <div className={status.kind === "done" ? "mx-auto flex w-full max-w-[1400px] flex-col gap-8" : "mx-auto flex w-full max-w-[960px] flex-col gap-8"}>
             {question && <QuestionHeader question={question} busy={status.kind === "searching"} origin={origin} onEdit={reset} onCancel={reset} filters={request?.filters} sticky={filters.sticky} />}
             {/* While the question glides through this space, hold the progress back so the two never overlap. */}
             <section aria-live="polite" className="min-w-0" style={{ "--fade-delay": origin && status.kind === "searching" ? `${GLIDE_MS * 0.6}ms` : "0ms" } as CSSProperties}>
