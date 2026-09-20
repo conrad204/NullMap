@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { ArrowsOut, Minus, Plus } from "@phosphor-icons/react";
 import type { MapEdge, MapPoint, Verdict } from "../types";
-import { clusterComponents, clusterHue, countClusters } from "../lib/clusters";
-import { ForceLayout, nodeRadius } from "../lib/forceLayout";
+import { clusterHue, clusterLabels, countClusters, pruneEdges } from "../lib/clusters";
+import { ForceLayout } from "../lib/forceLayout";
 import { VERDICT_META } from "../lib/verdicts";
 
 interface MapCanvasProps {
@@ -15,6 +15,8 @@ interface MapCanvasProps {
 }
 
 const HOVER_RADIUS = 8;
+/** Links kept per paper. Everything above the server's floor is a hairball; its strongest ties are a graph. */
+const LINKS_PER_PAPER = 6;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 24;
 /** The layout id of the reader's own question, which is a node like the papers. */
@@ -29,8 +31,13 @@ interface Transform {
 const IDENTITY: Transform = { k: 1, tx: 0, ty: 0 };
 const clampZoom = (k: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k));
 
-/** One color per cluster of linked papers, spaced around the wheel by the golden angle. */
-const clusterColor = (cluster: number) => `hsl(${clusterHue(cluster)} 58% 52%)`;
+/**
+ * One color per cluster of linked papers, spaced around the wheel by the golden
+ * angle. `weight` runs 0 to 1 with how connected the paper is: the hubs of a
+ * topic read darker than its leaves, so density is legible before any label is.
+ */
+const clusterColor = (cluster: number, weight = 0.5) =>
+  `hsl(${clusterHue(cluster)} ${54 + weight * 12}% ${60 - weight * 16}%)`;
 
 /** The extent of everything drawn, which only ever grows while a map streams in. */
 interface Bounds {
@@ -94,11 +101,12 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
     const emptied = layout.size > 0 && ids.size === 0;
     layout.retain(ids);
     layout.update(inputs);
+    const strongest = pruneEdges(points.length, edges, LINKS_PER_PAPER);
     layout.unlink();
-    layout.link(edges.flatMap(([a, b, cosine]) =>
+    layout.link(strongest.flatMap(([a, b, cosine]) =>
       points[a] && points[b] ? [[points[a].id, points[b].id, cosine] as const] : []));
-    const clusters = clusterComponents(points.length, edges);
-    latest.current = { points, edges, placementPoint, building, clusters };
+    const clusters = clusterLabels(points.length, strongest);
+    latest.current = { points, edges: strongest, placementPoint, building, clusters };
     setClusterCount(countClusters(clusters));
     if (emptied) {
       // A new question, a new picture: only then does the camera go home.
@@ -213,12 +221,21 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
       const mark = Math.min(3, Math.pow(k, 0.35));
       const { points: drawn, clusters, placementPoint: question } = latest.current;
 
+      // Which topic each node belongs to, by layout index, so a line can take
+      // the color of the topic it holds together.
+      const topic = new Int32Array(layout.size).fill(-1);
+      for (let index = 0; index < drawn.length; index += 1) {
+        const i = layout.indexOf(drawn[index].id);
+        if (i >= 0) topic[i] = clusters[index] ?? -1;
+      }
+
       // Lines first, under the dots: a line is the reason two papers sit together.
       ctx.lineCap = "round";
       layout.eachLink((i, j, cosine) => {
         const share = Math.max(0, (cosine - layout.options.linkFloor) / (1 - layout.options.linkFloor));
-        ctx.strokeStyle = colors.faint;
-        ctx.globalAlpha = 0.25 + share * 0.5;
+        const within = topic[i] >= 0 && topic[i] === topic[j];
+        ctx.strokeStyle = within ? clusterColor(topic[i], 0.35) : colors.faint;
+        ctx.globalAlpha = within ? 0.2 + share * 0.4 : 0.14 + share * 0.2;
         ctx.lineWidth = (0.5 + share * 0.9) * Math.min(mark, 1.6);
         ctx.beginPath();
         ctx.moveTo(toX(layout.xAt(i)), toY(layout.yAt(i)));
@@ -229,28 +246,40 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
 
       // One dot per paper, sized by how many papers it is linked to and colored
       // by the cluster those links put it in. A paper with no links is grey.
+      const { pointRadius, maxRadius } = layout.options;
       for (let index = 0; index < drawn.length; index += 1) {
         const i = layout.indexOf(drawn[index].id);
         if (i < 0) continue;
-        const cluster = clusters[index] ?? -1;
-        ctx.fillStyle = cluster >= 0 ? clusterColor(cluster) : colors.grey;
+        const cluster = topic[i];
+        const radius = layout.radiusAt(i);
+        const weight = Math.min(1, Math.max(0, (radius - pointRadius) / Math.max(maxRadius - pointRadius, 1e-9)));
+        ctx.fillStyle = cluster >= 0 ? clusterColor(cluster, weight) : colors.grey;
+        ctx.globalAlpha = cluster >= 0 ? 1 : 0.5;
         ctx.beginPath();
-        ctx.arc(toX(layout.xAt(i)), toY(layout.yAt(i)), layout.radiusAt(i) * mark, 0, Math.PI * 2);
+        ctx.arc(toX(layout.xAt(i)), toY(layout.yAt(i)), radius * mark, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.globalAlpha = 1;
 
-      // The question is a node of the same kind, in the accent color, so it can
-      // be found without being a different shape from everything else.
+      // The question is a node like the papers, but the only blue one and the
+      // only one with a halo, so the eye finds it without hunting.
       if (question) {
         const i = layout.indexOf(QUESTION_ID);
         if (i >= 0) {
           const x = toX(layout.xAt(i));
           const y = toY(layout.yAt(i));
+          const radius = (layout.options.maxRadius + 2) * mark;
+          ctx.globalAlpha = 0.22;
+          ctx.fillStyle = colors.accent;
+          ctx.beginPath();
+          ctx.arc(x, y, radius * 2.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
           ctx.fillStyle = colors.accent;
           ctx.strokeStyle = colors.surface;
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(x, y, nodeRadius(2, layout.options) * mark, 0, Math.PI * 2);
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
@@ -440,7 +469,7 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
     <figure>
       <div
         ref={wrapRef}
-        className="relative h-[340px] overflow-hidden rounded-panel border border-line bg-surface sm:h-[420px]"
+        className="relative h-[520px] overflow-hidden rounded-panel border border-line bg-surface sm:h-[720px]"
       >
         <canvas
           ref={canvasRef}
@@ -498,25 +527,14 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
           </div>
         )}
       </div>
-      <figcaption className="mt-2.5 space-y-1.5 text-xs text-ink-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-ink-2">
-            One dot per paper · color: its topic cluster, the papers it is linked to (grey: none) · size: number of
-            links · a line joins two papers whose embeddings are closely similar, pulling them together
+      {placementPoint && (
+        <figcaption className="mt-2.5 text-xs text-ink-3">
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "var(--accent)" }} aria-hidden />
+            Your question
           </span>
-          {placementPoint && (
-            <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap" title="Where your question sits among the studies.">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: "var(--accent)" }} aria-hidden />
-              Your question
-            </span>
-          )}
-        </div>
-        <p className="text-ink-3/70">
-          Drag a paper to hold it · drag the background to pan · scroll to zoom · double-click to reset
-          {building ? " · the view stays where you put it while the map builds" : ""}
-          {transform.k > 1 ? ` · showing ${transform.k.toFixed(1)}×` : ""}
-        </p>
-      </figcaption>
+        </figcaption>
+      )}
     </figure>
   );
 }
