@@ -835,3 +835,44 @@ def test_population_aliases_are_capped():
     aliases = [f"condition{name}" for name in "abcdef"]
     query = population_query({"population": "hypertension", "populationAliases": aliases})
     assert len(query["bool"]["should"]) == 1 + 4
+
+
+@pytest.mark.skipif(
+    not os.getenv("NULLMAP_TEST_ELASTIC_URL"), reason="Opt-in real Elasticsearch test"
+)
+def test_real_elasticsearch_embedded_sample_returns_vectors_and_the_corpus_size():
+    async def exercise():
+        config = Settings(
+            _env_file=None,
+            elastic_url=os.environ["NULLMAP_TEST_ELASTIC_URL"],
+            elastic_local=True,
+            elastic_index=f"nullmap-test-{uuid4().hex}",
+            embedding_dimensions=3,
+        )
+        repo = ElasticRepository(config)
+        try:
+            await repo.bulk_upsert(
+                [
+                    document(f"work{index}", embedding=[1.0, float(index) / 10, 0.0])
+                    for index in range(6)
+                ]
+                + [
+                    document("no_vector"),
+                    document("review", embedding=[0.0, 1.0, 0.0], is_review=True),
+                    document("contribution", record_kind="contribution", embedding=[0.0, 0.0, 1.0]),
+                ]
+            )
+            sample = await repo.sample_embedded(limit=4, seed=7)
+            assert sample["corpus"] == 7  # six works plus the review, never the contribution
+            assert len(sample["documents"]) == 4
+            assert all(len(doc["embedding"]) == 3 for doc in sample["documents"])
+            assert all(doc["id"] != "no_vector" for doc in sample["documents"])
+            repeated = await repo.sample_embedded(limit=4, seed=7)
+            assert [doc["id"] for doc in repeated["documents"]] == [
+                doc["id"] for doc in sample["documents"]
+            ]
+        finally:
+            await repo.client.indices.delete(index=config.elastic_index, ignore_unavailable=True)
+            await repo.close()
+
+    asyncio.run(exercise())

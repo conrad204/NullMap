@@ -16,8 +16,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.gapmap_service import GapMapService
 from app.llm import LLMService
-from app.models import Bucket, SearchRequest
+from app.models import Bucket, MapRequest, NoveltyRequest, SearchRequest
+from app.novelty import NoveltyEngine
 from app.pipeline import SearchPipeline
 from app.repository import ElasticRepository
 
@@ -30,7 +32,10 @@ async def lifespan(app: FastAPI):
     llm = LLMService()
     app.state.repository = repo
     app.state.pipeline = SearchPipeline(repo, llm)
+    app.state.novelty = NoveltyEngine(llm, repo=repo)
+    app.state.gapmap = GapMapService(repo)
     yield
+    await app.state.novelty.fulltext.close()
     await llm.close()
     await repo.close()
 
@@ -136,6 +141,34 @@ async def search_stream(body: SearchRequest, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/novelty")
+@app.post("/api/novelty", include_in_schema=False)
+async def novelty(body: NoveltyRequest, request: Request):
+    try:
+        return await request.app.state.novelty.assess(body.hypothesis, body.scan, body.read)
+    except Exception as exc:
+        logger.error("Novelty assessment failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="The novelty assessment could not complete. Please retry or inspect the backend logs.",
+        ) from None
+
+
+@app.post("/map")
+@app.post("/api/map", include_in_schema=False)
+async def gap_map(body: MapRequest, request: Request):
+    try:
+        return await request.app.state.gapmap.assess(
+            idea=body.idea, cutoff_year=body.cutoffYear, refresh=body.refresh
+        )
+    except Exception as exc:
+        logger.error("Gap map failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="The evidence map could not be built. Please retry or inspect the backend logs.",
+        ) from None
 
 
 @app.get("/studies/{study_id:path}")

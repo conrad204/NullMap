@@ -130,6 +130,55 @@ class Narrative(BaseModel):
     drivers: list[str]
 
 
+Coverage = Literal["tests_claim", "tests_related", "background_only"]
+NoveltyVerdict = Literal["already_done", "incremental", "open_gap", "insufficient_evidence"]
+
+
+class NoveltyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    hypothesis: str = Field(min_length=8, max_length=4000)
+    scan: int = Field(default=120, ge=10, le=400)
+    read: int = Field(default=5, ge=1, le=12)
+
+
+class MapRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    idea: str | None = Field(default=None, min_length=8, max_length=4000)
+    cutoffYear: int | None = Field(default=None, ge=1900, le=2100)
+    refresh: bool = False
+
+
+class Claim(BaseModel):
+    """The testable content of a hypothesis, as retrieval terms and comparable facets."""
+
+    intervention: str
+    system: str
+    outcome: str
+    direction: str
+    queries: list[str]
+    synonyms: list[str]
+
+
+class PaperRead(BaseModel):
+    """What one paper's own results say about the claim, quoted from its text."""
+
+    coverage: Coverage
+    system_tested: str
+    intervention_tested: str
+    outcome_measured: str
+    finding: str
+    quotes: list[str]
+    facets_settled: list[str]
+    facets_untested: list[str]
+
+
+class NoveltyAssessment(BaseModel):
+    verdict: NoveltyVerdict
+    summary: str
+    gaps: list[str]
+    settled: list[str]
+
+
 class IndexedNumberEvidence(BaseModel):
     value: float
     sentence_index: int = Field(ge=0)

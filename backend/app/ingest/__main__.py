@@ -125,6 +125,10 @@ def parser() -> argparse.ArgumentParser:
     references = commands.add_parser("reference-ids", help="Collect missing review-reference IDs for S3 backfill")
     references.add_argument("--input", type=Path, nargs="+", required=True)
     references.add_argument("--output", type=Path, required=True)
+    tei = commands.add_parser("tei", help="Extract null-hypothesis evidence from GROBID TEI XML full text")
+    tei.add_argument("--input", type=Path, nargs="+", required=True, help="TEI .xml files or directories")
+    tei.add_argument("--output", type=Path, required=True)
+    tei.add_argument("--source", default="openalex")
     snapshot = commands.add_parser("snapshot", help="Read the public OpenAlex S3 Parquet snapshot")
     snapshot.add_argument("--input", nargs="+", default=[])
     snapshot.add_argument("--manifest", help="Public S3 manifest URL or a pinned local manifest; defaults to public works")
@@ -220,6 +224,9 @@ async def run(args) -> dict:
         temporary.write_text("".join(identifier + "\n" for identifier in missing))
         temporary.replace(args.output)
         return {"missing_reference_ids": len(missing), "output": str(args.output)}
+    elif args.command == "tei":
+        from app.ingest.tei import extract_tei_files
+        return extract_tei_files(args.input, args.output, source=args.source)
     elif args.command == "snapshot":
         from app.ingest.snapshot import fingerprint, load_manifest, plan_manifest, scan_snapshot
         if args.input and args.manifest:

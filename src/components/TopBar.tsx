@@ -1,6 +1,6 @@
 import { cx } from "../lib/format";
 
-export type Mode = "search" | "contribute";
+export type Mode = "search" | "map" | "contribute";
 
 interface Props {
   mode: Mode;
@@ -10,6 +10,7 @@ interface Props {
 
 const MODES: Array<{ id: Mode; label: string }> = [
   { id: "search", label: "Search" },
+  { id: "map", label: "Map" },
   { id: "contribute", label: "Contribute" },
 ];
 

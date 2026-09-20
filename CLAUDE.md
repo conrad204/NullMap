@@ -45,8 +45,9 @@ Ingestion and bootstrap (`cd backend`):
 .venv/bin/python -m app.bootstrap --plan         # default; reads only the public S3 manifest
 .venv/bin/python -m app.bootstrap --run --max-files 1 --max-records 100 --registry-limit 20 --data-dir data/s3-smoke
 # --largest-first orders parts by size so a partial --max-files run covers more bytes; still a subset of update partitions, not a random sample
-.venv/bin/python -m app.ingest --help            # snapshot | fetch ctgov | normalize | classify | embed | link | index | reference-ids | label | train-classifier
+.venv/bin/python -m app.ingest --help            # snapshot | fetch ctgov | normalize | classify | embed | link | index | reference-ids | tei | label | train-classifier
 .venv/bin/python -m app.benchmark search --idea '...' --output data/search-benchmark.json
+.venv/bin/python -m app.novelty '<hypothesis>' --scan 120 --read 5   # novelty-gap CLI, same engine as POST /novelty
 ```
 
 Local Elasticsearch: `docker compose up -d elasticsearch` (9.1.4, security disabled, bound to localhost). `docker compose up --build -d` also runs the API image with `./dist` mounted at `/web`.
@@ -87,7 +88,11 @@ Registry primary-outcome numbers are authoritative and never overwritten by pape
 
 ### API surface (`backend/app/main.py`)
 
-Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`, `/novelty`, `/map`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+
+### Gap map (`backend/app/gapmap.py`, `gapmap_service.py`)
+
+`POST /map` describes the corpus rather than a query: `repository.sample_embedded` takes a deterministic `random_score` sample of embedded studies, `build_regions` clusters them with a dependency-free spherical k-means, and each region is labelled by *why* nothing new is there — `null_saturated`, `dark`, `contested`, `active`, `unread`, `thin` (`label_region`, reviews excluded from attempts). `unread` is the fallback rather than `active`: on the live index most regions carry no readable outcome at all, and calling those active would claim a literature nobody read. `find_gaps` interpolates: the midpoint between two neighbouring centroids is a gap when the two regions' own members almost never prefer the midpoint to either parent, and no third centroid sits in the band; adjacency is the top decile of pairwise centroid cosine (`neighbour_threshold`), not a constant, because "close" depends on the embedding model and corpus breadth. Whether a band is empty depends on `GAPMAP_REGIONS`, which is a resolution setting: measured on the live index, 24 regions yield none and 80 yield a handful. `place` returns the cosine to the nearest indexed paper as `redundancy` — a redundancy statistic, never a probability of novelty. `calibrate` rebuilds the map before a cutoff year and reports what later papers did per historical label; it is calibration, not prediction. The service caches one map, strips centroids from the payload, and warns whenever the sample is smaller than the embedded corpus.
 
 ### Statistics and bucket rules (`backend/app/statistics.py`)
 

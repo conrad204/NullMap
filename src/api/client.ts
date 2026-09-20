@@ -1,5 +1,6 @@
 import type {
-  ContributionReceipt, ContributionRequest, SearchProgress, SearchRequest, SearchResult,
+  ContributionReceipt, ContributionRequest, GapMap, MapRequest,
+  SearchProgress, SearchRequest, SearchResult,
 } from "../types";
 import { readEventStream } from "./stream";
 
@@ -75,4 +76,22 @@ export async function submitContribution(req: ContributionRequest, signal?: Abor
   }
   if (!res.ok) throw await responseError(res, "Upload");
   return await res.json() as ContributionReceipt;
+}
+
+export async function fetchMap(req: MapRequest, signal?: AbortSignal): Promise<GapMap> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/map`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+      signal,
+    });
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (error instanceof TypeError) throw new Error("Cannot reach the map service. Start the API or check your connection, then retry.");
+    throw error;
+  }
+  if (!res.ok) throw await responseError(res, "Map");
+  return await res.json() as GapMap;
 }

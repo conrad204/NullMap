@@ -694,6 +694,56 @@ class ElasticRepository:
     def hits(response: Any) -> list[dict]:
         return [dict(h["_source"], id=h["_id"]) for h in response["hits"]["hits"]]
 
+    async def sample_embedded(self, limit: int = 4000, seed: int = 0) -> dict:
+        """A deterministic random sample of embedded studies, plus what it omits.
+
+        Random rather than top-cited: a map of where the literature is thin must
+        not be drawn from its most popular corner. The counts travel with the
+        sample so a caller can say which fraction of the corpus it describes.
+        """
+        await self.ensure_index()
+        query = {
+            "bool": {
+                "filter": [{"term": {"record_kind": "study"}}, {"exists": {"field": "embedding"}}],
+            }
+        }
+        total = await self.client.count(index=self.index, query=query)
+        body = {
+            "index": self.index,
+            "size": max(0, limit),
+            "query": {
+                "function_score": {
+                    "query": query,
+                    "random_score": {"seed": seed, "field": "_seq_no"},
+                    # A filter-only query scores every document 0, and the default
+                    # multiply boost would turn the random score into 0 as well,
+                    # making "the sample" the first `size` documents in index order
+                    # — measured against the live index, that returned 4000 registry
+                    # records and not one of the 567k papers.
+                    "boost_mode": "replace",
+                }
+            },
+            "source_includes": [
+                "embedding",
+                "title",
+                "year",
+                "bucket",
+                "record_kind",
+                "is_review",
+                "cited_by_count",
+                "source",
+            ],
+        }
+        if self._vector_source_filter:
+            try:
+                result = await self.client.search(**body, source_exclude_vectors=False)
+            except (BadRequestError, TypeError):
+                self._vector_source_filter = False
+                result = await self.client.search(**body)
+        else:
+            result = await self.client.search(**body)
+        return {"documents": self.hits(result), "corpus": total["count"]}
+
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
         base = {"index": self.index, "size": 200, "source_excludes": ["embedding", "attachments"]}
         if vector is None:
