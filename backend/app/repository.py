@@ -12,16 +12,28 @@ from elasticsearch import AsyncElasticsearch, AuthorizationException, BadRequest
 from elasticsearch.helpers import async_bulk
 
 from app.config import Settings, settings
-from app.statistics import _analysis_type, _completion_date, _margin, _unreported, assign_bucket
+from app.statistics import (
+    DERIVED_SCALES,
+    INCONCLUSIVE_REASONS,
+    _analysis_type,
+    _completion_date,
+    _margin,
+    _unreported,
+    assign_bucket,
+    derived_field,
+    stored_analysis,
+)
 
-BUCKETS = ("effect", "credible_null", "inconclusive", "failed", "unreported")
+BUCKETS = ("effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported")
 _CACHE_FIELDS = set(
     (
         "extracted_at extraction_version extraction_status extraction_evidence evidence_span "
         "extraction_source fulltext_status "
         "population intervention comparator outcome outcome_unit n n_intervention n_comparator "
+        "mean_intervention mean_comparator sd_intervention sd_comparator "
+        "events_intervention events_comparator "
         "estimate ci_low ci_high p_value effect_type ci_level ci_sides p_value_operator has_control "
-        "design primary_outcome_met effect_direction outcome_direction"
+        "design primary_outcome_met reported_result effect_direction outcome_direction"
     ).split()
 )
 _LINK_FIELDS = set(
@@ -45,7 +57,7 @@ def index_mapping(dimensions: int = 384) -> dict:
         "pmids nct_ids referenced_works result_pmids canonical_id canonical_ids outcome_unit "
         "p_value_operator ci_sides extraction_version extraction_status embedding_model "
         "analysis_effect_type effect_direction outcome_direction work_type "
-        "pmcid extraction_source fulltext_status"
+        "pmcid extraction_source fulltext_status reported_result"
     ).split():
         properties[name] = {"type": "keyword"}
     for name in "title abstract population intervention comparator outcome".split():
@@ -56,9 +68,16 @@ def index_mapping(dimensions: int = 384) -> dict:
         properties[name] = {"type": "text", "index": False}
     for name in (
         "estimate ci_low ci_high p_value null_score ci_level n enrollment_actual enrollment_planned "
-        "analysis_estimate analysis_se analysis_ci_low analysis_ci_high mde"
+        "analysis_estimate analysis_se analysis_ci_low analysis_ci_high mde "
+        "n_intervention n_comparator mean_intervention mean_comparator "
+        "sd_intervention sd_comparator events_intervention events_comparator"
     ).split():
         properties[name] = {"type": "double"}
+    # Arm-level effects on every derivable scale, so a query on any scale can be
+    # bucketed over the full match set without reading documents.
+    for scale in DERIVED_SCALES:
+        for name in ("estimate", "ci_low", "ci_high"):
+            properties[derived_field(scale, name)] = {"type": "double"}
     for name in "year cited_by_count".split():
         properties[name] = {"type": "integer"}
     for name in (
@@ -102,7 +121,7 @@ outcome outcomes measure measures measured score scores level levels rate rates 
 functional study studies trial trials controlled randomized randomised placebo control group groups
 """.split()
 )
-_QUERY_STEMS = ("depress", "cognit", "arthroscop", "osteoarthrit")
+_QUERY_STEMS = ("depress", "cognit", "arthroscop", "osteoarthrit", "hypertens")
 
 
 def _search_normalize(value: str) -> str:
@@ -172,19 +191,55 @@ brain colon colorectal rectal liver hepatic skin eye eyes ear ears dental tooth 
 )
 
 
-def _population_terms(pico: dict) -> list[str]:
+# An alias made only of these words would admit nearly every clinical record.
+_ALIAS_TOO_BROAD = set(
+    "disease diseases disorder disorders syndrome syndromes condition conditions illness "
+    "illnesses complication complications health".split()
+)
+_MAX_POPULATION_ALIASES = 4
+
+
+def _specific_terms(value: str) -> list[str]:
     return [
         term
-        for term in _concept_terms(pico.get("population") or "")
+        for term in _concept_terms(value)
         if term not in _POPULATION_GENERIC and not term.isdecimal()
     ]
+
+
+def _population_terms(pico: dict) -> list[str]:
+    return _specific_terms(pico.get("population") or "")
+
+
+def _population_alias_terms(pico: dict) -> list[list[str]]:
+    """Model-proposed equivalent condition names, reduced to specific terms.
+
+    Aliases widen the full match set and therefore every bucket count, so an
+    alias that adds nothing specific, or merely repeats the population, is dropped.
+    """
+    primary = set(_population_terms(pico))
+    result: list[list[str]] = []
+    for alias in list(pico.get("populationAliases") or [])[:_MAX_POPULATION_ALIASES]:
+        terms = _specific_terms(str(alias))
+        if not terms or terms in result:
+            continue
+        if all(term in _ALIAS_TOO_BROAD or term in _ANATOMICAL_TERMS for term in terms):
+            continue
+        specific = {term for term in terms if term not in _ALIAS_TOO_BROAD}
+        if specific <= primary or primary <= specific:
+            # A subset is broader than the population; a superset is already matched by it.
+            continue
+        result.append(terms)
+    return result
 
 
 def population_query(pico: dict) -> dict | None:
     """Constrain explicit conditions/sites; generic demographic descriptions only rank.
 
     This guard also applies to reference expansion. It deliberately does not try
-    to infer diagnostic synonyms: absent textual support is a retrieval limitation.
+    to infer diagnostic synonyms itself: absent textual support is a retrieval limitation.
+    The parser may supply ``populationAliases`` (equivalent names of the same condition);
+    each is a full alternative to the condition clause and is ignored without a population.
     Multiple anatomical sites are alternatives under the same condition.
     """
     terms = _population_terms(pico)
@@ -207,7 +262,17 @@ def population_query(pico: dict) -> dict | None:
         )
     if condition:
         clauses.append(_concept_query(condition, fields, require_all=True))
-    return {"bool": {"must": clauses}}
+    primary = {"bool": {"must": clauses}}
+    alternatives = []
+    for alias in _population_alias_terms(pico):
+        must = [_concept_query(alias, fields, require_all=True)]
+        # An alias that drops the anatomical site must not escape it: "OA" still needs "knee".
+        if anatomy and not any(term in _ANATOMICAL_TERMS for term in alias):
+            must.append(clauses[0])
+        alternatives.append({"bool": {"must": must}})
+    if not alternatives:
+        return primary
+    return {"bool": {"should": [primary, *alternatives], "minimum_should_match": 1}}
 
 
 def lexical_query(pico: dict, idea: str, expanded_ids: list[str] | None = None) -> dict:
@@ -364,6 +429,8 @@ def rrf_fuse(*rankings: list[dict], limit: int = 200) -> list[dict]:
 # in statistics.assign_bucket at write time. This script only reapplies the query's
 # margin to those validated 95% bounds, plus the time-sensitive reporting deadline.
 # Pass doc explicitly to functions: Painless functions do not capture script locals.
+# An inconclusive row is emitted as 'inconclusive:<reason>' (statistics.INCONCLUSIVE_REASONS)
+# so one pass yields both the bucket and why; aggregate() folds the reasons back together.
 BUCKET_SCRIPT = """
 boolean present(def values, String key) {
     return values.containsKey(key) && values[key].size() > 0;
@@ -375,24 +442,54 @@ boolean flag(def values, String key) {
     return present(values, key) && values[key].value == true;
 }
 if (text(doc, 'bucket') == 'failed') { emit('failed'); return; }
-if (flag(doc, 'is_review')) { emit('inconclusive'); return; }
+if (flag(doc, 'is_review')) { emit('inconclusive:review'); return; }
 if (flag(doc, 'reporting_missing') && present(doc, 'reporting_due_date')
     && doc['reporting_due_date'].value.toInstant().toEpochMilli() < params.today) {
     emit('unreported'); return;
 }
 if (!present(doc, 'analysis_ci_low') || !present(doc, 'analysis_ci_high')) {
-    emit(text(doc, 'result_label') == 'positive' ? 'effect' : 'inconclusive'); return;
+    String label = present(doc, 'reported_result') ? text(doc, 'reported_result')
+        : text(doc, 'result_label');
+    emit(label == 'positive' ? 'effect' : (label == 'null' ? 'reported_null'
+        : (label == 'mixed' ? 'inconclusive:mixed_result' : 'inconclusive:no_result')));
+    return;
 }
-if (params.delta == null || text(doc, 'analysis_effect_type') != params.effect) {
-    emit('inconclusive'); return;
+if (params.delta == null) { emit('inconclusive:no_threshold'); return; }
+// The stored analysis is on the default scale; a query on another scale falls
+// back to the arm-level effect derived for that scale, mirroring _numeric_evidence.
+String prefix = 'analysis';
+if (text(doc, 'analysis_effect_type') != params.effect) {
+    if (params.derived == null || !present(doc, params.derived + '_ci_low')
+        || !present(doc, params.derived + '_ci_high')) { emit('inconclusive:other_scale'); return; }
+    prefix = params.derived;
 }
-double low = doc['analysis_ci_low'].value;
-double high = doc['analysis_ci_high'].value;
+double low = doc[prefix + '_ci_low'].value;
+double high = doc[prefix + '_ci_high'].value;
 if (low > -params.delta && high < params.delta) { emit('credible_null'); return; }
-if ((low > 0 || high < 0) && present(doc, 'analysis_estimate')
-    && Math.abs(doc['analysis_estimate'].value) >= params.delta) { emit('effect'); return; }
-emit('inconclusive');
+if ((low > 0 || high < 0) && present(doc, prefix + '_estimate')
+    && Math.abs(doc[prefix + '_estimate'].value) >= params.delta) { emit('effect'); return; }
+emit('inconclusive:wide_interval');
 """
+
+
+def bucket_runtime(sesoi: float, effect_type: str, today: datetime | None = None) -> dict:
+    """Runtime field applying BUCKET_SCRIPT with one query's margin and effect scale."""
+    today = (today or datetime.now(UTC)).replace(hour=0, minute=0, second=0, microsecond=0)
+    scale = _analysis_type(effect_type)
+    return {
+        "query_bucket": {
+            "type": "keyword",
+            "script": {
+                "source": BUCKET_SCRIPT,
+                "params": {
+                    "delta": _margin(sesoi, effect_type),
+                    "effect": scale,
+                    "derived": derived_field(scale, "")[:-1] if scale in DERIVED_SCALES else None,
+                    "today": int(today.timestamp() * 1000),
+                },
+            },
+        }
+    }
 
 
 def _prepare_document(incoming: dict, existing: dict | None = None) -> dict:
@@ -455,6 +552,7 @@ def _prepare_document(incoming: dict, existing: dict | None = None) -> dict:
     )
     # Normalization is the single source of truth for query-time numerical rules.
     doc.update(assign_bucket(doc))
+    doc.update(stored_analysis(doc))
     completion = _completion_date(doc.get("primary_completion_date"))
     doc["primary_completion_date"] = completion.isoformat() if completion else None
     # Substitute a known past date only to ask the same strict metadata predicate
@@ -733,19 +831,7 @@ class ElasticRepository:
 
     async def aggregate(self, query: dict, sesoi: float, effect_type: str) -> dict:
         today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        runtime = {
-            "query_bucket": {
-                "type": "keyword",
-                "script": {
-                    "source": BUCKET_SCRIPT,
-                    "params": {
-                        "delta": _margin(sesoi, effect_type),
-                        "effect": _analysis_type(effect_type),
-                        "today": int(today.timestamp() * 1000),
-                    },
-                },
-            }
-        }
+        runtime = bucket_runtime(sesoi, effect_type, today)
         q = {
             "bool": {
                 "must": [query],
@@ -768,7 +854,12 @@ class ElasticRepository:
             track_total_hits=True,
             runtime_mappings=runtime,
             aggs={
-                "buckets": {"terms": {"field": "query_bucket", "size": 5}},
+                "buckets": {
+                    "terms": {
+                        "field": "query_bucket",
+                        "size": len(BUCKETS) + len(INCONCLUSIVE_REASONS),
+                    }
+                },
                 "years": {
                     "date_histogram": {
                         "field": "publication_date",
@@ -777,7 +868,7 @@ class ElasticRepository:
                     }
                 },
                 "nulls": {
-                    "filter": {"term": {"query_bucket": "credible_null"}},
+                    "filter": {"terms": {"query_bucket": ["credible_null", "reported_null"]}},
                     "aggs": {
                         "sample": {
                             "sampler": {"shard_size": 300},
@@ -829,12 +920,18 @@ class ElasticRepository:
         )
         aggs = result["aggregations"]
         counts = dict.fromkeys(BUCKETS, 0)
-        counts.update({b["key"]: b["doc_count"] for b in aggs["buckets"]["buckets"]})
+        reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+        for row in aggs["buckets"]["buckets"]:
+            bucket, _, reason = row["key"].partition(":")
+            counts[bucket] += row["doc_count"]
+            if reason:
+                reasons[reason] += row["doc_count"]
         registered = aggs["completed"]["doc_count"]
         unreported = aggs["completed"]["missing"]["doc_count"]
         return {
             "total": result["hits"]["total"]["value"],
             "bucketCounts": counts,
+            "inconclusiveReasons": reasons,
             "yearCounts": [
                 {"year": int(b["key_as_string"][:4]), "count": b["doc_count"]}
                 for b in aggs["years"]["buckets"]

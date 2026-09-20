@@ -11,14 +11,15 @@ from elasticsearch import AuthorizationException, BadRequestError
 
 from app.config import Settings
 from app.repository import (
-    BUCKET_SCRIPT,
+    BUCKETS,
     ElasticRepository,
     _prepare_document,
+    bucket_runtime,
     index_mapping,
     lexical_query,
     population_query,
 )
-from app.statistics import _analysis_type, _margin, assign_bucket
+from app.statistics import assign_bucket
 
 
 def document(identifier="paper", **kwargs):
@@ -222,6 +223,25 @@ def test_real_elasticsearch_runtime_parity_cache_and_linked_counts():
                     ci_high=None,
                     result_label="positive",
                 ),
+                document("text_null", estimate=None, ci_low=None, ci_high=None,
+                         result_label="null"),
+                # A quoted statement from the report outranks the lexicon label.
+                document("stated_null", estimate=None, ci_low=None, ci_high=None,
+                         result_label="positive", reported_result="null"),
+                # Arm-level summaries only: every derivable scale must agree with Python.
+                document("arms_means", estimate=None, ci_low=None, ci_high=None, effect_type=None,
+                         mean_intervention=10.1, mean_comparator=10.0, sd_intervention=4.0,
+                         sd_comparator=4.0, n_intervention=900, n_comparator=900),
+                document("arms_events", estimate=None, ci_low=None, ci_high=None, effect_type=None,
+                         events_intervention=20, events_comparator=45, n_intervention=100,
+                         n_comparator=100, result_label="positive"),
+                # A reported HR stays visible to HR queries although SMD is the write-time scale.
+                document("hr_with_arms", effect_type="HR", estimate=0.96, ci_low=0.88,
+                         ci_high=1.06, events_intervention=793, events_comparator=824,
+                         n_intervention=12927, n_comparator=12944),
+                document("md_with_arms", effect_type="MD", estimate=0.1, ci_low=-0.3, ci_high=0.5,
+                         mean_intervention=10.1, mean_comparator=10.0, sd_intervention=4.0,
+                         sd_comparator=4.0, n_intervention=900, n_comparator=900),
                 document("failed", is_retracted=True),
                 document("review", is_review=True),
                 document(
@@ -253,20 +273,10 @@ def test_real_elasticsearch_runtime_parity_cache_and_linked_counts():
             ]
             assert await repo.bulk_upsert(raw) == len(raw)
             today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-            for sesoi, scale in [(0.2, "SMD"), (0.05, "SMD"), (0.2, "logOR"), (1.25, "OR")]:
-                runtime = {
-                    "query_bucket": {
-                        "type": "keyword",
-                        "script": {
-                            "source": BUCKET_SCRIPT,
-                            "params": {
-                                "delta": _margin(sesoi, scale),
-                                "effect": _analysis_type(scale),
-                                "today": int(today.timestamp() * 1000),
-                            },
-                        },
-                    }
-                }
+            scales = [(0.2, "SMD"), (0.05, "SMD"), (0.2, "logOR"), (1.25, "OR"), (1.25, "HR"),
+                      (1.25, "RR"), (3.0, "MD"), (0.5, "MD")]
+            for sesoi, scale in scales:
+                runtime = bucket_runtime(sesoi, scale)
                 response = await repo.client.search(
                     index=repo.index,
                     query={"match_all": {}},
@@ -277,11 +287,19 @@ def test_real_elasticsearch_runtime_parity_cache_and_linked_counts():
                 actual = {
                     hit["_id"]: hit["fields"]["query_bucket"][0] for hit in response["hits"]["hits"]
                 }
-                expected = {row["id"]: assign_bucket(row, sesoi, scale)["bucket"] for row in raw}
+                expected = {}
+                for row in raw:
+                    verdict = assign_bucket(row, sesoi, scale)
+                    reason = verdict["inconclusive_reason"]
+                    expected[row["id"]] = verdict["bucket"] + (f":{reason}" if reason else "")
+                # The script must agree on the bucket and on why a row is inconclusive.
                 assert actual == expected
             aggregate = await repo.aggregate({"match_all": {}}, 0.2, "SMD")
             assert aggregate["total"] == len(raw) - 1
             assert sum(aggregate["bucketCounts"].values()) == aggregate["total"]
+            assert set(aggregate["bucketCounts"]) == set(BUCKETS)
+            assert (sum(aggregate["inconclusiveReasons"].values())
+                    == aggregate["bucketCounts"]["inconclusive"] > 0)
             assert aggregate["fileDrawer"] == {
                 "completed": 3,
                 "unreported": 2,
@@ -762,3 +780,52 @@ def test_real_elasticsearch_population_guard_scopes_lexical_and_expanded_candida
             await repo.close()
 
     asyncio.run(exercise())
+
+
+def test_hypertension_population_matches_by_prefix_so_hypertensive_is_retrieved():
+    query = population_query({"population": "Patients with hypertension"})
+    assert {"prefix": {"abstract": {"value": "hypertens"}}} in (
+        query["bool"]["must"][0]["bool"]["should"][0]["bool"]["should"]
+    )
+
+
+def test_population_aliases_are_alternatives_to_the_condition_clause():
+    pico = {
+        "population": "Patients with hypertension",
+        "populationAliases": ["Hypertensive patients", "High blood pressure", "", "Adults"],
+    }
+    query = population_query(pico)
+    primary, *alternatives = query["bool"]["should"]
+    assert query["bool"]["minimum_should_match"] == 1
+    assert primary == population_query({"population": pico["population"]})
+    # "Hypertensive" repeats the stemmed population; blank and generic aliases add nothing.
+    assert len(alternatives) == 1
+    alias = alternatives[0]["bool"]["must"][0]["bool"]
+    assert alias["minimum_should_match"] == 2
+    assert [clause["multi_match"]["query"] for clause in alias["should"]] == ["blood", "pressure"]
+
+
+@pytest.mark.parametrize(
+    "alias", ["Hypertensive disorder", "Chronic disease", "Kidney", "disorders", "Patients"]
+)
+def test_broad_or_generic_population_aliases_are_ignored(alias):
+    pico = {"population": "Adults with hypertension", "populationAliases": [alias]}
+    # Only structural breadth is detectable here; semantic breadth is the prompt's job.
+    assert population_query(pico) == population_query({"population": pico["population"]})
+
+
+def test_population_alias_cannot_escape_the_anatomical_site_or_exist_alone():
+    pico = {
+        "population": "Patients with knee osteoarthritis",
+        "populationAliases": ["Degenerative joint disease", "Gonarthrosis of the knee"],
+    }
+    _, without_site, with_site = population_query(pico)["bool"]["should"]
+    assert "knee" in str(without_site["bool"]["must"][1])
+    assert len(with_site["bool"]["must"]) == 1
+    assert population_query({"population": "Adults", "populationAliases": ["Hypertension"]}) is None
+
+
+def test_population_aliases_are_capped():
+    aliases = [f"condition{name}" for name in "abcdef"]
+    query = population_query({"population": "hypertension", "populationAliases": aliases})
+    assert len(query["bool"]["should"]) == 1 + 4

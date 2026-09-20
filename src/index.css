@@ -25,6 +25,7 @@
 
   --v-effect: #1e8a5a;
   --v-null: #2a55c2;
+  --v-reported-null: #5b74b8;
   --v-inconclusive: #8e8e98;
   --v-failed: #c0463f;
   --v-unreported: #a8741a;
@@ -49,6 +50,7 @@
 
     --v-effect: #4cc08a;
     --v-null: #7a9ff2;
+    --v-reported-null: #a3b5e0;
     --v-inconclusive: #83838d;
     --v-failed: #e0655e;
     --v-unreported: #d9a43b;
@@ -75,6 +77,7 @@
 
   --color-v-effect: var(--v-effect);
   --color-v-null: var(--v-null);
+  --color-v-reported-null: var(--v-reported-null);
   --color-v-inconclusive: var(--v-inconclusive);
   --color-v-failed: var(--v-failed);
   --color-v-unreported: var(--v-unreported);

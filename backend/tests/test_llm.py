@@ -5,7 +5,13 @@ from types import SimpleNamespace
 import pytest
 
 from app.config import Settings
-from app.llm import LLMService, Usage, indexed_to_extraction, validate_extraction
+from app.llm import (
+    LLMService,
+    Usage,
+    indexed_to_extraction,
+    spelled_numbers,
+    validate_extraction,
+)
 from app.models import Extraction, IndexedExtraction, Pico, SearchRequest
 
 
@@ -30,16 +36,22 @@ def test_exact_numeric_and_quote_validation():
 
 
 @pytest.mark.parametrize(
-    "fact",
+    "facts",
     [
-        {"value": 500, "quote": "Among 200 patients."},
-        {"value": 200, "quote": "Among 200 patients there was no effect."},
-        {"value": 200, "quote": ""},
+        {"estimate": {"value": 500, "quote": "Among 200 patients."}},
+        {"n": {"value": 200, "quote": "Among 200 patients there was no effect."}},
+        {"n": {"value": 200, "quote": ""}},
     ],
 )
-def test_fabricated_number_or_quote_rejects_entire_extraction(fact):
+def test_fabricated_number_or_quote_rejects_entire_extraction(facts):
     with pytest.raises(ValueError):
-        validate_extraction(extraction(n=fact), "Among 200 patients.")
+        validate_extraction(extraction(**facts), "Among 200 patients.")
+
+
+def test_fabricated_total_sample_size_is_never_stored():
+    result = validate_extraction(
+        extraction(n={"value": 500, "quote": "Among 200 patients."}), "Among 200 patients.")
+    assert result["n"] is None and "n" not in result["extraction_evidence"]
 
 
 def test_inequality_preserved():
@@ -160,6 +172,7 @@ def test_parse_cache_keeps_concepts_stable_without_retaining_plan_overrides():
                     outcome="depression",
                     interventionAliases=["Prozac"],
                     outcomeAliases=["depressive symptoms"],
+                    populationAliases=["MDD", "b", "c", "d", "e"],
                     synonyms=[],
                     studyDesigns=["RCT"],
                     sesoi=0.2,
@@ -184,6 +197,7 @@ def test_parse_cache_keeps_concepts_stable_without_retaining_plan_overrides():
         assert first.sesoi == 0.4 and repeat.sesoi == 0.2
         assert repeat.interventionAliases == ["Prozac"]
         assert repeat.outcomeAliases == ["depressive symptoms"]
+        assert repeat.populationAliases == ["MDD", "b", "c", "d"]
 
     asyncio.run(run())
 
@@ -230,3 +244,131 @@ def test_full_text_lines_are_quoted_verbatim_and_validated_against_the_lines_onl
     plain = asyncio.run(service.extract({"id": "W2", "abstract": abstract}, Usage()))
     assert plain["extraction_source"] == "abstract"
     assert plain["extraction_evidence"]["estimate"] == "PHQ-9 change was 0.02 (−0.10 to 0.14), p = 0.74."
+
+
+def _arm_facts(**overrides):
+    text = ("Mean pain was 4.1 (SD 1.9) with drug (n=60) and 4.3 (SD 2.0) with placebo (n=62). "
+            "Stroke occurred in 12 and 15 participants.")
+    facts = {
+        "n_intervention": {"value": 60, "quote": text}, "n_comparator": {"value": 62, "quote": text},
+        "mean_intervention": {"value": 4.1, "quote": text},
+        "mean_comparator": {"value": 4.3, "quote": text},
+        "sd_intervention": {"value": 1.9, "quote": text},
+        "sd_comparator": {"value": 2.0, "quote": text},
+        "events_intervention": {"value": 12, "quote": text},
+        "events_comparator": {"value": 15, "quote": text},
+    }
+    facts.update(overrides)
+    return extraction(**facts), text
+
+
+def test_arm_level_summaries_need_verbatim_numbers_and_both_arms():
+    facts, text = _arm_facts()
+    result = validate_extraction(facts, text)
+    assert (result["mean_intervention"], result["sd_comparator"], result["events_comparator"]) == (
+        4.1, 2.0, 15)
+    # One arm's SD missing: the continuous summary is dropped whole; counts survive.
+    facts, text = _arm_facts(sd_comparator=None)
+    partial = validate_extraction(facts, text)
+    assert partial["mean_intervention"] is None and "mean_intervention" not in partial[
+        "extraction_evidence"]
+    assert partial["events_intervention"] == 12
+    # Arm sizes missing: nothing arm-level is usable.
+    facts, text = _arm_facts(n_comparator=None)
+    assert validate_extraction(facts, text)["events_intervention"] is None
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"events_intervention": {"value": 1.9, "quote": "(SD 1.9)"}},
+        {"events_intervention": {"value": 62, "quote": "placebo (n=62)"}},
+        {"sd_comparator": {"value": 0, "quote": "in 12 and 15 participants. 0"}},
+    ],
+)
+def test_fractional_or_impossible_arm_values_reject_the_extraction(override):
+    facts, text = _arm_facts(**override)
+    with pytest.raises(ValueError):
+        validate_extraction(facts, text + " 0")
+
+
+def test_unquoted_arm_value_or_p_value_is_dropped_without_losing_the_verified_interval():
+    text = "Mean pain was 4.1 (SD 1.9) vs 4.3 (SD 2.0); HR 1.18 (95% CI 1.08 to 1.29; P = .001)."
+    fact = lambda value: {"value": value, "quote": text}  # noqa: E731
+    result = validate_extraction(
+        extraction(
+            estimate=fact(1.18), ci_low=fact(1.08), ci_high=fact(1.29), ci_level=fact(0.95),
+            p_value=fact(0.05), n_intervention=fact(60), n_comparator=fact(62),
+            mean_intervention=fact(4.2), mean_comparator=fact(4.3),
+            sd_intervention=fact(1.9), sd_comparator=fact(2.0),
+        ),
+        text,
+    )
+    assert (result["estimate"], result["ci_low"], result["ci_high"]) == (1.18, 1.08, 1.29)
+    # 0.05 and 4.2 are in no quote: the p value goes alone, the arm summary as a group.
+    assert result["p_value"] is None and "p_value_operator" not in result
+    assert all(result[name] is None for name in (
+        "mean_intervention", "mean_comparator", "sd_intervention", "sd_comparator"))
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Sixty-three rats were randomized (n = 21)", [63.0]),
+        ("Four hundred patients were randomized, 201 received", [400.0]),
+        ("One thousand two hundred and fifty-six adults", [1256.0]),
+        ("After matching, 11 106 matched pairs were found.", [11106.0]),
+        ("HR 1.18 (95% CI 1.08 1.29) in 2 of 3 trials", []),
+    ],
+)
+def test_spelled_out_and_space_grouped_numbers_are_read_as_written(text, expected):
+    assert spelled_numbers(text) == expected
+
+
+def test_spelled_sample_size_is_verbatim_support_and_a_summed_total_is_dropped_alone():
+    text = "Four hundred patients were randomized. The difference was 0.31 (95% CI -0.19 to 0.81)."
+    sentences = text.split(". ")
+    numbers = {
+        "estimate": {"value": 0.31, "quote": sentences[1]},
+        "ci_low": {"value": -0.19, "quote": sentences[1]},
+        "ci_high": {"value": 0.81, "quote": sentences[1]},
+        "ci_level": {"value": 0.95, "quote": sentences[1]},
+    }
+    spelled = validate_extraction(
+        extraction(n={"value": 400, "quote": sentences[0] + "."}, **numbers), text)
+    assert spelled["n"] == 400 and spelled["extraction_evidence"]["n"].startswith("Four hundred")
+    # 201 + 199 appears in no sentence: the total goes, the verified interval stays.
+    summed = validate_extraction(
+        extraction(n={"value": 401, "quote": sentences[0] + "."}, **numbers), text)
+    assert summed["n"] is None and "n" not in summed["extraction_evidence"]
+    assert (summed["estimate"], summed["ci_low"], summed["ci_high"]) == (0.31, -0.19, 0.81)
+    # Any other invented number still rejects the whole extraction.
+    with pytest.raises(ValueError):
+        validate_extraction(
+            extraction(**{**numbers, "estimate": {"value": 0.35, "quote": sentences[1]}}), text)
+
+
+def test_reported_result_needs_its_quote_and_a_known_value():
+    text = "There was no significant difference between groups."
+    ok = validate_extraction(extraction(reported_result={"value": "null", "quote": text}), text)
+    assert ok["reported_result"] == "null"
+    assert ok["extraction_evidence"]["reported_result"] == text
+    # The schema itself admits only the three categories, never a free-text verdict.
+    with pytest.raises(ValueError):
+        extraction(reported_result={"value": "promising", "quote": text})
+    with pytest.raises(ValueError):
+        validate_extraction(
+            extraction(reported_result={"value": "null", "quote": "No difference."}), text)
+
+
+def test_out_of_range_sentence_drops_a_droppable_fact_but_still_rejects_an_estimate():
+    fields = dict.fromkeys(IndexedExtraction.model_fields)
+    droppable = IndexedExtraction.model_validate(
+        {**fields, "reported_result": {"value": "null", "sentence_index": 7},
+         "estimate": {"value": 0.3, "sentence_index": 0}})
+    converted = indexed_to_extraction(droppable, ["The difference was 0.3."])
+    assert converted.reported_result is None and converted.estimate.value == 0.3
+    fatal = IndexedExtraction.model_validate(
+        {**fields, "estimate": {"value": 0.3, "sentence_index": 7}})
+    with pytest.raises(ValueError, match="Invalid evidence sentence"):
+        indexed_to_extraction(fatal, ["The difference was 0.3."])

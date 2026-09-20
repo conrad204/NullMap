@@ -11,7 +11,8 @@ from app.config import Settings
 from app.llm import Usage, indexed_to_extraction, validate_extraction
 from app.models import Extraction, IndexedExtraction, Pico, SearchRequest
 from app.pipeline import SearchPipeline
-from app.statistics import assign_bucket
+from app.repository import BUCKETS
+from app.statistics import INCONCLUSIVE_REASONS, assign_bucket
 
 
 @pytest.fixture(autouse=True)
@@ -121,19 +122,22 @@ class MemoryRepository:
         self.aggregate_parameters = (sesoi, effect_type)
         if self.fixed_aggregation is not None:
             return deepcopy(self.fixed_aggregation)
-        counts = dict.fromkeys(
-            ("effect", "credible_null", "inconclusive", "failed", "unreported"), 0
-        )
+        counts = dict.fromkeys(BUCKETS, 0)
         rows = [
             row
             for row in self.documents.values()
             if not row.get("is_review") and row.get("record_kind") != "linked_publication"
         ]
+        reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
         for row in rows:
-            counts[assign_bucket(row, sesoi, effect_type)["bucket"]] += 1
+            verdict = assign_bucket(row, sesoi, effect_type)
+            counts[verdict["bucket"]] += 1
+            if verdict["inconclusive_reason"]:
+                reasons[verdict["inconclusive_reason"]] += 1
         return {
             "total": len(rows),
             "bucketCounts": counts,
+            "inconclusiveReasons": reasons,
             "yearCounts": [],
             "nullTerms": [],
             "fileDrawer": {"completed": 0, "unreported": 0, "overdue": 0, "share": None},
@@ -359,7 +363,7 @@ def test_rejected_extraction_is_cached_as_text_only_without_repeated_payment():
         second = await pipeline.extract_one(row, usage, warnings)
         assert first["extraction_status"] == second["extraction_status"] == "rejected"
         assert first["evidence_tier"] == "text_only"
-        assert first["bucket"] == "inconclusive"
+        assert first["bucket"] == "reported_null"
         assert llm.extract_calls == 1 and usage.extraction_cache_hits == 1
         assert len(repo.cache_writes) == 1
 
@@ -424,7 +428,7 @@ def test_new_extraction_does_not_relabel_old_endpoint_numbers():
         assert result["outcome"] == "Fatigue severity"
         assert result.get("estimate") is None
         assert result.get("ci_low") is None and result.get("ci_high") is None
-        assert result["bucket"] == "inconclusive"
+        assert result["bucket"] == "reported_null"
 
     asyncio.run(exercise())
 
@@ -586,7 +590,7 @@ def test_indexed_evidence_uses_exact_original_sentence_and_rejects_out_of_bounds
     assert converted.estimate.quote == sentences[1]
     validated = validate_extraction(converted, " ".join(sentences))
     assert validated["estimate"] == -0.1 and validated["n"] == 1500
-    data["n"]["sentence_index"] = 2
+    data["estimate"]["sentence_index"] = 2
     with pytest.raises(ValueError, match="Invalid evidence sentence"):
         indexed_to_extraction(IndexedExtraction.model_validate(data), sentences)
 
@@ -594,7 +598,7 @@ def test_indexed_evidence_uses_exact_original_sentence_and_rejects_out_of_bounds
 def test_indexed_evidence_still_rejects_fabricated_value_in_real_sentence():
     data = {
         **dict.fromkeys(IndexedExtraction.model_fields),
-        "n": {"value": 9000, "sentence_index": 0},
+        "estimate": {"value": 9000, "sentence_index": 0},
     }
     converted = indexed_to_extraction(
         IndexedExtraction.model_validate(data), ["There were 200 participants."]
@@ -624,7 +628,7 @@ def test_full_text_lines_are_passed_to_extraction_and_source_is_recorded():
         repo = MemoryRepository([row])
         llm = FakeLLM(extraction=full_text_extraction())
         fulltext = FakeFullText(lines=["A sentence.", "[Table 2] Depression score | 0.02"], status="used")
-        settings = config()
+        settings = config(extraction_cache_version="v2-sentence-evidence")
         settings.openai_api_key = "test"
         pipeline = SearchPipeline(repo, llm, settings, fulltext=fulltext)
         usage, warnings = Usage(), []
@@ -773,3 +777,13 @@ def test_full_text_disabled_never_fetches_and_uses_the_abstract():
         assert result["extraction_source"] == "abstract"
 
     asyncio.run(exercise())
+
+
+def test_inconclusive_is_summarised_with_the_reasons_it_could_not_be_classified():
+    from app.pipeline import inconclusive_sentence
+
+    assert inconclusive_sentence(0, {"no_result": 0}) == ""
+    sentence = inconclusive_sentence(7, {"wide_interval": 2, "no_result": 5, "review": 0})
+    assert sentence.startswith("A further 7 are inconclusive: 2 had an interval too wide")
+    assert "5 had no readable comparative result" in sentence and "review" not in sentence
+    assert inconclusive_sentence(3, None) == "A further 3 are inconclusive. "

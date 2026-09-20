@@ -25,6 +25,16 @@ types are retained, including records without abstracts. Nonprimary works are
 retained for discovery but excluded from primary-study statistical pools.
 Missing abstracts do not imply missing results.
 
+The opt-in `hypertension-kidney-pubmed` profile is the same topical scope restricted
+to PubMed-indexed works (a PMID in `ids`, or `pubmed` in `indexed_in`). Update-date
+partitions differ enormously in quality: in a 2026-09-19 check, a `2025-10` part had
+0.0% PMIDs and 4.9% DOIs, a `2026-01` part 11.5% and 99.6%, and the identifier-poor
+parts contain many records whose title and abstract belong to different works.
+Registry linking matches on PMID and full text needs a PMCID, so a corpus built from
+such parts cannot link. `--largest-first` does not avoid them; it selects by bytes.
+The profile is recorded in checkpoints and provenance as its own scope. The Parquet
+snapshot carries no `pmcid` in `ids`; the normalizer recovers it from PMC location URLs.
+
 Completion means all matches under those rules in the supplied snapshot.
 Incomplete metadata, terminology and source coverage prevent a promise of every
 relevant study worldwide. The snapshot is a dated release, not a live feed.

@@ -31,6 +31,8 @@ PROJECTED_FIELDS = (
     "publication_date",
     "ids",
     "pmid",
+    "indexed_in",
+    "locations",
     "doi",
     "referenced_works",
     "is_retracted",

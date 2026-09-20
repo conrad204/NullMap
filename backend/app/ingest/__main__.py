@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from app.ingest.fetch import atomic_json, fetch_pages
+from app.ingest.scope import PROFILES
 
 
 def read_jsonl(path: Path):
@@ -133,7 +134,7 @@ def parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--max-bytes", type=int, default=5_000_000_000)
     snapshot.add_argument("--limit", type=int, help="Optional explicit row cap; absent means exhaust selected parts")
     snapshot.add_argument("--topic", default="", help="Optional additional topic-name filter")
-    snapshot.add_argument("--profile", choices=["hypertension-kidney", "all"], default="hypertension-kidney")
+    snapshot.add_argument("--profile", choices=list(PROFILES), default="hypertension-kidney", help="The -pubmed profile keeps only PubMed-indexed works, which registry linking and full text need")
     snapshot.add_argument("--work-ids", type=Path, help="Backfill these newline-separated W IDs from S3; overrides topic/profile filtering")
     snapshot.add_argument("--min-free-bytes", type=int, default=1_000_000_000)
     snapshot.add_argument("--plan", action="store_true", help="Inspect the manifest without reading Parquet")

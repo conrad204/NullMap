@@ -12,6 +12,8 @@ References:
 - https://www.statsmodels.org/stable/generated/statsmodels.stats.meta_analysis.combine_effects.html
   (DerSimonian-Laird, method_re="chi2"). We explicitly clamp negative tau².
 - https://doi.org/10.1002/pst.175 (assurance as expected power).
+- Cochrane Handbook 6.4-6.5 and Hedges (1981): effect sizes from reported arm-level
+  means/SDs or event counts, with the small-sample correction for standardized differences.
 
 Assurance here is two-sided statistical significance, including effects in the
 unfavourable direction. It is not a probability of clinically meaningful benefit.
@@ -37,6 +39,14 @@ _Z95 = _NORMAL.inv_cdf(0.975)
 _MDE_FACTOR = _Z95 + _NORMAL.inv_cdf(0.8)
 _RATIO_TYPES = {"OR": "logOR", "RR": "logRR", "HR": "logHR"}
 _MAX_REQUIRED_N = 10_000_000
+# Scales computable from arm-level summaries, in the order used when none was requested.
+DERIVED_SCALES = ("SMD", "logOR", "MD", "logRR")
+# Why a study is inconclusive. Only ``wide_interval`` describes the study itself (it
+# could not tell no effect from a meaningful one); the others describe what we could read.
+INCONCLUSIVE_REASONS = (
+    "wide_interval", "mixed_result", "no_result", "other_scale", "no_threshold", "review"
+)
+_MAX_PLAUSIBLE_SMD = 5.0
 
 
 def _number(value: Any) -> float | None:
@@ -81,7 +91,16 @@ def _effect_type(value: Any) -> str | None:
         "LOGHAZARDRATIO": "logHR",
         "LNHR": "logHR",
     }
-    return aliases.get(cleaned)
+    if cleaned in aliases:
+        return aliases[cleaned]
+    # Extracted scale names are free text ("mean difference in IOP (mmHg)"). Log scales
+    # and the standardized difference are tested first so they are not read as plain ones.
+    for name in ("LOGODDSRATIO", "LOGRISKRATIO", "LOGHAZARDRATIO", "STANDARDIZEDMEANDIFFERENCE",
+                 "STANDARDISEDMEANDIFFERENCE", "HAZARDRATIO", "ODDSRATIO", "RISKRATIO",
+                 "RELATIVERISK", "MEANDIFFERENCE", "DIFFERENCEINMEANS"):
+        if name in cleaned:
+            return aliases[name]
+    return None
 
 
 def _analysis_type(value: Any) -> str | None:
@@ -144,7 +163,131 @@ def _unreported(study: dict, today: date) -> bool:
     )
 
 
-def _numeric_evidence(study: dict) -> dict:
+def derived_field(scale: str, name: str) -> str:
+    return f"derived_{scale.lower()}_{name}"
+
+
+def _count(value: Any) -> int | None:
+    number = _number(value)
+    return int(number) if number is not None and number >= 0 and number.is_integer() else None
+
+
+def derive_effects(study: dict) -> dict[str, dict]:
+    """Effect sizes computed from arm-level summaries, as intervention minus comparator.
+
+    Nothing is imputed: a continuous effect needs both means, both SDs and both arm
+    sizes; a binary effect needs both event counts and both arm sizes. Hazard ratios
+    cannot be recovered from summaries and are never derived.
+    """
+    effects: dict[str, dict] = {}
+    n1, n2 = _count(study.get("n_intervention")), _count(study.get("n_comparator"))
+    if n1 is None or n2 is None or n1 < 2 or n2 < 2:
+        return effects
+    m1, m2 = _number(study.get("mean_intervention")), _number(study.get("mean_comparator"))
+    sd1, sd2 = _number(study.get("sd_intervention")), _number(study.get("sd_comparator"))
+    if None not in (m1, m2, sd1, sd2) and sd1 > 0 and sd2 > 0:
+        difference = m1 - m2
+        pooled_sd = math.sqrt(((n1 - 1) * sd1 * sd1 + (n2 - 1) * sd2 * sd2) / (n1 + n2 - 2))
+        d = difference / pooled_sd
+        # Arms several pooled SDs apart almost always mean a standard error was reported
+        # as an SD, so neither the SMD nor the SE of the mean difference is usable.
+        if abs(d) <= _MAX_PLAUSIBLE_SMD:
+            correction = 1 - 3 / (4 * (n1 + n2 - 2) - 1)
+            effects["MD"] = {
+                "estimate": difference,
+                "se": math.sqrt(sd1 * sd1 / n1 + sd2 * sd2 / n2),
+                "note": "Mean difference and SE computed from reported arm means, SDs and sizes.",
+            }
+            effects["SMD"] = {
+                "estimate": correction * d,
+                "se": correction * math.sqrt((n1 + n2) / (n1 * n2) + d * d / (2 * (n1 + n2))),
+                "note": "Hedges' g computed from reported arm means, SDs and sizes (pooled SD, "
+                "small-sample correction).",
+            }
+    e1, e2 = _count(study.get("events_intervention")), _count(study.get("events_comparator"))
+    if e1 is not None and e2 is not None and e1 <= n1 and e2 <= n2:
+        cells = [float(e1), float(n1 - e1), float(e2), float(n2 - e2)]
+        # With no events, or only events, in both arms the ratio carries no information.
+        if not (e1 == e2 == 0 or (e1 == n1 and e2 == n2)):
+            note = "computed from reported arm event counts and sizes"
+            if 0 in cells:
+                cells = [cell + 0.5 for cell in cells]
+                note += " with a 0.5 continuity correction for an empty cell"
+            a, b, c, d_ = cells
+            effects["logOR"] = {
+                "estimate": math.log(a * d_ / (b * c)),
+                "se": math.sqrt(1 / a + 1 / b + 1 / c + 1 / d_),
+                "note": f"Log odds ratio {note}.",
+            }
+            variance = 1 / a - 1 / (a + b) + 1 / c - 1 / (c + d_)
+            if variance > 0:
+                effects["logRR"] = {
+                    "estimate": math.log((a / (a + b)) / (c / (c + d_))),
+                    "se": math.sqrt(variance),
+                    "note": f"Log risk ratio {note}.",
+                }
+    return {
+        scale: effect
+        for scale, effect in effects.items()
+        if math.isfinite(effect["estimate"]) and math.isfinite(effect["se"]) and effect["se"] > 0
+    }
+
+
+def _numeric_evidence(study: dict, requested: str | None = None) -> dict:
+    """Reported numbers first; arm-level derivation only fills a gap on the requested scale.
+
+    A reported interval on the requested scale is never replaced, so registry
+    primary-outcome analyses stay authoritative.
+    """
+    result = _reported_evidence(study)
+    derived = derive_effects(study)
+    for scale in DERIVED_SCALES:
+        effect = derived.get(scale)
+        for name in ("estimate", "ci_low", "ci_high"):
+            result[derived_field(scale, name)] = None
+        if effect:
+            result[derived_field(scale, "estimate")] = effect["estimate"]
+            result[derived_field(scale, "ci_low")] = effect["estimate"] - _Z95 * effect["se"]
+            result[derived_field(scale, "ci_high")] = effect["estimate"] + _Z95 * effect["se"]
+    target = _analysis_type(requested)
+    reported = result["analysis_ci"] is not None
+    if reported and (target is None or result["analysis_effect_type"] == target):
+        return result
+    scale = target if target in derived else None
+    if scale is None and not reported:
+        scale = next((name for name in DERIVED_SCALES if name in derived), None)
+    if scale is None:
+        return result
+    effect = derived[scale]
+    low, high = effect["estimate"] - _Z95 * effect["se"], effect["estimate"] + _Z95 * effect["se"]
+    result.update(
+        analysis_effect_type=scale,
+        analysis_estimate=effect["estimate"],
+        analysis_se=effect["se"],
+        analysis_ci=[low, high],
+        analysis_ci_low=low,
+        analysis_ci_high=high,
+        evidence_tier="derived",
+        mde=_MDE_FACTOR * effect["se"],
+        numeric_notes=[*result["numeric_notes"], effect["note"]],
+    )
+    return result
+
+
+def stored_analysis(study: dict) -> dict:
+    """Scale-neutral analysis fields for the index: reported numbers, else the first derived.
+
+    Buckets are written on the default scale, but a query may use any scale. Storing the
+    reported analysis (rather than whatever the default scale selected) lets the
+    aggregation script find it, with ``derived_*`` fields covering every other scale.
+    """
+    evidence = _numeric_evidence(study)
+    keys = ("analysis_effect_type", "analysis_estimate", "analysis_se", "analysis_ci",
+            "analysis_ci_low", "analysis_ci_high", "evidence_tier", "mde", "numeric_notes")
+    return {key: evidence[key] for key in keys}
+
+
+def _reported_evidence(study: dict) -> dict:
     kind = _effect_type(study.get("effect_type"))
     result = {
         "analysis_effect_type": _analysis_type(kind),
@@ -264,13 +407,17 @@ def assign_bucket(
 ) -> dict:
     """Return classification metadata without changing the input study document.
 
-    Text-only null claims never establish equivalence. A text-only positive label
-    is a provisional reported effect, with magnitude explicitly unverified.
+    Text-only null claims never establish equivalence: they are ``reported_null``,
+    never ``credible_null``. A text-only positive label is likewise a provisional
+    reported effect, with magnitude explicitly unverified.
     Methodological failures override numerical findings. Reviews are discovery
     sources, never independent patient samples in a pool.
     """
-    result = _numeric_evidence(study)
-    result.update(bucket="inconclusive", rationale="", significant_but_trivial=False)
+    result = _numeric_evidence(study, effect_type)
+    result.update(
+        bucket="inconclusive", rationale="", significant_but_trivial=False,
+        inconclusive_reason=None,
+    )
     status = str(study.get("overall_status", "")).upper()
     failures = []
     if study.get("is_retracted") is True:
@@ -291,6 +438,7 @@ def assign_bucket(
         return result
     if study.get("is_review") is True:
         result["rationale"] = "Review used for discovery; not an independent primary study."
+        result["inconclusive_reason"] = "review"
         return result
     if _unreported(study, today or datetime.now(UTC).date()):
         result.update(
@@ -302,31 +450,44 @@ def assign_bucket(
 
     interval = result["analysis_ci"]
     if interval is None:
-        label = _text(study.get("result_label"))
+        # A quoted statement read from the report outranks the index-time phrase lexicon.
+        stated = _text(study.get("reported_result"))
+        label = stated or _text(study.get("result_label"))
+        origin = "The report states" if stated else "Abstract classifier reports"
         if label == "positive":
             result.update(
                 bucket="effect",
-                rationale="Abstract classifier reports an effect; statistical significance and "
+                rationale=f"{origin} an effect; statistical significance and "
                 "meaningful magnitude are unverified without compatible numerical evidence.",
             )
         elif label == "null":
+            result.update(
+                bucket="reported_null",
+                rationale=f"{origin} no significant difference. Without a compatible "
+                "numerical CI, this cannot establish absence of a meaningful effect.",
+            )
+        elif label == "mixed":
+            result["inconclusive_reason"] = "mixed_result"
             result["rationale"] = (
-                "Abstract reports no significant difference. Without a compatible numerical CI, "
-                "this cannot establish absence of a meaningful effect."
+                f"{origin} conflicting primary results, and no compatible numerical CI "
+                "is available to weigh them."
             )
         else:
+            result["inconclusive_reason"] = "no_result"
             result["rationale"] = (
-                "Insufficient compatible numerical evidence to classify the effect."
+                "No comparative result could be read: no usable numbers and no stated outcome."
             )
         return result
 
     margin = _margin(sesoi, effect_type)
     if margin is None:
+        result["inconclusive_reason"] = "no_threshold"
         result["rationale"] = (
             "A positive SESOI on a supported effect scale is required; raw ratio margins must exceed 1."
         )
         return result
     if result["analysis_effect_type"] != _analysis_type(effect_type):
+        result["inconclusive_reason"] = "other_scale"
         result["rationale"] = (
             f"Study uses {result['analysis_effect_type']} but the SESOI uses "
             f"{_analysis_type(effect_type) or effect_type}; meaningfulness cannot be compared across scales."
@@ -354,6 +515,7 @@ def assign_bucket(
             "the CI need not exclude effects smaller than the SESOI.",
         )
     else:
+        result["inconclusive_reason"] = "wide_interval"
         result["rationale"] = (
             "The 95% CI does not establish equivalence and the evidence does not establish "
             "a statistically significant effect whose estimate reaches the SESOI."
@@ -564,7 +726,9 @@ def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = 
             continue
         kind = classification["analysis_effect_type"]
         outcome = _text(study.get("outcome"))
-        unit = _unit(study, kind)
+        derived = classification["evidence_tier"] == "derived"
+        # A derived SMD is in SD units whatever instrument the arms were measured on.
+        unit = "SD" if derived and kind == "SMD" else _unit(study, kind)
         if not outcome or (kind == "MD" and not unit):
             warnings.append(
                 "Numeric studies with unknown outcomes or missing MD units were not pooled."
@@ -573,6 +737,10 @@ def analyze_studies(studies: list[dict], plan: dict, file_drawer: dict | None = 
         if classification["evidence_tier"] == "reconstructed":
             warnings.append(
                 "Some pooled evidence uses reconstructed normal-approximation uncertainty."
+            )
+        if derived:
+            warnings.append(
+                "Some pooled evidence uses effect sizes computed from reported arm-level summaries."
             )
         direction = _text(study.get("effect_direction") or study.get("outcome_direction"))
         comparison = (_text(study.get("intervention")), _text(study.get("comparator")))
