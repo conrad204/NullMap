@@ -84,7 +84,9 @@ function GapCard({ gap, regions }: { gap: MapGap; regions: MapRegion[] }) {
       <p className="mt-1.5 text-xs text-ink-3">
         {gap.discouraged
           ? "Open because the surrounding work reported nulls or never reported at all — read those first."
-          : "Open between two active literatures."}
+          : `Open between ${gap.parentLabels
+              .map((label) => REGION_META[label].label.toLowerCase())
+              .join(" and ")} regions.`}
       </p>
     </li>
   );
@@ -136,8 +138,9 @@ export default function MapPanel() {
             Where does your idea land?
           </h1>
           <p className="mt-3 max-w-[44ch] leading-relaxed text-ink-2">
-            The index is clustered into regions and each region is described by what happened in it:
-            effects, reported nulls, or studies that were run and never reported. An idea is placed
+            A sample of the index is clustered into regions and each region is described by what
+            happened in it: effects, reported nulls, studies that were run and never reported, or
+            records no result could be read from at all. An idea is placed
             against that map, so "nothing here" can be told apart from "this has been tried and it
             did not work".
           </p>
@@ -169,6 +172,20 @@ export default function MapPanel() {
         {state.kind === "loading" && <p className="text-sm text-ink-2">Clustering the indexed corpus…</p>}
         {map && (
           <div className="flex flex-col gap-8">
+            <div className="text-xs text-ink-3">
+              <p>
+                {formatCount(map.coverage.sampled)} embedded studies of{" "}
+                {formatCount(map.coverage.corpus)} in the index
+                {map.coverage.corpus > 0 &&
+                  ` (${percent(map.coverage.sampled / map.coverage.corpus)})`}
+                , in {map.coverage.regions} regions · {map.version}
+              </p>
+              {map.warnings.map((warning) => (
+                <p key={warning} className="mt-1">
+                  {warning}
+                </p>
+              ))}
+            </div>
             {placement?.nearest && placement.redundancy !== null && (
               <div className="rounded-control border border-line bg-surface p-5">
                 <p className="text-sm text-ink-2">Closest indexed paper</p>
@@ -206,7 +223,7 @@ export default function MapPanel() {
                   Pairs of related regions with almost nothing published between them, most open first.
                 </p>
                 <ul className="mt-3 flex flex-col gap-3">
-                  {map.gaps.slice(0, 5).map((gap) => (
+                  {map.gaps.map((gap) => (
                     <GapCard key={gap.regions.join("-")} gap={gap} regions={map.regions} />
                   ))}
                 </ul>
@@ -220,21 +237,6 @@ export default function MapPanel() {
                   <RegionCard key={region.id} region={region} />
                 ))}
               </ul>
-            </div>
-
-            <div className="text-xs text-ink-3">
-              <p>
-                {formatCount(map.coverage.sampled)} embedded studies of{" "}
-                {formatCount(map.coverage.corpus)} in the index
-                {map.coverage.corpus > 0 &&
-                  ` (${percent(map.coverage.sampled / map.coverage.corpus)})`}
-                , in {map.coverage.regions} regions · {map.version}
-              </p>
-              {map.warnings.map((warning) => (
-                <p key={warning} className="mt-1">
-                  {warning}
-                </p>
-              ))}
             </div>
           </div>
         )}
