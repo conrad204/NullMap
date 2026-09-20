@@ -69,6 +69,20 @@ has yet been observed on real data with the final prompt**; the pooled arithmeti
 groups is covered by unit tests only. About $0.005 per grouping call and $0.008 per trend call
 at configured prices.
 
+**Relevance screening** (live API, growing cloud index). "In adults taking creatine supplements,
+creatine increases resting … blood pressure" first returned 14 keyword matches and 3 `effect`
+studies: a telmisartan trial and two case reports (a lymphoma, a COVID infection), matched
+because the corpus mentions "creatine" constantly as in "creatine kinase". With the screen it
+returned 0 relevant studies and cost $0.0008 instead of $0.0106, since nothing irrelevant was
+read. A first version screened only the top 60 ranks and, on "hypertension is caused by high
+salt intake" (678 keyword matches), kept 38 registry records and no papers, because the registry
+sweep fills the early ranks; screening 160 in batches of 40 kept 64 (10 of the 50 shown are
+papers) and the trend ran on 4 effect studies, at about $0.02 for that search. Two kept
+"papers" were corrupt records with a literary title on a salt abstract ("Ah! L’amour,
+l’amour…"), which the screen cannot see through because it reads the abstract. Screening
+accuracy was not measured against human judgement. When the match set exceeds the screened
+page, bucket counts still describe unscreened keyword matches and the response says so.
+
 The Painless bucket script was checked for parity with `assign_bucket` on real Elasticsearch
 9.1.4 across 8 scale/margin requests and 21 documents, including derived effects, a reported
 HR alongside arm counts, and lexicon-versus-stated text labels. 311 backend tests (5 of them

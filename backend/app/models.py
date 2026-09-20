@@ -103,6 +103,12 @@ class Extraction(BaseModel):
     has_control: BoolEvidence | None
 
 
+class Relevance(BaseModel):
+    """Ids of retrieved studies that actually address the research question."""
+
+    relevant_ids: list[str]
+
+
 class OutcomeGroup(BaseModel):
     label: str
     study_ids: list[str]

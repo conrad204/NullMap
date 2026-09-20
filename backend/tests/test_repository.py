@@ -227,7 +227,13 @@ def test_real_elasticsearch_runtime_parity_cache_and_linked_counts():
                          result_label="null"),
                 # A quoted statement from the report outranks the lexicon label.
                 document("stated_null", estimate=None, ci_low=None, ci_high=None,
-                         result_label="positive", reported_result="null"),
+                         result_label="positive", reported_result="null", has_control=True),
+                # Read, "positive" quoted, but no control arm: a case report earns no verdict.
+                document("case_report", estimate=None, ci_low=None, ci_high=None,
+                         result_label="positive", reported_result="positive",
+                         extraction_status="verified"),
+                document("registry_stated", estimate=None, ci_low=None, ci_high=None,
+                         source="merged", reported_result="null", nct_ids=["NCT00000009"]),
                 # Arm-level summaries only: every derivable scale must agree with Python.
                 document("arms_means", estimate=None, ci_low=None, ci_high=None, effect_type=None,
                          mean_intervention=10.1, mean_comparator=10.0, sd_intervention=4.0,

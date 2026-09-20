@@ -449,8 +449,12 @@ if (flag(doc, 'reporting_missing') && present(doc, 'reporting_due_date')
     emit('unreported'); return;
 }
 if (!present(doc, 'analysis_ci_low') || !present(doc, 'analysis_ci_high')) {
-    String label = present(doc, 'reported_result') ? text(doc, 'reported_result')
-        : text(doc, 'result_label');
+    String source = text(doc, 'source');
+    boolean comparative = flag(doc, 'has_control') || source == 'ctgov' || source == 'merged'
+        || present(doc, 'nct_ids');
+    boolean read = text(doc, 'extraction_status') == 'verified';
+    String label = comparative && present(doc, 'reported_result') ? text(doc, 'reported_result')
+        : (read && !comparative ? '' : text(doc, 'result_label'));
     emit(label == 'positive' ? 'effect' : (label == 'null' ? 'reported_null'
         : (label == 'mixed' ? 'inconclusive:mixed_result' : 'inconclusive:no_result')));
     return;

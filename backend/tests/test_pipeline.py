@@ -188,6 +188,13 @@ class FakeLLM:
         self.narrations.append(deepcopy(table))
         return SimpleNamespace(summary="The structured evidence remains uncertain.", drivers=[])
 
+    async def screen(self, question, rows, usage):
+        self.screen_rows = deepcopy(rows)
+        if getattr(self, "screen_error", None):
+            raise self.screen_error
+        keep = getattr(self, "relevant", None)
+        return {row["id"] for row in rows} if keep is None else set(keep)
+
     async def group_outcomes(self, question, rows, usage):
         self.grouping_rows = deepcopy(rows)
         return dict(getattr(self, "groups", {}))
@@ -438,7 +445,8 @@ def test_new_extraction_does_not_relabel_old_endpoint_numbers():
         assert result["outcome"] == "Fatigue severity"
         assert result.get("estimate") is None
         assert result.get("ci_low") is None and result.get("ci_high") is None
-        assert result["bucket"] == "reported_null"
+        # Read, but no control arm was quoted: the abstract's wording earns no verdict.
+        assert (result["bucket"], result["inconclusive_reason"]) == ("inconclusive", "no_result")
 
     asyncio.run(exercise())
 
@@ -853,5 +861,48 @@ def test_effect_trend_keeps_counts_when_the_model_fails_and_is_absent_without_ef
         none = await SearchPipeline(MemoryRepository([paper("N")]), FakeLLM(), settings).search(
             SearchRequest(idea="Does vitamin D reduce depression?"))
         assert none["effectTrend"] is None
+
+    asyncio.run(exercise())
+
+
+def test_relevance_screen_drops_keyword_matches_before_reading_and_recounts_buckets():
+    async def exercise():
+        rows = [_effect("A", "Depression", 0.5, "favours_intervention"),
+                paper("KINASE", title="Creatine kinase in a case of sepsis", result_label="positive"),
+                paper("C", result_label="null", has_control=True)]
+        repo, llm = MemoryRepository(rows), FakeLLM()
+        llm.relevant = {"A", "C", "not-a-hit"}
+        settings = config()
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(repo, llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert [p["id"] for p in result["papers"]] == ["A", "C"]
+        assert result["screening"] == {"screened": 3, "relevant": 2, "complete": True}
+        # Counts describe the relevant studies, not the three keyword matches.
+        assert result["totalScanned"] == 2 and result["bucketCounts"]["effect"] == 1
+        assert "screened for relevance" in result["countScope"]
+        assert "abstract" in llm.screen_rows[0] and llm.extract_calls == 2
+
+    asyncio.run(exercise())
+
+
+def test_relevance_screen_fails_open_and_nothing_relevant_reads_as_no_prior_studies():
+    async def exercise():
+        rows = [paper("KINASE", result_label="positive")]
+        settings = config()
+        settings.openai_api_key = "test"
+        down = FakeLLM()
+        down.screen_error = RuntimeError("model down")
+        kept = await SearchPipeline(MemoryRepository(rows), down, settings).search(
+            SearchRequest(idea="Does creatine raise blood pressure?"))
+        assert len(kept["papers"]) == 1 and kept["screening"] is None
+        assert any("Relevance screening was unavailable" in w for w in kept["warnings"])
+        none = FakeLLM()
+        none.relevant = set()
+        empty = await SearchPipeline(MemoryRepository(rows), none, settings).search(
+            SearchRequest(idea="Does creatine raise blood pressure?"))
+        assert empty["papers"] == [] and empty["totalScanned"] == 0
+        assert sum(empty["bucketCounts"].values()) == 0 and empty["effectTrend"] is None
+        assert none.extract_calls == 0
 
     asyncio.run(exercise())

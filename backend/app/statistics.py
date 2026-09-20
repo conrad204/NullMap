@@ -450,9 +450,14 @@ def assign_bucket(
 
     interval = result["analysis_ci"]
     if interval is None:
-        # A quoted statement read from the report outranks the index-time phrase lexicon.
-        stated = _text(study.get("reported_result"))
-        label = stated or _text(study.get("result_label"))
+        # A quoted statement read from the report outranks the index-time phrase lexicon,
+        # but a between-group result needs a comparison group: once a paper has been read
+        # and no control arm was quoted (a case report, a single-arm series), neither its
+        # stated result nor its wording earns a verdict.
+        comparative = study.get("has_control") is True or _is_registry(study)
+        read = _text(study.get("extraction_status")) == "verified"
+        stated = _text(study.get("reported_result")) if comparative else ""
+        label = stated or ("" if read and not comparative else _text(study.get("result_label")))
         origin = "The report states" if stated else "Abstract classifier reports"
         if label == "positive":
             result.update(

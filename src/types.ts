@@ -174,6 +174,8 @@ export interface SearchResult {
   costs?: QueryCosts;
   warnings?: string[];
   effectTrend?: EffectTrend | null;
+  /** Relevance screen over keyword matches; `complete` means the counts cover relevant studies only. */
+  screening?: { screened: number; relevant: number; complete: boolean } | null;
   alternativeRoutes?: { label: string; reason: string; evidenceCount: number }[];
   retrieval?: { mode: string; expanded: number };
   spin?: { eligible: number; disagreements: number };

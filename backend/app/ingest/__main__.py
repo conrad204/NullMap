@@ -130,6 +130,7 @@ def parser() -> argparse.ArgumentParser:
     snapshot.add_argument("--manifest", help="Public S3 manifest URL or a pinned local manifest; defaults to public works")
     snapshot.add_argument("--max-files", type=int, help="Select at most this many manifest files before enforcing the byte budget")
     snapshot.add_argument("--largest-first", action="store_true", help="Order parts by descending size; a partial run then covers more of the corpus")
+    snapshot.add_argument("--skip-files", type=int, default=0, help="Skip this many leading manifest files, to continue after an earlier --max-files run in a new output directory")
     snapshot.add_argument("--output", type=Path, default=Path("data/snapshot/works.jsonl"))
     snapshot.add_argument("--max-bytes", type=int, default=5_000_000_000)
     snapshot.add_argument("--limit", type=int, help="Optional explicit row cap; absent means exhaust selected parts")
@@ -229,7 +230,8 @@ async def run(args) -> dict:
         else:
             manifest = await load_manifest(location)
         plan = plan_manifest(manifest, max_files=args.max_files,
-                             largest_first=getattr(args, "largest_first", False))
+                             largest_first=getattr(args, "largest_first", False),
+                             skip_files=getattr(args, "skip_files", 0))
         if args.plan:
             return {k: v for k, v in plan.items() if k != "files"}
         pinned = args.output.with_suffix(args.output.suffix + ".manifest.json")

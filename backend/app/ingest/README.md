@@ -93,6 +93,17 @@ its size. A part may contain no scope matches. `--max-files`, `--max-records` an
 `--registry-limit` are explicit partial runs. Use a separate directory for the
 full run: changing selected files invalidates the scan checkpoint.
 
+To continue after a `--max-files N` run without rescanning, start a new directory
+with `--skip-files N` (optionally with another `--max-files` to work in chunks).
+Provenance keeps the fingerprint of the whole release. A run that skips parts
+never sets `complete_snapshot_scope=true`, even when every part has been covered
+across runs; coverage is then the union of the per-directory checkpoints.
+
+```sh
+.venv/bin/python -m app.bootstrap --run --skip-registry --skip-files 550 --max-files 30 \
+  --max-snapshot-bytes 40000000000 --data-dir data/research-s3-continue/p0550-0579
+```
+
 ## Checkpoints and coverage
 
 Keep each output and its sidecars together:

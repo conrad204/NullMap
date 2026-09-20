@@ -27,6 +27,12 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Order parts by descending size so a partial --max-files run covers more of the corpus",
     )
+    result.add_argument(
+        "--skip-files",
+        type=int,
+        default=0,
+        help="Skip leading manifest parts to continue an earlier --max-files run; use a new data dir",
+    )
     result.add_argument("--max-snapshot-bytes", type=int, default=5_000_000_000)
     result.add_argument(
         "--max-records", type=int, help="Explicit partial record cap; default has no cap"
@@ -56,7 +62,12 @@ async def bootstrap(args) -> dict:
     if args.max_snapshot_bytes <= 0 or args.min_free_bytes < 0:
         raise ValueError("Snapshot budget must be positive and free-space threshold nonnegative")
     manifest = await load_manifest(args.manifest)
-    plan = plan_manifest(manifest, max_files=args.max_files, largest_first=args.largest_first)
+    plan = plan_manifest(
+        manifest,
+        max_files=args.max_files,
+        largest_first=args.largest_first,
+        skip_files=args.skip_files,
+    )
     summary = {k: v for k, v in plan.items() if k != "files"}
     summary.update(
         source="public_s3",
@@ -135,6 +146,7 @@ async def bootstrap(args) -> dict:
             str(args.min_free_bytes),
         ]
         for flag, value in (
+            ("--skip-files", args.skip_files or None),
             ("--max-files", args.max_files),
             ("--limit", args.max_records),
             ("--work-ids", args.work_ids),

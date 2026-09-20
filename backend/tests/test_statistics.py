@@ -531,12 +531,23 @@ def test_derived_smds_pool_across_instruments_and_are_flagged():
 
 
 def test_quoted_reported_result_outranks_the_phrase_lexicon_but_never_an_interval():
-    stated_null = assign_bucket({"result_label": "positive", "reported_result": "null"})
+    stated_null = assign_bucket(
+        {"result_label": "positive", "reported_result": "null", "has_control": True})
     assert stated_null["bucket"] == "reported_null"
     assert stated_null["rationale"].startswith("The report states")
-    assert assign_bucket({"result_label": "no_result_stated", "reported_result": "positive"})[
-        "bucket"] == "effect"
-    assert assign_bucket({"reported_result": "mixed"})["bucket"] == "inconclusive"
+    assert assign_bucket({"result_label": "no_result_stated", "reported_result": "positive",
+                          "has_control": True})["bucket"] == "effect"
+    assert assign_bucket({"reported_result": "mixed", "has_control": True})[
+        "inconclusive_reason"] == "mixed_result"
+    # A case report: read, a "positive" sentence quoted, but no comparison group.
+    case_report = assign_bucket({"result_label": "positive", "reported_result": "positive",
+                                 "extraction_status": "verified", "has_control": None})
+    assert (case_report["bucket"], case_report["inconclusive_reason"]) == ("inconclusive",
+                                                                          "no_result")
+    # Not yet read: the index-time lexicon label still stands. Registry rows are comparative.
+    assert assign_bucket({"result_label": "positive"})["bucket"] == "effect"
+    assert assign_bucket({"source": "merged", "reported_result": "null"})[
+        "bucket"] == "reported_null"
     # A reported interval still decides: a text "positive" cannot make this an effect.
     numeric = assign_bucket({"reported_result": "positive", "effect_type": "SMD",
                              "estimate": 0.02, "ci_low": -0.1, "ci_high": 0.14})

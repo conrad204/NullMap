@@ -458,6 +458,25 @@ def test_largest_first_covers_more_bytes_without_changing_the_part_set():
     assert full_default["manifest_sha256"] == full_sorted["manifest_sha256"]
 
 
+def test_skip_files_continues_a_partial_run_without_claiming_the_release():
+    from app.ingest.snapshot import plan_manifest
+    manifest = _manifest([10, 5000, 30, 4000, 20])
+    first = plan_manifest(manifest, max_files=2)
+    rest = plan_manifest(manifest, skip_files=2)
+    chunk = plan_manifest(manifest, skip_files=2, max_files=2)
+    assert [f["size_bytes"] for f in rest["files"]] == [30, 4000, 20]
+    assert [f["size_bytes"] for f in chunk["files"]] == [30, 4000]
+    assert rest["skipped_parts"] == 2 and first["skipped_parts"] == 0
+    # Same release identity, and the tail alone is never the complete scope.
+    assert rest["manifest_sha256"] == first["manifest_sha256"]
+    assert rest["all_parts_selected"] is False
+    assert rest["selected_bytes_fraction"] == round(4050 / 9060, 6)
+    with pytest.raises(ValueError):
+        plan_manifest(manifest, skip_files=5)
+    with pytest.raises(ValueError):
+        plan_manifest(manifest, skip_files=-1)
+
+
 def test_reordering_parts_invalidates_a_scan_checkpoint(tmp_path):
     import json
 

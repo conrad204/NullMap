@@ -85,7 +85,11 @@ async def load_manifest(location: str, *, client: httpx.AsyncClient | None = Non
 
 
 def plan_manifest(
-    manifest: dict, *, max_files: int | None = None, largest_first: bool = False
+    manifest: dict,
+    *,
+    max_files: int | None = None,
+    largest_first: bool = False,
+    skip_files: int = 0,
 ) -> dict:
     """Select manifest parts to scan.
 
@@ -94,9 +98,15 @@ def plan_manifest(
     explicitly partial run, ``largest_first`` therefore covers far more of the
     corpus per unit of time. It never changes which parts exist, only their
     order, so a full run is unaffected.
+
+    ``skip_files`` continues after an earlier ``max_files`` run in a new data
+    directory. The manifest fingerprint stays that of the whole release, and a
+    run that skips parts never counts as having selected all of them.
     """
     if max_files is not None and max_files <= 0:
         raise ValueError("max-files must be positive")
+    if skip_files < 0:
+        raise ValueError("skip-files must not be negative")
     parts = []
     seen = set()
     for entry in manifest["files"]:
@@ -113,7 +123,10 @@ def plan_manifest(
     if not parts:
         raise ValueError("Manifest has no Parquet files")
     ordered = sorted(parts, key=lambda part: -part["size_bytes"]) if largest_first else parts
-    selected = ordered[:max_files] if max_files is not None else ordered
+    remaining = ordered[skip_files:]
+    if not remaining:
+        raise ValueError("skip-files leaves no manifest parts to scan")
+    selected = remaining[:max_files] if max_files is not None else remaining
     total_bytes = sum(part["size_bytes"] for part in parts)
     budgeted = sum(part["size_bytes"] for part in selected)
     return {
@@ -121,6 +134,7 @@ def plan_manifest(
         "snapshot_date": manifest.get("date"),
         "total_parts": len(parts),
         "selected_parts": len(selected),
+        "skipped_parts": skip_files,
         "selection_order": "largest_first" if largest_first else "manifest",
         "physical_bytes_budgeted": budgeted,
         "selected_bytes_fraction": round(budgeted / total_bytes, 6) if total_bytes else 0.0,

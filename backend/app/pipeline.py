@@ -12,8 +12,14 @@ from app.config import Settings, settings
 from app.fulltext import FullTextClient
 from app.llm import LLMService, Usage
 from app.models import Pico, SearchRequest
-from app.repository import ElasticRepository, lexical_query, population_query, rrf_fuse
-from app.statistics import analyze_studies, assign_bucket
+from app.repository import (
+    BUCKETS,
+    ElasticRepository,
+    lexical_query,
+    population_query,
+    rrf_fuse,
+)
+from app.statistics import INCONCLUSIVE_REASONS, analyze_studies, assign_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,24 @@ def inconclusive_sentence(count: int, reasons: dict | None) -> str:
     ]
     detail = f": {'; '.join(parts)}" if parts else ""
     return f"A further {count} are inconclusive{detail}. "
+
+
+# The registry sweep can fill the first several dozen ranks with trials, so the screen has to
+# reach well past the displayed page or papers are cut before anyone judges them.
+SCREEN_LIMIT = 160
+SCREEN_BATCH = 40
+
+
+def recount(studies: list[dict], sesoi: float, effect_type: str) -> dict:
+    """Bucket counts over screened studies, replacing the keyword-match aggregation."""
+    counts = dict.fromkeys(BUCKETS, 0)
+    reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+    for study in studies:
+        verdict = assign_bucket(study, sesoi, effect_type)
+        counts[verdict["bucket"]] += 1
+        if verdict["inconclusive_reason"]:
+            reasons[verdict["inconclusive_reason"]] += 1
+    return {"total": len(studies), "bucketCounts": counts, "inconclusiveReasons": reasons}
 
 
 def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
@@ -282,6 +306,51 @@ class SearchPipeline:
             await self.repo.cache_extraction(study["id"], extraction)
             return dict(current, **extraction)
 
+    async def screen(
+        self, question: dict, studies: list[dict], usage: Usage, warnings: list[str]
+    ) -> tuple[list[dict], dict | None]:
+        """Drop keyword matches that do not address the question, before paying to read them.
+
+        Sharing words with the question is not relevance ("creatine kinase" in a
+        hypertension paper is not creatine supplementation). Fails open: if the screen
+        is unavailable every match is kept and the result says so.
+        """
+        if not studies or not self.config.openai_api_key:
+            return studies, None
+        head = studies[:SCREEN_LIMIT]
+        rows = [
+            {
+                "id": d["id"],
+                "title": (d.get("title") or "")[:200],
+                "population": (d.get("population") or "")[:120],
+                "intervention": (d.get("intervention") or "")[:120],
+                "outcome": (d.get("outcome") or "")[:120],
+                "abstract": (d.get("abstract") or "")[:280],
+            }
+            for d in head
+        ]
+        try:
+            batches = await asyncio.gather(
+                *(
+                    self.llm.screen(question, rows[start : start + SCREEN_BATCH], usage)
+                    for start in range(0, len(rows), SCREEN_BATCH)
+                )
+            )
+            relevant = set().union(*batches)
+        except Exception as exc:
+            logger.warning("Relevance screening unavailable: %s", type(exc).__name__)
+            warnings.append(
+                "Relevance screening was unavailable; results are keyword matches and may "
+                "include studies that do not address the question."
+            )
+            return studies, None
+        kept = [d for d in head if d["id"] in relevant]
+        return kept, {
+            "screened": len(head),
+            "relevant": len(kept),
+            "complete": len(head) == len(studies),
+        }
+
     async def group_outcomes(
         self, question: dict, studies: list[dict], verdicts: dict, usage: Usage, warnings: list[str]
     ) -> dict[str, str]:
@@ -463,6 +532,14 @@ class SearchPipeline:
                 [d["id"] for d in expanded] + [d["id"] for d in merged],
             )
         studies = [d for d in hits if not d.get("is_review")]
+        question = {
+            "idea": request.idea,
+            "population": pico.population,
+            "intervention": pico.intervention,
+            "comparator": pico.comparator,
+            "outcome": pico.outcome,
+        }
+        studies, screening = await self.screen(question, studies, usage, warnings)
         await emit(
             "classifying",
             "Loading cached numbers and verifying uncached evidence spans",
@@ -478,15 +555,31 @@ class SearchPipeline:
             "estimating", "Aggregating every match and calculating study assurance", len(studies)
         )
         aggregation = await self.repo.aggregate(query, pico.sesoi, pico.effectType)
+        count_scope = (
+            "All indexed lexical matches plus screened review references; reviews excluded. "
+            "Planning uses compatible studies among the top retrieved results."
+        )
+        # Complete only if the screened page was the whole match set, not its first page.
+        if screening:
+            screening["complete"] = (
+                screening["complete"] and aggregation["total"] <= screening["screened"]
+            )
+        if screening and screening["complete"]:
+            # Every lexical match was screened, so the counts can describe relevant studies only.
+            aggregation.update(recount(studies, pico.sesoi, pico.effectType))
+            count_scope = (
+                f"All {screening['screened']} keyword matches were screened for relevance; counts "
+                f"cover the {screening['relevant']} that address the question. Reviews excluded."
+            )
+        elif screening:
+            warnings.append(
+                f"Counts cover all {aggregation['total']} keyword matches, but only the top "
+                f"{screening['screened']} were screened for relevance ({screening['relevant']} "
+                "judged relevant), so the counts include studies that may not address the question."
+            )
         plan = request.model_dump()
         plan.update(sesoi=pico.sesoi, effectType=pico.effectType)
         verdicts = {d["id"]: assign_bucket(d, pico.sesoi, pico.effectType) for d in studies}
-        question = {
-            "idea": request.idea,
-            "intervention": pico.intervention,
-            "comparator": pico.comparator,
-            "outcome": pico.outcome,
-        }
         outcome_groups = await self.group_outcomes(question, studies, verdicts, usage, warnings)
         stats = await asyncio.to_thread(
             analyze_studies, studies, plan, aggregation["fileDrawer"], outcome_groups
@@ -602,7 +695,8 @@ class SearchPipeline:
             "bucketCounts": aggregation["bucketCounts"],
             "inconclusiveReasons": aggregation.get("inconclusiveReasons"),
             "yearCounts": aggregation["yearCounts"],
-            "countScope": "All indexed lexical matches plus screened review references; reviews excluded. Planning uses compatible studies among the top retrieved results.",
+            "countScope": count_scope,
+            "screening": screening,
             "nullTerms": aggregation["nullTerms"],
             "statistics": stats,
             "costs": usage.summary([d.get("abstract", "") for d in targets], self.config),
