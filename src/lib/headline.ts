@@ -1,4 +1,4 @@
-import type { Verdict } from "../types";
+import type { EffectDirections, Verdict } from "../types";
 
 export interface Headline {
   /** Has this been tested before? */
@@ -19,6 +19,8 @@ export function headline(
   provisional: boolean,
   /** Read studies with a comparison group; omitted when the API does not report it. */
   controlled?: number,
+  /** Splits the effects by the arm they favoured, so a difference is never read as a benefit. */
+  directions?: EffectDirections,
 ): Headline {
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   if (total === 0) {
@@ -48,12 +50,15 @@ export function headline(
     };
   }
   const caveat = provisional ? " These are claims read from abstracts; their size is unverified." : "";
+  const split = directions && directions.favoursComparator > 0
+    ? ` Not all in the same direction: ${directions.favoursIntervention} favoured the intervention, ${directions.favoursComparator} favoured the comparator.`
+    : "";
   const found =
     nulls === 0 ? `${counts.effect === 1 ? "It reports" : `All ${counts.effect} report`} an effect.${caveat}`
     : counts.effect === 0 ? `${nulls === 1 ? "It found" : `All ${nulls} found`} no significant difference${counts.credible_null === nulls ? ", with intervals tight enough to rule out a meaningful effect" : ""}.`
     : `Results are split: ${plural(counts.effect, "reports", "report")} an effect, ${plural(nulls, "reports", "report")} no difference.${caveat}`;
   return {
     title: "This has been tested before",
-    detail: `${reported} of ${plural(total, "matching study reports", "matching studies report")} a result. ${found}${silent ? ` Of the rest, ${silent}.` : ""}`,
+    detail: `${reported} of ${plural(total, "matching study reports", "matching studies report")} a result. ${found}${split}${silent ? ` Of the rest, ${silent}.` : ""}`,
   };
 }

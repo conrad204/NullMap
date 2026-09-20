@@ -537,6 +537,70 @@ def test_extraction_cache_patch_refreshes_normalized_retrieval_text():
     assert "abstract" not in patch
 
 
+def aggregation_response(bucket_rows, direction_rows, total=None):
+    counted = sum(row["doc_count"] for row in bucket_rows)
+    return {
+        "hits": {"total": {"value": total if total is not None else counted}},
+        "aggregations": {
+            "buckets": {"buckets": bucket_rows},
+            "years": {"buckets": []},
+            "nulls": {"sample": {"terms": {"buckets": []}}},
+            "completed": {"doc_count": 0, "missing": {"doc_count": 0}, "overdue": {"doc_count": 0}},
+            "effect_directions": {"directions": {"buckets": direction_rows}},
+            "spin_candidates": {"doc_count": 0, "spin": {"doc_count": 0}},
+        },
+    }
+
+
+def test_effect_directions_are_counted_over_the_full_match_set_and_partition_the_bucket():
+    response = aggregation_response(
+        [
+            {"key": "effect", "doc_count": 6},
+            {"key": "credible_null", "doc_count": 2},
+            {"key": "inconclusive:wide_interval", "doc_count": 1},
+        ],
+        [
+            {"key": "favours_intervention", "doc_count": 4},
+            {"key": "favours_comparator", "doc_count": 1},
+            {"key": "unclear", "doc_count": 1},
+        ],
+    )
+    client = SimpleNamespace(search=AsyncMock(return_value=response))
+    repo = ElasticRepository(Settings(_env_file=None), client=client)
+    repo._index_ready = True
+    aggregate = asyncio.run(repo.aggregate({"match_all": {}}, 0.2, "SMD"))
+    assert aggregate["effectDirections"] == {
+        "favoursIntervention": 4,
+        "favoursComparator": 1,
+        "unclear": 1,
+    }
+    assert sum(aggregate["effectDirections"].values()) == aggregate["bucketCounts"]["effect"]
+    directions = client.search.call_args.kwargs["aggs"]["effect_directions"]
+    assert directions["filter"] == {"term": {"query_bucket": "effect"}}
+    assert directions["aggs"]["directions"]["terms"]["missing"] == "unclear"
+
+
+def test_effects_without_a_stated_direction_are_folded_into_unclear_not_dropped():
+    response = aggregation_response(
+        [{"key": "effect", "doc_count": 5}],
+        [
+            {"key": "favours_intervention", "doc_count": 2},
+            # A document with no result_direction arrives under the aggregation's missing value.
+            {"key": "unclear", "doc_count": 3},
+        ],
+    )
+    client = SimpleNamespace(search=AsyncMock(return_value=response))
+    repo = ElasticRepository(Settings(_env_file=None), client=client)
+    repo._index_ready = True
+    aggregate = asyncio.run(repo.aggregate({"match_all": {}}, 0.2, "SMD"))
+    assert aggregate["effectDirections"] == {
+        "favoursIntervention": 2,
+        "favoursComparator": 0,
+        "unclear": 3,
+    }
+    assert sum(aggregate["effectDirections"].values()) == aggregate["bucketCounts"]["effect"] == 5
+
+
 @pytest.mark.skipif(
     not os.getenv("NULLMAP_TEST_ELASTIC_URL"), reason="Opt-in real Elasticsearch test"
 )

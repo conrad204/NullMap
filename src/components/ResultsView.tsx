@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
-import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, VERDICT_ORDER, countByVerdict, type BarGroupKey } from "../lib/verdicts";
+import type { EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import { BAR_GROUPS, BAR_VERDICTS, FILTER_GROUPS, INCONCLUSIVE_REASONS, UNSTATED_DIRECTION_GROUP, VERDICT_META, VERDICT_ORDER, countByVerdict, directionsFromPapers, type BarGroup, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
 import { SORT_OPTIONS, sortPapers, type SortKey } from "../lib/sort";
@@ -11,8 +11,9 @@ import MapPanel from "./MapPanel";
 
 type Filter = BarGroupKey | Verdict | "all";
 const isVerdict = (filter: Filter): filter is Verdict => (VERDICT_ORDER as string[]).includes(filter);
-const filterVerdicts = (filter: Filter): Verdict[] => isVerdict(filter) ? [filter] : BAR_GROUPS.find((group) => group.key === filter)?.verdicts ?? [];
-const filterLabel = (filter: Filter) => isVerdict(filter) ? VERDICT_META[filter].label : BAR_GROUPS.find((group) => group.key === filter)?.label ?? "";
+const filterGroup = (filter: Filter) => FILTER_GROUPS.find((group) => group.key === filter);
+const matchesFilter = (filter: Filter, paper: Paper) => filter === "all" || (isVerdict(filter) ? paper.verdict === filter : filterGroup(filter)?.matches(paper) === true);
+const filterLabel = (filter: Filter) => isVerdict(filter) ? VERDICT_META[filter].label : filterGroup(filter)?.label ?? "";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
 const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
@@ -37,12 +38,14 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const reasons = result.inconclusiveReasons ?? countReasons(result.papers);
   // Provisional when no displayed effect is backed by numbers.
   const effects = result.papers.filter((paper) => paper.verdict === "effect");
-  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled);
   const matched = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  // Older payloads carry no direction split over the match set; the displayed studies are all we can count.
+  const directions = result.effectDirections ?? directionsFromPapers(result.papers);
+  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled, result.effectDirections ?? undefined);
   // Stated beside the active filters, not in the warnings list: a reader of filtered
   // results has to be told why unpublished trial records survived a citation bound.
   const exemption = registryExemptionNotice(result.filters, result.papers);
-  const shown = sortPapers(filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict)), sort);
+  const shown = sortPapers(result.papers.filter((paper) => matchesFilter(filter, paper)), sort);
   return (
     <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
       <div className="flex min-w-0 flex-col gap-10">
@@ -64,7 +67,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       {result.pico && <details className="text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>}
       {result.recommendedPico && <RecommendedPicoPanel recommended={result.recommendedPico} />}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
-      <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
+      <VerdictBreakdown counts={counts} directions={directions} directionsOverMatchSet={result.effectDirections != null} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
       <MapPanel idea={result.idea} />
@@ -139,24 +142,37 @@ function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
     <p className="mt-3 max-w-[70ch] text-xs leading-relaxed text-ink-3">{trend.scope} An “effect” is a significant difference in either direction, so the split matters. {trend.summary ? "The counts are computed; the paragraph is a generated reading of the studies’ extracted facts and quotes, and introduces no numbers of its own." : "A written summary needs at least two such studies."}</p>
   </section>;
 }
-function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
+function VerdictBreakdown({ counts, directions, directionsOverMatchSet, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; directions: EffectDirections; directionsOverMatchSet: boolean; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
-  const groups = BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) }));
+  const groups = BAR_GROUPS.map((group) => ({ group, total: group.total(counts, directions) }));
+  // A direction counted off the page is not a count of the match set: show no number rather than a zero.
+  const display = (group: BarGroup, total: number) => total === 0 && group.direction && !directionsOverMatchSet ? "—" : formatCount(total);
+  const unstated = UNSTATED_DIRECTION_GROUP.total(counts, directions);
   return <section>
     <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
-    <div role="img" aria-label={groups.map(({ group, total }) => `${total} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
+    <div role="img" aria-label={groups.map(({ group, total }) => `${display(group, total)} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
       {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
       {groups.filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className={cx(group.bg, "min-w-1 basis-0 rounded-mark transition-opacity duration-300", filter !== "all" && filter !== group.key && "opacity-25")} />)}
     </div>
-    <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">{groups.map(({ group, total }) => <li key={group.key}>
+    <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">{groups.map(({ group, total }) => <li key={group.key}>
       <button type="button" title={group.description} onClick={() => onFilter(filter === group.key ? "all" : group.key)} aria-pressed={filter === group.key} className={cx("group -mx-2 flex w-[calc(100%+1rem)] flex-col gap-1.5 rounded-control p-2 text-left transition-colors", filter === group.key ? "bg-surface-2" : "hover:bg-surface-2/60")}>
-        <span className="flex items-baseline gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 self-center rounded-mark", group.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(total)}</span><span className="text-sm font-medium text-ink">{group.label}</span></span>
-        <span className="text-xs leading-relaxed text-ink-3">{group.verdicts.length === 1 ? VERDICT_META[group.verdicts[0]].short : group.verdicts.map((verdict) => `${formatCount(counts[verdict])} ${VERDICT_META[verdict].short}`).join(" · ")}</span>
+        <span className="flex items-baseline gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 self-center rounded-mark", group.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{display(group, total)}</span><span className="text-sm font-medium text-ink">{group.label}</span></span>
+        <span className="text-xs leading-relaxed text-ink-3">{group.detail(counts)}</span>
       </button>
     </li>)}</ul>
-    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select an answer to filter the displayed studies below.</p>
+    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} {directionsOverMatchSet ? `Which arm an effect favoured is the study's own stated result, read from a quoted sentence; benefit, harm and any unstated direction together make up the ${formatCount(counts.effect)} that found a difference.` : "No direction breakdown came back for the match set, so the direction counts cover the displayed studies only and a dash means none of them stated it."} Select an answer to filter the displayed studies below.</p>
+    {unstated > 0 && <UnstatedDirectionNote count={unstated} scoped={directionsOverMatchSet} active={filter === UNSTATED_DIRECTION_GROUP.key} onToggle={() => onFilter(filter === UNSTATED_DIRECTION_GROUP.key ? "all" : UNSTATED_DIRECTION_GROUP.key)} />}
     <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
+}
+function UnstatedDirectionNote({ count, scoped, active, onToggle }: { count: number; scoped: boolean; active: boolean; onToggle: () => void }) {
+  return <div className="mt-6 border-t border-line pt-5">
+    <button type="button" onClick={onToggle} aria-pressed={active} className={cx("group -m-2 flex items-baseline gap-2 rounded-control p-2 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+      <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(count)}</span>
+      <span className="text-sm text-ink-2 group-hover:text-ink">further {count === 1 ? "match" : "matches"} found a difference without saying which arm it favoured</span>
+    </button>
+    <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-ink-2">{UNSTATED_DIRECTION_GROUP.description} It is left out of the bar because it answers neither benefit nor harm.{scoped ? "" : " Counted over the displayed studies only."}</p>
+  </div>;
 }
 function InconclusiveNote({ count, reasons, active, onToggle }: { count: number; reasons: Partial<Record<InconclusiveReason, number>>; active: boolean; onToggle: () => void }) {
   if (count === 0) return null;

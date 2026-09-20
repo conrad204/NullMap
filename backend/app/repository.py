@@ -25,6 +25,12 @@ from app.statistics import (
 )
 
 BUCKETS = ("effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported")
+# Direction is a property of an effect, not a bucket: these partition the effect bucket.
+EFFECT_DIRECTIONS = {
+    "favours_intervention": "favoursIntervention",
+    "favours_comparator": "favoursComparator",
+    "unclear": "unclear",
+}
 _CACHE_FIELDS = set(
     (
         "extracted_at extraction_version extraction_status extraction_evidence evidence_span "
@@ -875,15 +881,56 @@ class ElasticRepository:
                 "source",
             ],
         }
-        if self._vector_source_filter:
-            try:
-                result = await self.client.search(**body, source_exclude_vectors=False)
-            except (BadRequestError, TypeError):
-                self._vector_source_filter = False
-                result = await self.client.search(**body)
-        else:
-            result = await self.client.search(**body)
+        result = await self._search_with_vectors(body)
         return {"documents": self.hits(result), "corpus": total["count"]}
+
+    async def _search_with_vectors(self, body: dict) -> Any:
+        """Search keeping the stored vectors in `_source`, on 9.1 and on 9.2+."""
+        if not self._vector_source_filter:
+            return await self.client.search(**body)
+        try:
+            return await self.client.search(**body, source_exclude_vectors=False)
+        except (BadRequestError, TypeError):
+            self._vector_source_filter = False
+            return await self.client.search(**body)
+
+    async def knn_studies(
+        self, vector: list[float], limit: int, filters: dict | None = None
+    ) -> list[dict]:
+        """Nearest studies to an arbitrary vector, each with its own embedding.
+
+        The vectors travel back because the caller reports a cosine per concept,
+        which cannot be recomputed without them. Elasticsearch scores a `cosine`
+        dense vector as `(1 + cos) / 2`, so the score is converted back to the
+        cosine rather than reported as an opaque relevance number.
+        """
+        await self.ensure_index()
+        body = {
+            "index": self.index,
+            "size": limit,
+            "knn": {
+                "field": "embedding",
+                "query_vector": vector,
+                "k": limit,
+                "num_candidates": min(10 * limit, 1000),
+                "filter": [{"term": {"record_kind": "study"}}, *filter_clauses(filters)],
+            },
+            "source_includes": [
+                "embedding",
+                "title",
+                "year",
+                "url",
+                "source",
+                "bucket",
+                "query_bucket",
+                "cited_by_count",
+            ],
+        }
+        result = await self._search_with_vectors(body)
+        return [
+            dict(hit["_source"], id=hit["_id"], cosine=2 * float(hit["_score"]) - 1)
+            for hit in result["hits"]["hits"]
+        ]
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
         base = {"index": self.index, "size": RETRIEVE_LIMIT, "source_excludes": ["embedding"]}
@@ -1136,6 +1183,18 @@ class ElasticRepository:
                         },
                     },
                 },
+                "effect_directions": {
+                    "filter": {"term": {"query_bucket": "effect"}},
+                    "aggs": {
+                        "directions": {
+                            "terms": {
+                                "field": "result_direction",
+                                "missing": "unclear",
+                                "size": len(EFFECT_DIRECTIONS),
+                            }
+                        }
+                    },
+                },
                 "spin_candidates": {
                     "filter": {
                         "bool": {
@@ -1157,12 +1216,17 @@ class ElasticRepository:
             counts[bucket] += row["doc_count"]
             if reason:
                 reasons[reason] += row["doc_count"]
+        directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
+        for row in aggs["effect_directions"]["directions"]["buckets"]:
+            # An unrecognized direction is not a fourth answer; it is one nobody stated.
+            directions[EFFECT_DIRECTIONS.get(row["key"], "unclear")] += row["doc_count"]
         registered = aggs["completed"]["doc_count"]
         unreported = aggs["completed"]["missing"]["doc_count"]
         return {
             "total": result["hits"]["total"]["value"],
             "bucketCounts": counts,
             "inconclusiveReasons": reasons,
+            "effectDirections": directions,
             "yearCounts": [
                 {"year": int(b["key_as_string"][:4]), "count": b["doc_count"]}
                 for b in aggs["years"]["buckets"]
