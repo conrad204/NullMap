@@ -22,6 +22,15 @@ export async function mockConceptSearch(
     ...req.positive.map((text) => ({ text, sign: "positive" as const })),
     ...req.negative.map((text) => ({ text, sign: "negative" as const })),
   ];
+  // The real service rejects a combination that cancels to a zero vector; the demo must not
+  // invent results for a query the backend would refuse.
+  const same = (a: string[], b: string[]) => {
+    const norm = (terms: string[]) => [...terms].map((term) => term.toLowerCase()).sort().join("|");
+    return a.length > 0 && norm(a) === norm(b);
+  };
+  if (same(req.positive, req.negative)) {
+    throw new Error("The concepts cancel each other out, so the search has no direction.");
+  }
   const matches: ConceptMatch[] = Array.from({ length: Math.min(req.limit ?? 8, 8) }, (_, index) => ({
     id: `demo_concept_${index}`,
     title: `Illustrative paper ${index + 1} near ${req.positive[0] ?? "the combined direction"}`,

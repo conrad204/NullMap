@@ -28,8 +28,10 @@ type State =
  */
 export default function ConceptSearch() {
   const [concepts, setConcepts] = useState<Concept[]>([]);
+  const [drafts, setDrafts] = useState<Record<ConceptSign, string>>({ positive: "", negative: "" });
   const [state, setState] = useState<State>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -40,6 +42,7 @@ export default function ConceptSearch() {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
+    setSearched(expression(query));
     setState({ kind: "searching" });
     try {
       const result = await searchConcepts(toRequest(query), ac.signal);
@@ -52,11 +55,17 @@ export default function ConceptSearch() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void run(concepts);
+    // A term still being typed is part of the query the user sees, so submit it too.
+    let query = concepts;
+    for (const sign of SIGNS) query = addConcepts(query, drafts[sign], sign);
+    setConcepts(query);
+    setDrafts({ positive: "", negative: "" });
+    void run(query);
   }
 
   const positive = bySign(concepts, "positive");
   const line = expression(concepts);
+  const stale = state.kind === "done" && searched !== line;
 
   return (
     <section aria-labelledby="concepts-heading" className="flex flex-col gap-6">
@@ -77,6 +86,8 @@ export default function ConceptSearch() {
               key={sign}
               sign={sign}
               concepts={bySign(concepts, sign)}
+              draft={drafts[sign]}
+              onDraft={(value) => setDrafts((current) => ({ ...current, [sign]: value }))}
               onAdd={(raw) => { setConcepts((current) => addConcepts(current, raw, sign)); setError(null); }}
               onRemove={(id) => setConcepts((current) => removeConcept(current, id))}
               onFlip={(id) => setConcepts((current) => flipConcept(current, id))}
@@ -87,12 +98,13 @@ export default function ConceptSearch() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="min-w-0 text-sm text-ink-2">
             {positive.length ? (
-              <>Searching near <span className="font-mono text-[0.9em] text-ink">{line}</span></>
+              <>Searching near <span className="font-mono text-[0.9em] break-all text-ink">{line}</span></>
             ) : (
               "Add a positive concept to search; negative concepts are optional."
             )}
           </p>
-          <button type="submit" disabled={state.kind === "searching"} className="btn btn-primary shrink-0">
+          {/* Committing the draft on blur would move the button out from under a click already on its way. */}
+          <button type="submit" disabled={state.kind === "searching"} onMouseDown={(event) => event.preventDefault()} className="btn btn-primary shrink-0">
             {state.kind === "searching" ? "Searching…" : "Search concepts"}
             <ArrowRight size={16} weight="bold" aria-hidden />
           </button>
@@ -124,22 +136,24 @@ export default function ConceptSearch() {
 
       <div aria-live="polite" className="min-w-0">
         {state.kind === "error" && <p role="alert" className="text-sm text-v-failed">{state.message}</p>}
+        {stale && <p className="mb-2 text-sm text-ink-3">Showing results for <span className="font-mono text-[0.9em] break-all">{searched}</span>. Search again for the combination above.</p>}
         {state.kind === "done" && <ConceptResults result={state.result} />}
       </div>
     </section>
   );
 }
 
-function ConceptField({ sign, concepts, onAdd, onRemove, onFlip }: {
+function ConceptField({ sign, concepts, draft, onDraft, onAdd, onRemove, onFlip }: {
   sign: ConceptSign;
   concepts: Concept[];
+  draft: string;
+  onDraft: (value: string) => void;
   onAdd: (raw: string) => void;
   onRemove: (id: string) => void;
   onFlip: (id: string) => void;
 }) {
   const meta = SIGN_META[sign];
-  const [draft, setDraft] = useState("");
-  const commit = () => { if (draft.trim()) { onAdd(draft); setDraft(""); } };
+  const commit = () => { if (draft.trim()) { onAdd(draft); onDraft(""); } };
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter" || event.key === ",") {
       event.preventDefault();
@@ -179,7 +193,7 @@ function ConceptField({ sign, concepts, onAdd, onRemove, onFlip }: {
         </ul>
       )}
       <input id={inputId} value={draft} className="field" placeholder={meta.placeholder} maxLength={200}
-        onChange={(event) => setDraft(event.target.value)} onKeyDown={onKeyDown} onBlur={commit} />
+        onChange={(event) => onDraft(event.target.value)} onKeyDown={onKeyDown} onBlur={commit} />
     </div>
   );
 }
@@ -215,7 +229,7 @@ function ConceptRow({ match }: { match: ConceptMatch }) {
   return (
     <li className="rounded-panel border border-line bg-surface p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="min-w-0 flex-1 font-medium leading-snug text-ink">
+        <p className="min-w-0 flex-1 break-words font-medium leading-snug text-ink">
           {match.url ? (
             <a href={match.url} target="_blank" rel="noreferrer" className="underline-offset-4 hover:text-accent hover:underline">{match.title}</a>
           ) : match.title}
