@@ -77,7 +77,7 @@ export const DEFAULT_OPTIONS: LayoutOptions = {
   nudge: 0.2,
   alphaDecay: 0.028,
   alphaMin: 0.003,
-  velocityDecay: 0.4,
+  velocityDecay: 0.46,
   repulsion: 36,
   repulsionReach: 260,
   pointRadius: 2.2,
@@ -289,15 +289,22 @@ export class ForceLayout {
     this.alpha = Math.max(this.alpha, this.options.nudge);
   }
 
-  /** Holds a node under the pointer; it still pushes its neighbors around. */
+  /**
+   * Holds a node under the pointer; it still pushes its neighbors around.
+   *
+   * Grabbing a paper wakes the graph, but the rest of a drag only keeps it
+   * awake: re-heating on every pointer move made the whole picture judder
+   * around the held paper instead of flowing out of its way.
+   */
   pin(i: number, x: number, y: number): void {
+    const held = !Number.isNaN(this.fixedX[i]);
     this.fixedX[i] = x;
     this.fixedY[i] = y;
     this.x[i] = x;
     this.y[i] = y;
     this.vx[i] = 0;
     this.vy[i] = 0;
-    this.alpha = Math.max(this.alpha, this.options.reheat);
+    this.alpha = Math.max(this.alpha, held ? this.options.nudge : this.options.reheat);
   }
 
   /** Lets a held node go; the graph warms up enough to take it back in. */

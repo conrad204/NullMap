@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
-import { ArrowsOut, Minus, Plus } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowsOut, Minus, Plus } from "@phosphor-icons/react";
 import type { MapEdge, MapPoint, Verdict } from "../types";
 import { clusterHue, clusterLabels, countClusters, pruneEdges } from "../lib/clusters";
 import { ForceLayout } from "../lib/forceLayout";
@@ -17,8 +17,12 @@ interface MapCanvasProps {
 const HOVER_RADIUS = 8;
 /** Links kept per paper. Everything above the server's floor is a hairball; its strongest ties are a graph. */
 const LINKS_PER_PAPER = 6;
-const MIN_ZOOM = 1;
+/** Below the fit, so the whole graph can be pushed back and read as a shape. */
+const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 24;
+/** How the replay lets the papers back in: this many arrivals, this far apart. */
+const REPLAY_STEPS = 24;
+const REPLAY_INTERVAL = 90;
 /** The layout id of the reader's own question, which is a node like the papers. */
 const QUESTION_ID = "\u0000question";
 
@@ -81,6 +85,9 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
   const [dragging, setDragging] = useState(false);
   const dirtyRef = useRef(true);
   const [clusterCount, setClusterCount] = useState(0);
+  // While a replay runs this is how many papers have arrived so far; null is
+  // the normal state, where every paper the server sent is on the map.
+  const [revealed, setRevealed] = useState<number | null>(null);
   const latest = useRef<{ points: MapPoint[]; edges: MapEdge[]; placementPoint: { x: number; y: number } | null; building: boolean; clusters: Int32Array }>({ points, edges, placementPoint, building, clusters: new Int32Array(0) });
 
   // The simulation is fed, never rebuilt: papers the layout has seen keep the
@@ -89,8 +96,15 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
   // frame that reorders or drops papers cannot move the ones that stay.
   useEffect(() => {
     const layout = layoutRef.current!;
+    // A replay shows the same map arriving a few papers at a time: the ones
+    // that have not arrived yet are simply not in the layout, so they enter at
+    // their projected coordinates and are drawn into place by the same forces.
+    const shown = revealed === null ? points : points.slice(0, revealed);
+    const shownEdges = revealed === null
+      ? edges
+      : edges.filter(([a, b]) => a < shown.length && b < shown.length);
     const ids = new Set<string>();
-    const inputs = points.map((point) => {
+    const inputs = shown.map((point) => {
       ids.add(point.id);
       return { id: point.id, x: point.x, y: point.y };
     });
@@ -101,12 +115,12 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
     const emptied = layout.size > 0 && ids.size === 0;
     layout.retain(ids);
     layout.update(inputs);
-    const strongest = pruneEdges(points.length, edges, LINKS_PER_PAPER);
+    const strongest = pruneEdges(shown.length, shownEdges, LINKS_PER_PAPER);
     layout.unlink();
     layout.link(strongest.flatMap(([a, b, cosine]) =>
-      points[a] && points[b] ? [[points[a].id, points[b].id, cosine] as const] : []));
-    const clusters = clusterLabels(points.length, strongest);
-    latest.current = { points, edges: strongest, placementPoint, building, clusters };
+      shown[a] && shown[b] ? [[shown[a].id, shown[b].id, cosine] as const] : []));
+    const clusters = clusterLabels(shown.length, strongest);
+    latest.current = { points: shown, edges: strongest, placementPoint, building, clusters };
     setClusterCount(countClusters(clusters));
     if (emptied) {
       // A new question, a new picture: only then does the camera go home.
@@ -115,7 +129,20 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
       setTransform(IDENTITY);
     }
     dirtyRef.current = true;
-  }, [points, edges, placementPoint, building]);
+  }, [points, edges, placementPoint, building, revealed]);
+
+  // The replay itself: papers arrive in equal batches until they are all back,
+  // then the map returns to following the server's set.
+  useEffect(() => {
+    if (revealed === null) return;
+    if (revealed >= points.length) {
+      setRevealed(null);
+      return;
+    }
+    const batch = Math.max(1, Math.ceil(points.length / REPLAY_STEPS));
+    const timer = window.setTimeout(() => setRevealed((seen) => (seen === null ? null : seen + batch)), REPLAY_INTERVAL);
+    return () => window.clearTimeout(timer);
+  }, [revealed, points.length]);
 
   useEffect(() => {
     dirtyRef.current = true;
@@ -382,6 +409,23 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
     if (canvas) zoomAt(factor, canvas.clientWidth / 2, canvas.clientHeight / 2);
   };
 
+  /**
+   * Runs the layout to rest at once, so a click ends the drifting instead of
+   * waiting it out. Bounded, because settling a full map is not free.
+   */
+  const snap = useCallback(() => {
+    const layout = layoutRef.current!;
+    layout.settle(fitRef.current?.scale ?? 1, 300);
+    dirtyRef.current = true;
+  }, []);
+
+  /** Empties the map and lets the same papers arrive again, a few at a time. */
+  const replay = useCallback(() => {
+    if (!points.length) return;
+    setHover(null);
+    setRevealed(1);
+  }, [points.length]);
+
   /** The layout node under a canvas pixel, or -1. */
   const nodeAt = (px: number, py: number): number => {
     const plane = toPlane(px, py);
@@ -411,6 +455,8 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
     dragRef.current = null;
     setDragging(false);
     event.currentTarget.releasePointerCapture(event.pointerId);
+    // A click that went nowhere is a request for the picture to stop moving.
+    if (!drag.moved) snap();
   }
 
   function handleMove(event: MouseEvent<HTMLCanvasElement>) {
@@ -489,6 +535,7 @@ export default function MapCanvas({ points, edges, placementPoint = null, buildi
             { label: "Zoom in", icon: <Plus size={14} weight="bold" />, run: () => zoomCenter(1.4), off: transform.k >= MAX_ZOOM },
             { label: "Zoom out", icon: <Minus size={14} weight="bold" />, run: () => zoomCenter(1 / 1.4), off: transform.k <= MIN_ZOOM },
             { label: "Reset the view", icon: <ArrowsOut size={14} weight="bold" />, run: () => { movedRef.current = false; setTransform(IDENTITY); }, off: transform.k === 1 && transform.tx === 0 && transform.ty === 0 },
+            { label: "Replay the papers arriving", icon: <ArrowClockwise size={14} weight="bold" />, run: replay, off: revealed !== null || points.length === 0 },
           ].map(({ label, icon, run, off }) => (
             <button
               key={label}
