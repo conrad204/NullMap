@@ -5,7 +5,7 @@ from statistics import NormalDist
 import numpy as np
 import pytest
 
-from app.statistics import analyze_studies, assign_bucket
+from app.statistics import analyze_studies, assign_bucket, derive_effects, stored_analysis
 
 
 def study(sid="a", estimate=0.02, low=-0.1, high=0.14, **kwargs):
@@ -81,7 +81,9 @@ def test_significant_small_point_with_meaningful_ci_tail_remains_inconclusive():
 
 def test_text_null_never_becomes_credible_null():
     result = assign_bucket({"result_label": "null", "n": 10_000})
-    assert result["bucket"] == "inconclusive"
+    # A reported null is surfaced as such, but is never evidence of equivalence.
+    assert result["bucket"] == "reported_null"
+    assert "cannot establish absence" in result["rationale"]
     assert result["evidence_tier"] == "text_only"
     assert result["mde"] is None
     positive = assign_bucket({"result_label": "positive"})
@@ -163,7 +165,7 @@ def test_estimate_and_exact_p_can_reconstruct_but_p_and_n_alone_cannot():
     p_only = {"effect_type": "SMD", "n": 400, "p_value": 0.5, "result_label": "null"}
     result = assign_bucket(p_only)
     assert result["analysis_se"] is None
-    assert result["bucket"] == "inconclusive"
+    assert result["bucket"] == "reported_null"
     reconstructed = assign_bucket({**p_only, "estimate": 0.1, "p_value": 0.05})
     assert reconstructed["evidence_tier"] == "reconstructed"
     assert reconstructed["analysis_se"] == pytest.approx(0.1 / 1.95996398454)
@@ -443,3 +445,133 @@ def test_review_without_control_arm_is_discovery_evidence_not_a_failed_trial():
     assert assign_bucket(review)["bucket"] == "inconclusive"
     assert "Review used for discovery" in assign_bucket(review)["rationale"]
     assert assign_bucket({**review, "is_retracted": True})["bucket"] == "failed"
+
+
+ARMS = {
+    "mean_intervention": 12.0, "mean_comparator": 10.0, "sd_intervention": 4.0,
+    "sd_comparator": 4.0, "n_intervention": 50, "n_comparator": 50,
+}
+
+
+def test_arm_level_means_give_hedges_g_and_mean_difference():
+    effects = derive_effects(ARMS)
+    correction = 1 - 3 / (4 * 98 - 1)
+    assert effects["SMD"]["estimate"] == pytest.approx(0.5 * correction)
+    assert effects["SMD"]["se"] == pytest.approx(correction * sqrt(100 / 2500 + 0.25 / 200))
+    assert effects["MD"]["estimate"] == pytest.approx(2.0)
+    assert effects["MD"]["se"] == pytest.approx(sqrt(16 / 50 + 16 / 50))
+    result = assign_bucket({**ARMS, "outcome": "Pain"})
+    assert result["evidence_tier"] == "derived" and result["bucket"] == "effect"
+    assert any("Hedges" in note for note in result["numeric_notes"])
+
+
+def test_arm_level_events_give_log_ratios_with_continuity_correction_only_when_needed():
+    arms = {"events_intervention": 20, "events_comparator": 40,
+            "n_intervention": 100, "n_comparator": 100}
+    effects = derive_effects(arms)
+    assert effects["logOR"]["estimate"] == pytest.approx(log((20 * 60) / (80 * 40)))
+    assert effects["logOR"]["se"] == pytest.approx(sqrt(1 / 20 + 1 / 80 + 1 / 40 + 1 / 60))
+    assert effects["logRR"]["estimate"] == pytest.approx(log(0.2 / 0.4))
+    assert set(effects) == {"logOR", "logRR"}
+    empty_cell = derive_effects({**arms, "events_intervention": 0})
+    assert empty_cell["logOR"]["estimate"] == pytest.approx(log((0.5 * 60.5) / (100.5 * 40.5)))
+    assert "continuity" in empty_cell["logOR"]["note"]
+
+
+@pytest.mark.parametrize(
+    "arms",
+    [
+        {**ARMS, "sd_comparator": None},
+        {**ARMS, "sd_intervention": 0},
+        {**ARMS, "n_comparator": 1},
+        {**ARMS, "n_intervention": 50.5},
+        {"events_intervention": 0, "events_comparator": 0, "n_intervention": 9, "n_comparator": 9},
+        {"events_intervention": 9, "events_comparator": 9, "n_intervention": 9, "n_comparator": 9},
+        {"events_intervention": 12, "events_comparator": 3, "n_intervention": 9, "n_comparator": 9},
+        {"mean_intervention": 1.0, "mean_comparator": 2.0, "n_intervention": 9, "n_comparator": 9},
+        # 96 units apart with "SDs" of 1.0 and 2.3: a standard error reported as an SD.
+        {"mean_intervention": 202.1, "mean_comparator": 298.0, "sd_intervention": 1.0,
+         "sd_comparator": 2.3, "n_intervention": 21, "n_comparator": 21},
+    ],
+)
+def test_incomplete_or_impossible_arm_summaries_derive_nothing(arms):
+    assert derive_effects(arms) == {}
+    assert assign_bucket(arms)["evidence_tier"] == "text_only"
+
+
+def test_reported_interval_on_the_requested_scale_is_never_replaced_by_a_derived_one():
+    trial = {"effect_type": "HR", "estimate": 0.96, "ci_low": 0.88, "ci_high": 1.06,
+             "events_intervention": 793, "events_comparator": 824,
+             "n_intervention": 12927, "n_comparator": 12944}
+    reported = assign_bucket(trial, 1.25, "HR")
+    assert reported["evidence_tier"] == "numeric" and reported["analysis_effect_type"] == "logHR"
+    assert reported["analysis_estimate"] == pytest.approx(log(0.96))
+    derived = assign_bucket(trial, 1.25, "OR")
+    assert derived["evidence_tier"] == "derived" and derived["bucket"] == "credible_null"
+    # No arm-level route to SMD: the reported scale is shown and cannot be compared.
+    mismatch = assign_bucket(trial, 0.2, "SMD")
+    assert mismatch["bucket"] == "inconclusive" and mismatch["analysis_effect_type"] == "logHR"
+    # The index keeps the reported analysis whatever the default scale selected.
+    assert stored_analysis(trial)["analysis_effect_type"] == "logHR"
+    assert reported["derived_logor_ci_high"] == pytest.approx(derived["analysis_ci_high"])
+    assert reported["derived_smd_estimate"] is None
+
+
+def test_derived_smds_pool_across_instruments_and_are_flagged():
+    rows = [
+        {**ARMS, "id": f"S{i}", "mean_intervention": 10.0 + shift, "outcome": "Pain",
+         "outcome_unit": unit, "intervention": "Drug", "comparator": "Placebo"}
+        for i, (shift, unit) in enumerate([(0.2, "mm VAS"), (0.0, "points"), (-0.2, "")])
+    ]
+    stats = analyze_studies(rows, {"sesoi": 0.2, "effectType": "SMD", "plannedN": 400})
+    assert [pool["k"] for pool in stats["pools"]] == [3]
+    assert stats["pools"][0]["unit"] == "SD"
+    assert stats["assurance"] is not None
+    assert any("arm-level summaries" in warning for warning in stats["warnings"])
+
+
+def test_quoted_reported_result_outranks_the_phrase_lexicon_but_never_an_interval():
+    stated_null = assign_bucket({"result_label": "positive", "reported_result": "null"})
+    assert stated_null["bucket"] == "reported_null"
+    assert stated_null["rationale"].startswith("The report states")
+    assert assign_bucket({"result_label": "no_result_stated", "reported_result": "positive"})[
+        "bucket"] == "effect"
+    assert assign_bucket({"reported_result": "mixed"})["bucket"] == "inconclusive"
+    # A reported interval still decides: a text "positive" cannot make this an effect.
+    numeric = assign_bucket({"reported_result": "positive", "effect_type": "SMD",
+                             "estimate": 0.02, "ci_low": -0.1, "ci_high": 0.14})
+    assert numeric["bucket"] == "credible_null" and numeric["evidence_tier"] == "numeric"
+
+
+@pytest.mark.parametrize(
+    ("raw", "scale"),
+    [
+        ("mean difference in IOP (FC-NFC) in mmHg", "MD"),
+        ("adjusted hazard ratio", "logHR"),
+        ("standardized mean difference (Hedges g)", "SMD"),
+        ("log odds ratio per SD", "logOR"),
+        ("relative risk reduction", "logRR"),
+        ("percent change", None),
+    ],
+)
+def test_free_text_effect_scales_are_normalised_without_confusing_log_or_standardized(raw, scale):
+    result = assign_bucket({"effect_type": raw, "estimate": 1.1, "ci_low": 1.0, "ci_high": 1.2})
+    assert result["analysis_effect_type"] == scale
+
+
+@pytest.mark.parametrize(
+    ("row", "reason"),
+    [
+        ({"effect_type": "SMD", "estimate": 0.1, "ci_low": -0.6, "ci_high": 0.7}, "wide_interval"),
+        ({"result_label": "mixed"}, "mixed_result"),
+        ({"result_label": "no_result_stated"}, "no_result"),
+        ({"effect_type": "HR", "estimate": 0.9, "ci_low": 0.7, "ci_high": 1.1}, "other_scale"),
+        ({"is_review": True}, "review"),
+    ],
+)
+def test_every_inconclusive_verdict_says_why_and_other_buckets_carry_no_reason(row, reason):
+    verdict = assign_bucket(row)
+    assert (verdict["bucket"], verdict["inconclusive_reason"]) == ("inconclusive", reason)
+    assert verdict["rationale"]
+    for other in ({"result_label": "null"}, {"result_label": "positive"}, {"is_retracted": True}):
+        assert assign_bucket(other)["inconclusive_reason"] is None

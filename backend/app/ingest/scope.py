@@ -6,7 +6,13 @@ import re
 from app.ingest.openalex import reconstruct_abstract
 
 SCOPE_VERSION = "hypertension-kidney-v1"
-PROFILES = ("hypertension-kidney", "all")
+PROFILES = ("hypertension-kidney", "hypertension-kidney-pubmed", "all")
+# The -pubmed profile is the same topical scope restricted to PubMed-indexed works.
+# Update-date partitions differ enormously in quality: some hold almost no PMIDs or
+# DOIs and many records whose title and abstract belong to different works. Registry
+# linking and Europe PMC full text both need the PubMed identity, so a corpus meant
+# for trial evidence can require it. It is opt-in and recorded as its own scope.
+PUBMED_SUFFIX = "-pubmed"
 TOPIC_IDS = {
     "T10144",
     "T11839",
@@ -34,9 +40,28 @@ CTGOV_QUERY = (
 )
 
 
+def is_pubmed_indexed(work: dict) -> bool:
+    ids = work.get("ids")
+    if isinstance(ids, str):
+        try:
+            ids = json.loads(ids)
+        except json.JSONDecodeError:
+            ids = {}
+    indexed = work.get("indexed_in")
+    return bool(
+        (isinstance(ids, dict) and ids.get("pmid"))
+        or work.get("pmid")
+        or (isinstance(indexed, (list, tuple)) and "pubmed" in indexed)
+    )
+
+
 def matches_work(work: dict, profile: str = "hypertension-kidney", topic: str = "") -> bool:
     if profile not in PROFILES:
         raise ValueError(f"Unknown scope: {profile}")
+    if profile.endswith(PUBMED_SUFFIX):
+        return is_pubmed_indexed(work) and matches_work(
+            work, profile.removesuffix(PUBMED_SUFFIX), topic
+        )
     topics = work.get("topics") or []
     topic_text = json.dumps(topics, ensure_ascii=False).lower()
     if topic and topic.lower() not in topic_text:
@@ -69,6 +94,17 @@ def coarse_predicate(columns: set[str], profile: str) -> str:
     """Cheap SQL prefilter; exact phrase matching follows abstract reconstruction."""
     if profile == "all":
         return "true"
+    if profile.endswith(PUBMED_SUFFIX):
+        # Text casts keep this valid whether ids is a MAP, a STRUCT or a JSON string.
+        identity = [
+            f"lower(CAST(\"{name}\" AS VARCHAR)) LIKE '%{needle}%'"
+            for name, needle in (("ids", "pmid"), ("indexed_in", "pubmed"))
+            if name in columns
+        ]
+        if "pmid" in columns:
+            identity.append('"pmid" IS NOT NULL')
+        topical = coarse_predicate(columns, profile.removesuffix(PUBMED_SUFFIX))
+        return f"({' OR '.join(identity) or 'false'}) AND {topical}"
     fields = [
         f"coalesce(CAST(\"{name}\" AS VARCHAR), '')"
         for name in ("title", "display_name", "abstract_inverted_index", "topics")

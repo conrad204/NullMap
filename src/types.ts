@@ -1,5 +1,19 @@
 /** JSON contract shared with the FastAPI service. */
-export type Verdict = "effect" | "credible_null" | "inconclusive" | "failed" | "unreported";
+export type InconclusiveReason =
+  | "wide_interval"
+  | "mixed_result"
+  | "no_result"
+  | "other_scale"
+  | "no_threshold"
+  | "review";
+
+export type Verdict =
+  | "effect"
+  | "credible_null"
+  | "reported_null"
+  | "inconclusive"
+  | "failed"
+  | "unreported";
 export type Source = "openalex" | "clinicaltrials" | "ctgov" | "merged" | "user" | "arxiv" | "pubmed" | "osf";
 export type EffectType = "SMD" | "MD" | "logOR" | "logRR" | "logHR";
 export interface EffectSize {
@@ -21,11 +35,13 @@ export interface Paper {
   snapshotDate?: string | null;
   verdict: Verdict;
   rationale: string;
+  /** Set only when verdict is "inconclusive". */
+  inconclusiveReason?: InconclusiveReason | null;
   sampleSize: number | null;
   effectSize: EffectSize | null;
   evidenceSpan?: string;
   numericSource?: string | null;
-  evidenceTier?: "numeric" | "reconstructed" | "text_only";
+  evidenceTier?: "numeric" | "derived" | "reconstructed" | "text_only";
   mde?: number | null;
   pValue?: number | null;
   whyStopped?: string | null;
@@ -132,6 +148,8 @@ export interface SearchResult {
   estimate: PursuitEstimate;
   completedAt: string;
   bucketCounts?: Record<Verdict, number>;
+  /** Why the inconclusive matches are inconclusive, over the same full match set. */
+  inconclusiveReasons?: Partial<Record<InconclusiveReason, number>> | null;
   countScope?: string;
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];

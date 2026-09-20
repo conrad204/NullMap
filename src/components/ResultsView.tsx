@@ -1,23 +1,30 @@
 import { useState } from "react";
 import { ArrowUpRight } from "@phosphor-icons/react";
-import type { Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
-import { RECOMMENDATION_META, VERDICT_META, VERDICT_ORDER, countByVerdict } from "../lib/verdicts";
+import type { InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
+import { BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
 import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
 
 type Filter = Verdict | "all";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", user: "Contribution", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
-const TIERS = { numeric: "Reported numbers", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
+const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
 const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
   catch { return undefined; }
 }
 
+function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, number>> {
+  const reasons: Partial<Record<InconclusiveReason, number>> = {};
+  for (const paper of papers) if (paper.inconclusiveReason) reasons[paper.inconclusiveReason] = (reasons[paper.inconclusiveReason] ?? 0) + 1;
+  return reasons;
+}
+
 export default function ResultsView({ result }: { result: SearchResult }) {
   const [filter, setFilter] = useState<Filter>("all");
   const counts = result.bucketCounts ?? countByVerdict(result.papers);
-  const total = VERDICT_ORDER.reduce((sum, verdict) => sum + counts[verdict], 0);
+  // Without a server breakdown (mock data, older API), count the reasons on the displayed studies.
+  const reasons = result.inconclusiveReasons ?? countReasons(result.papers);
   const shown = filter === "all" ? result.papers : result.papers.filter((paper) => paper.verdict === filter);
   return (
     <div className="fade-up flex flex-col gap-10">
@@ -35,7 +42,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>
       </section>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
-      <VerdictBreakdown counts={counts} total={total} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
+      <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_minmax(245px,290px)]">
         <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
         <EstimatePanel estimate={result.estimate} statistics={result.statistics} />
@@ -45,14 +52,15 @@ export default function ResultsView({ result }: { result: SearchResult }) {
     </div>
   );
 }
-function VerdictBreakdown({ counts, total, filter, onFilter, scope }: { counts: Record<Verdict, number>; total: number; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
+function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
+  const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
   return <section>
-    <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(total)} classified matches</span></h2>
-    <div role="img" aria-label={VERDICT_ORDER.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].label}`).join(", ")} className="mt-3 flex h-3 w-full gap-px overflow-hidden rounded-mark">
-      {total === 0 && <div className="w-full bg-surface-2" />}
-      {VERDICT_ORDER.filter((verdict) => counts[verdict] > 0).map((verdict) => <div key={verdict} style={{ flexGrow: counts[verdict] }} className={cx(VERDICT_META[verdict].bg, "transition-opacity duration-300", filter !== "all" && filter !== verdict && "opacity-25")} />)}
+    <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
+    <div role="img" aria-label={BAR_VERDICTS.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].label}`).join(", ")} className="mt-3 flex h-3 w-full gap-px overflow-hidden rounded-mark">
+      {classified === 0 && <div className="w-full bg-surface-2" />}
+      {BAR_VERDICTS.filter((verdict) => counts[verdict] > 0).map((verdict) => <div key={verdict} style={{ flexGrow: counts[verdict] }} className={cx(VERDICT_META[verdict].bg, "transition-opacity duration-300", filter !== "all" && filter !== verdict && "opacity-25")} />)}
     </div>
-    <ul className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">{VERDICT_ORDER.map((verdict) => {
+    <ul className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">{BAR_VERDICTS.map((verdict) => {
       const meta = VERDICT_META[verdict];
       return <li key={verdict}><button type="button" onClick={() => onFilter(filter === verdict ? "all" : verdict)} aria-pressed={filter === verdict} className={cx("group -m-2 flex w-[calc(100%+1rem)] flex-col items-start gap-1 rounded-control p-2 text-left transition-colors", filter === verdict ? "bg-surface-2" : "hover:bg-surface-2/60")}>
         <span className="flex items-center gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 rounded-mark", meta.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(counts[verdict])}</span></span>
@@ -60,7 +68,25 @@ function VerdictBreakdown({ counts, total, filter, onFilter, scope }: { counts: 
       </button></li>;
     })}</ul>
     <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select a bucket to filter the displayed studies below.</p>
+    <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
+}
+function InconclusiveNote({ count, reasons, active, onToggle }: { count: number; reasons: Partial<Record<InconclusiveReason, number>>; active: boolean; onToggle: () => void }) {
+  if (count === 0) return null;
+  const known = INCONCLUSIVE_REASONS.filter(({ key }) => (reasons[key] ?? 0) > 0);
+  // With no breakdown from the server, still explain every way a study ends up here.
+  const rows = known.length ? known : INCONCLUSIVE_REASONS.filter(({ key }) => key !== "no_threshold");
+  return <div className="mt-6 border-t border-line pt-5">
+    <button type="button" onClick={onToggle} aria-pressed={active} className={cx("group -m-2 flex items-baseline gap-2 rounded-control p-2 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+      <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(count)}</span>
+      <span className="text-sm text-ink-2 group-hover:text-ink">further {count === 1 ? "match is" : "matches are"} inconclusive</span>
+    </button>
+    <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-ink-2">Inconclusive means neither an effect nor a null could be established. It is left out of the bar because it is not a finding: it does not mean the intervention does nothing, and most often it describes what could be read from the record, not what the study found.</p>
+    <dl className="mt-4 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">{rows.map(({ key, label, detail }) => <div key={key}>
+      <dt className="flex items-baseline gap-2 text-sm text-ink">{known.length > 0 && <span className="font-mono tabular-nums text-ink">{formatCount(reasons[key] ?? 0)}</span>}<span>{label}</span></dt>
+      <dd className="mt-1 text-xs leading-relaxed text-ink-3">{detail}</dd>
+    </div>)}</dl>
+  </div>;
 }
 function EstimatePanel({ estimate, statistics }: { estimate: PursuitEstimate; statistics?: Statistics }) {
   const assurance = statistics ? statistics.assurance : estimate.pSuccess;

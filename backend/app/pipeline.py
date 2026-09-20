@@ -18,6 +18,28 @@ from app.statistics import analyze_studies, assign_bucket
 logger = logging.getLogger(__name__)
 
 
+_REASON_PHRASES = {
+    "wide_interval": "had an interval too wide to separate no effect from a meaningful one",
+    "mixed_result": "reported conflicting primary results",
+    "no_result": "had no readable comparative result",
+    "other_scale": "reported on a scale that cannot be compared with this threshold",
+    "no_threshold": "could not be compared without a valid threshold",
+}
+
+
+def inconclusive_sentence(count: int, reasons: dict | None) -> str:
+    """Inconclusive is mostly a statement about what could be read, so say which."""
+    if not count:
+        return ""
+    parts = [
+        f"{reasons[key]} {phrase}"
+        for key, phrase in _REASON_PHRASES.items()
+        if reasons and reasons.get(key)
+    ]
+    detail = f": {'; '.join(parts)}" if parts else ""
+    return f"A further {count} are inconclusive{detail}. "
+
+
 def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
     verdict = assign_bucket(study, sesoi, effect_type)
     effect = None
@@ -45,6 +67,7 @@ def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
         "snapshotDate": (study.get("snapshot_provenance") or {}).get("snapshot_date"),
         "verdict": verdict["bucket"],
         "rationale": verdict["rationale"],
+        "inconclusiveReason": verdict["inconclusive_reason"],
         "sampleSize": study.get("n"),
         "effectSize": effect,
         "evidenceSpan": study.get("evidence_span", ""),
@@ -358,9 +381,11 @@ class SearchPipeline:
             summary = (
                 f"The full indexed match set contains {aggregation['total']} primary studies: "
                 f"{c['effect']} reported effects, {c['credible_null']} credible nulls, "
-                f"{c['inconclusive']} inconclusive, {c['failed']} methodological failures, "
+                f"{c.get('reported_null', 0)} reported nulls of unverified magnitude, "
+                f"{c['failed']} methodological failures, "
                 f"and {c['unreported']} overdue unreported trials. "
-                "Text-only classifications do not establish meaningful effect size. "
+                + inconclusive_sentence(c["inconclusive"], aggregation.get("inconclusiveReasons"))
+                + "Text-only classifications do not establish meaningful effect size. "
             )
         drivers = stats.get("warnings", [])[:4]
         if studies and stats.get("assurance") is None:
@@ -419,7 +444,7 @@ class SearchPipeline:
             alternatives.append(
                 {
                     "label": f"Reconsider outcome/context: {term['term']}",
-                    "reason": "Over-represented in credible-null abstracts; inspect the source studies before reusing this design.",
+                    "reason": "Over-represented in null-result abstracts (credible or reported); inspect the source studies before reusing this design.",
                     "evidenceCount": term["count"],
                 }
             )
@@ -448,6 +473,7 @@ class SearchPipeline:
             "completedAt": datetime.now(UTC).isoformat(),
             "pico": pico.model_dump(),
             "bucketCounts": aggregation["bucketCounts"],
+            "inconclusiveReasons": aggregation.get("inconclusiveReasons"),
             "yearCounts": aggregation["yearCounts"],
             "countScope": "All indexed lexical matches plus screened review references; reviews excluded. Planning uses compatible studies among the top retrieved results.",
             "nullTerms": aggregation["nullTerms"],

@@ -37,6 +37,82 @@ def effect_type(value: str | None) -> str | None:
     return aliases.get(cleaned)
 
 
+_CONTROL_TITLE = re.compile(
+    r"\b(?:placebo|sham|control|usual care|standard (?:of )?care|no (?:treatment|intervention)|"
+    r"vehicle|wait(?:ing)?[- ]?list)\b",
+    re.IGNORECASE,
+)
+_PARTICIPANT_UNITS = {"participants", "subjects", "patients"}
+_CONTROL_ARM_TYPES = {"PLACEBO_COMPARATOR", "ACTIVE_COMPARATOR", "SHAM_COMPARATOR",
+                      "NO_INTERVENTION"}
+
+
+def _arm_pair(outcome: dict, selected: list[str],
+              arm_types: dict[str, str] | None = None) -> tuple[str, str] | None:
+    """(intervention, comparator) group IDs, or None when the orientation is not evident.
+
+    A posted analysis fixes the order. Otherwise exactly one of two groups must be the
+    control, by its registered arm type or, failing that, by its title.
+    """
+    if len(selected) == 2:
+        return selected[0], selected[1]
+    groups = [group for group in outcome.get("groups", []) if group.get("id")]
+    if selected or len(groups) != 2:
+        return None
+    kinds = [(arm_types or {}).get(" ".join(group.get("title", "").casefold().split()))
+             for group in groups]
+    controls = [kind in _CONTROL_ARM_TYPES for kind in kinds]
+    if None in kinds or sum(controls) != 1 or "EXPERIMENTAL" not in kinds:
+        controls = [bool(_CONTROL_TITLE.search(group.get("title", ""))) for group in groups]
+    if controls == [False, True]:
+        return groups[0]["id"], groups[1]["id"]
+    if controls == [True, False]:
+        return groups[1]["id"], groups[0]["id"]
+    return None
+
+
+def arm_summary(outcome: dict, selected: list[str],
+                arm_types: dict[str, str] | None = None) -> dict:
+    """Posted per-arm results for one outcome: means with SDs, or participant counts.
+
+    Only a single class and category is read, so repeated timepoints or multi-level
+    categories are never collapsed into one comparison. Medians, geometric and
+    model-adjusted means are left alone.
+    """
+    pair = _arm_pair(outcome, selected, arm_types)
+    classes = outcome.get("classes") or []
+    if pair is None or len(classes) != 1 or len(classes[0].get("categories") or []) != 1:
+        return {}
+    sizes: dict = {}
+    for denominator in [*(classes[0].get("denoms") or []), *(outcome.get("denoms") or [])]:
+        if str(denominator.get("units", "")).lower() in _PARTICIPANT_UNITS:
+            sizes = {item.get("groupId"): integer(item.get("value"))
+                     for item in denominator.get("counts", [])}
+            break
+    measured = {item.get("groupId"): item
+                for item in classes[0]["categories"][0].get("measurements") or []}
+    if any(sizes.get(group) is None or group not in measured for group in pair):
+        return {}
+    param = str(outcome.get("paramType", "")).upper()
+    dispersion = str(outcome.get("dispersionType", "")).upper().replace(" ", "_")
+    values = [number(measured[group].get("value")) for group in pair]
+    summary = {"n_intervention": sizes[pair[0]], "n_comparator": sizes[pair[1]]}
+    if param == "COUNT_OF_PARTICIPANTS":
+        events = [integer(measured[group].get("value")) for group in pair]
+        if None in events or any(event > sizes[group] for event, group in zip(events, pair)):
+            return {}
+        return {**summary, "events_intervention": events[0], "events_comparator": events[1]}
+    if param != "MEAN" or dispersion not in {"STANDARD_DEVIATION", "STANDARD_ERROR"}:
+        return {}
+    spreads = [number(measured[group].get("spread")) for group in pair]
+    if None in values or None in spreads or any(spread <= 0 for spread in spreads):
+        return {}
+    if dispersion == "STANDARD_ERROR":
+        spreads = [spread * sizes[group] ** 0.5 for spread, group in zip(spreads, pair)]
+    return {**summary, "mean_intervention": values[0], "mean_comparator": values[1],
+            "sd_intervention": spreads[0], "sd_comparator": spreads[1]}
+
+
 def _analysis_row(outcome: dict, analysis: dict, outcome_index: int, index: int) -> dict:
     groups = {group["id"]: group for group in outcome.get("groups", []) if group.get("id")}
     selected = list(dict.fromkeys(analysis.get("groupIds") or []))
@@ -45,7 +121,7 @@ def _analysis_row(outcome: dict, analysis: dict, outcome_index: int, index: int)
     ci_percent = number(analysis.get("ciPctValue"))
     denominators = None
     for denominator in outcome.get("denoms", []):
-        if str(denominator.get("units", "")).lower() not in {"participants", "subjects", "patients"}:
+        if str(denominator.get("units", "")).lower() not in _PARTICIPANT_UNITS:
             continue
         counts = {item.get("groupId"): integer(item.get("value"))
                   for item in denominator.get("counts", [])}
@@ -97,7 +173,7 @@ def flatten_trial(record: dict) -> dict:
     completion = normalize_date((status.get("primaryCompletionDateStruct") or {}).get("date"))
     year = int(completion[:4]) if completion else None
     arm_types = {arm.get("type") for arm in arms}
-    control_types = {"PLACEBO_COMPARATOR", "ACTIVE_COMPARATOR", "SHAM_COMPARATOR", "NO_INTERVENTION"}
+    control_types = _CONTROL_ARM_TYPES
     has_control = True if arm_types & control_types else None
     intervention_model = (design.get("designInfo") or {}).get("interventionModel")
     if intervention_model == "SINGLE_GROUP" or (len(arms) == 1 and design.get("studyType") == "INTERVENTIONAL"):
@@ -149,4 +225,31 @@ def flatten_trial(record: dict) -> dict:
         study["evidence_tier"] = "structured"
         study["selection_note"] = ("First comparative primary outcome with a supported effect scale; "
                                    "other primary analyses are retained in registry_analyses.")
+    primaries = [(index, outcome) for index, outcome in enumerate(measures)
+                 if outcome.get("type") == "PRIMARY"]
+    if selected:
+        # Arm-level numbers must describe the same outcome and arms as the chosen analysis.
+        primaries = [(index, outcome) for index, outcome in primaries
+                     if index == selected["outcome_index"]]
+    arm_types = {" ".join(arm.get("label", "").casefold().split()): arm.get("type")
+                 for arm in arms if arm.get("label")}
+    for index, outcome in primaries:
+        summary = arm_summary(outcome, selected["analysis_group_ids"] if selected else [],
+                              arm_types)
+        if not summary:
+            continue
+        study.update(summary)
+        if not selected:
+            titles = {group.get("id"): group.get("title", "") for group in outcome.get("groups", [])}
+            pair = _arm_pair(outcome, [], arm_types)
+            study.update({
+                "outcome": outcome.get("title", ""), "outcome_unit": outcome.get("unitOfMeasure", ""),
+                "intervention": titles.get(pair[0]) or study["intervention"],
+                "comparator": titles.get(pair[1]) or study["comparator"],
+                "n": summary["n_intervention"] + summary["n_comparator"], "has_control": True,
+                "numeric_source": f"resultsSection.outcomeMeasuresModule.outcomeMeasures[{index}]",
+                "selection_note": "First primary outcome posting two-arm summary results; "
+                                  "no comparative analysis was posted.",
+            })
+        break
     return study

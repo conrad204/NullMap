@@ -331,3 +331,82 @@ def test_snapshot_projection_schema_and_budget(tmp_path):
     assert result["records"] == 1
     assert "huge_unused_column" not in result["columns"]
     assert normalize_work(json.loads((tmp_path / "out.jsonl").read_text()))["abstract"] == "No difference"
+
+
+def _posted(param, dispersion, measurements, *, groups=None, analyses=None, arms=None, classes=None):
+    groups = groups or [("OG000", "Amlodipine"), ("OG001", "Placebo")]
+    outcome = {
+        "type": "PRIMARY", "title": "Change in systolic blood pressure", "unitOfMeasure": "mmHg",
+        "paramType": param, "dispersionType": dispersion,
+        "groups": [{"id": gid, "title": title} for gid, title in groups],
+        "denoms": [{"units": "Participants",
+                    "counts": [{"groupId": gid, "value": "100"} for gid, _ in groups]}],
+        "classes": classes or [{"categories": [{"measurements": measurements}]}],
+    }
+    if analyses:
+        outcome["analyses"] = analyses
+    return {
+        "protocolSection": {
+            "identificationModule": {"nctId": "NCT00000001"},
+            "armsInterventionsModule": {"armGroups": arms or []},
+        },
+        "hasResults": True,
+        "resultsSection": {"outcomeMeasuresModule": {"outcomeMeasures": [outcome]}},
+    }
+
+
+def test_registry_arm_level_means_are_captured_when_no_analysis_was_posted():
+    measurements = [{"groupId": "OG000", "value": "-12.0", "spread": "1.0"},
+                    {"groupId": "OG001", "value": "-10.0", "spread": "1.2"}]
+    study = flatten_trial(_posted("MEAN", "Standard Error", measurements))
+    assert (study["mean_intervention"], study["mean_comparator"]) == (-12.0, -10.0)
+    # A posted standard error is converted with that arm's own size.
+    assert (study["sd_intervention"], study["sd_comparator"]) == pytest.approx((10.0, 12.0))
+    assert (study["n_intervention"], study["n_comparator"], study["n"]) == (100, 100, 200)
+    assert study["comparator"] == "Placebo" and study["has_control"] is True
+    assert study["numeric_source"].endswith("outcomeMeasures[0]")
+
+
+def test_registry_arm_orientation_uses_arm_types_and_is_never_guessed():
+    measurements = [{"groupId": "OG000", "value": "30"}, {"groupId": "OG001", "value": "20"}]
+    groups = [("OG000", "Chlorthalidone"), ("OG001", "Hydrochlorothiazide")]
+    arms = [{"label": "Chlorthalidone", "type": "ACTIVE_COMPARATOR"},
+            {"label": "Hydrochlorothiazide", "type": "EXPERIMENTAL"}]
+    oriented = flatten_trial(_posted("COUNT_OF_PARTICIPANTS", None, measurements,
+                                     groups=groups, arms=arms))
+    assert (oriented["events_intervention"], oriented["events_comparator"]) == (20, 30)
+    assert oriented["intervention"] == "Hydrochlorothiazide"
+    unknown = flatten_trial(_posted("COUNT_OF_PARTICIPANTS", None, measurements, groups=groups))
+    assert "events_intervention" not in unknown
+
+
+@pytest.mark.parametrize(
+    ("param", "dispersion"),
+    [("MEDIAN", "Inter-Quartile Range"), ("LEAST_SQUARES_MEAN", "Standard Error"),
+     ("GEOMETRIC_MEAN", "95% Confidence Interval"), ("MEAN", "Full Range")],
+)
+def test_registry_summaries_that_are_not_means_with_sds_are_left_alone(param, dispersion):
+    measurements = [{"groupId": "OG000", "value": "5", "spread": "1"},
+                    {"groupId": "OG001", "value": "6", "spread": "1"}]
+    assert "mean_intervention" not in flatten_trial(_posted(param, dispersion, measurements))
+
+
+def test_registry_repeated_timepoints_and_impossible_counts_are_not_collapsed():
+    row = [{"groupId": "OG000", "value": "5", "spread": "1"},
+           {"groupId": "OG001", "value": "6", "spread": "1"}]
+    classes = [{"title": "Week 4", "categories": [{"measurements": row}]},
+               {"title": "Week 8", "categories": [{"measurements": row}]}]
+    assert "mean_intervention" not in flatten_trial(
+        _posted("MEAN", "Standard Deviation", row, classes=classes))
+    too_many = [{"groupId": "OG000", "value": "101"}, {"groupId": "OG001", "value": "3"}]
+    assert "events_intervention" not in flatten_trial(
+        _posted("COUNT_OF_PARTICIPANTS", None, too_many))
+
+
+def test_real_registry_record_keeps_reported_hazard_ratio_and_adds_matching_arm_counts():
+    record = json.loads((Path(__file__).parent / "fixtures/ctgov_vital_live.json").read_text())
+    study = flatten_trial(record)
+    assert (study["effect_type"], study["estimate"]) == ("HR", 0.96)
+    # Same outcome and the same two arms as the selected analysis of a four-group factorial.
+    assert (study["events_intervention"], study["n_intervention"]) == (793, 12927)
+    assert (study["events_comparator"], study["n_comparator"]) == (824, 12944)

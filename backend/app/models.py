@@ -4,7 +4,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Bucket = Literal["effect", "credible_null", "inconclusive", "failed", "unreported"]
+Bucket = Literal[
+    "effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported"
+]
 EffectType = Literal["SMD", "MD", "logOR", "logRR", "logHR"]
 
 
@@ -31,6 +33,7 @@ class Pico(BaseModel):
     synonyms: list[str]
     interventionAliases: list[str] = Field(default_factory=list)
     outcomeAliases: list[str] = Field(default_factory=list)
+    populationAliases: list[str] = Field(default_factory=list)
     studyDesigns: list[str]
     sesoi: float = Field(gt=0)
     sesoiRationale: str
@@ -44,6 +47,13 @@ class NumberEvidence(BaseModel):
 
 class TextEvidence(BaseModel):
     value: str
+    quote: str
+
+
+class ResultEvidence(BaseModel):
+    """What the report itself states for its primary between-group comparison."""
+
+    value: Literal["positive", "null", "mixed"]
     quote: str
 
 
@@ -64,6 +74,12 @@ class Extraction(BaseModel):
     n: NumberEvidence | None
     n_intervention: NumberEvidence | None
     n_comparator: NumberEvidence | None
+    mean_intervention: NumberEvidence | None
+    mean_comparator: NumberEvidence | None
+    sd_intervention: NumberEvidence | None
+    sd_comparator: NumberEvidence | None
+    events_intervention: NumberEvidence | None
+    events_comparator: NumberEvidence | None
     estimate: NumberEvidence | None
     ci_low: NumberEvidence | None
     ci_high: NumberEvidence | None
@@ -72,6 +88,7 @@ class Extraction(BaseModel):
     p_value: NumberEvidence | None
     effect_type: TextEvidence | None
     primary_outcome_met: BoolEvidence | None
+    reported_result: ResultEvidence | None
     has_control: BoolEvidence | None
 
 
@@ -87,6 +104,11 @@ class IndexedNumberEvidence(BaseModel):
 
 class IndexedTextEvidence(BaseModel):
     value: str
+    sentence_index: int = Field(ge=0)
+
+
+class IndexedResultEvidence(BaseModel):
+    value: Literal["positive", "null", "mixed"]
     sentence_index: int = Field(ge=0)
 
 
@@ -107,6 +129,12 @@ class IndexedExtraction(BaseModel):
     n: IndexedNumberEvidence | None
     n_intervention: IndexedNumberEvidence | None
     n_comparator: IndexedNumberEvidence | None
+    mean_intervention: IndexedNumberEvidence | None
+    mean_comparator: IndexedNumberEvidence | None
+    sd_intervention: IndexedNumberEvidence | None
+    sd_comparator: IndexedNumberEvidence | None
+    events_intervention: IndexedNumberEvidence | None
+    events_comparator: IndexedNumberEvidence | None
     estimate: IndexedNumberEvidence | None
     ci_low: IndexedNumberEvidence | None
     ci_high: IndexedNumberEvidence | None
@@ -115,4 +143,5 @@ class IndexedExtraction(BaseModel):
     p_value: IndexedNumberEvidence | None
     effect_type: IndexedTextEvidence | None
     primary_outcome_met: IndexedBoolEvidence | None
+    reported_result: IndexedResultEvidence | None
     has_control: IndexedBoolEvidence | None

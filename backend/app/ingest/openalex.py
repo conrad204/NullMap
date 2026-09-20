@@ -5,7 +5,12 @@ from typing import Any
 from app.fulltext import normalize_pmcid
 from app.ingest.common import NCT_PATTERN, empty_study, integer, pmid
 
-NORMALIZER_VERSION = "openalex-v4-pmcid"
+NORMALIZER_VERSION = "openalex-v5-pmcid-locations"
+PMC_LOCATION_RE = re.compile(
+    r"(?:ncbi\.nlm\.nih\.gov/pmc|pmc\.ncbi\.nlm\.nih\.gov|europepmc\.org(?:/pmc)?)"
+    r"/articles/(?:PMC)?(\d+)",
+    re.IGNORECASE,
+)
 REVIEW_TITLE_RE = re.compile(
     r"\b(?:(?:systematic|scoping|narrative|umbrella|literature|integrative|rapid)\s+reviews?"
     r"|meta[-\s]?analys(?:is|es)"
@@ -73,6 +78,18 @@ def reconstruct_abstract(inverted: Any) -> str:
     return " ".join(positions[position] for position in sorted(positions))
 
 
+def work_pmcid(work: dict, ids: dict) -> str | None:
+    """PMCID from ``ids`` or, as the Parquet snapshot omits it there, a PMC location URL."""
+    direct = normalize_pmcid(ids.get("pmcid") or work.get("pmcid"))
+    if direct:
+        return direct
+    for location in _array(work.get("locations")):
+        match = PMC_LOCATION_RE.search(str(_object(location).get("landing_page_url") or ""))
+        if match:
+            return normalize_pmcid(match.group(1))
+    return None
+
+
 def normalize_work(work: dict, *, require_abstract: bool = False) -> dict | None:
     abstract = reconstruct_abstract(work.get("abstract_inverted_index"))
     if require_abstract and not abstract:
@@ -98,7 +115,7 @@ def normalize_work(work: dict, *, require_abstract: bool = False) -> dict | None
         "year": year, "publication_date": f"{year:04d}-01-01" if year else None,
         "pmids": [paper_pmid] if paper_pmid else [],
         # PubMed Central ID enables query-time full text; absent for most works.
-        "pmcid": normalize_pmcid(ids.get("pmcid") or work.get("pmcid")),
+        "pmcid": work_pmcid(work, ids),
         "nct_ids": sorted({x.upper() for x in NCT_PATTERN.findall(abstract)}),
         "referenced_works": [str(x).rstrip("/").rsplit("/", 1)[-1]
                              for x in _array(work.get("referenced_works"))],

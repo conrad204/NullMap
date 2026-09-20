@@ -2,6 +2,62 @@
 
 This records observed implementation checks, not a clinical validation study. Counts and timings belong to these runs and may change as the index expands or caches warm.
 
+## Numeric coverage, text-tier and corpus-quality checks
+
+These are bounded spot checks made while fixing why `credible_null` never fired. None is a
+human-reviewed accuracy study, and no re-ingest or re-index of the cloud index was performed,
+so **the live index does not yet reflect any of this**.
+
+**State of the live index before the change** (`studies-hypertension-kidney-s3`, 228,998
+study records, read-only aggregations): 0 `credible_null`, 196,412 `inconclusive`; 772 records
+with a CI; 201,357 `no_result_stated`; 311 of 197,100 papers with a PMID, 0 with a PMCID, 90
+mentioning an NCT ID; 5 merged trial–paper records against 31,893 trials. A random 2,000-paper
+sample came from two update partitions (`2025-10`: 1,785; `2025-07`: 214), median citation
+count 0, and 24% of 2,099 abstract-bearing records shared no content word between title and
+abstract (an upper bound on mismatched records, since non-English titles also fail it). The
+`unreported` count therefore rests on almost no linking and is probably inflated.
+
+**Registry arm-level derivation.** 1,000 real ClinicalTrials.gov trials with posted results
+from the scope query, flattened before and after: trials with a usable 95% interval rose from
+**62 to 200**. On the default SMD 0.2 request, buckets went from 0 `effect` / 0 `credible_null`
+to 37 / 6; the six credible nulls included NCT02185417 (hydrochlorothiazide vs chlorthalidone).
+Of the rest, 360 are `failed` (242 single-arm) and the remainder post medians, adjusted means,
+several timepoints, more than two groups without an analysis, or arms whose control cannot be
+identified. The real VITAL fixture keeps its reported HR for HR requests and yields a derived
+log OR from 793/12,927 vs 824/12,944 for OR requests.
+
+**S3 partition quality and the PubMed profile.** Column-projected reads of one part per month:
+PMID share ranged from 0.0% (`2025-10`, `2026-02`) to 11.5% (`2026-01`); `ids` never contained
+`pmcid`. One 217 MB `2026-01-16` part scanned with `hypertension-kidney-pubmed` took 61 s and
+produced 1,166 works: 1,166 with a PMID, 236 with a PMCID recovered from location URLs, and
+833 of 850 abstract-bearing records passing the title/abstract check. This is one part, not a
+corpus estimate.
+
+**Paper extraction on 25 real trial-like abstracts** from that part (`gpt-4.1-mini`, about
+$0.03 per pass, the same 25 each time):
+
+| Pass | Rejected whole | With a usable interval | `inconclusive` |
+| --- | ---: | ---: | ---: |
+| Arm-level fields only | 19 | 1 | 16 |
+| + number words, unsupported total `n` dropped alone | 10 | 4 | not recorded |
+| + `p_value` and arm summaries dropped alone, SMD plausibility guard | 0 | 7 | not recorded |
+| + quoted `reported_result` (enum), free-text scale names | 2 | 4 | 5 |
+
+Fifteen of the first 19 rejections were `Number absent from quoted evidence for n`: spelled-out
+sizes ("Four hundred patients") and totals the model had summed. One discarded extraction held
+a mean difference of 0.308 with a 95% CI of −0.194 to 0.81. The interval count moved between
+4 and 7 across passes with no code change to that path, so treat it as run-to-run model
+variance, not a trend. The phrase lexicon labelled 17 of the 25 `inconclusive`; with
+`reported_result` 5 remained. **That is a coverage figure, not accuracy**: the labels were not
+checked against human judgement, at least two quoted sentences were weak support for their
+label, and the sample included animal studies, which nothing in the pipeline excludes. About
+70% of these abstracts stayed text-only on every pass.
+
+The Painless bucket script was checked for parity with `assign_bucket` on real Elasticsearch
+9.1.4 across 8 scale/margin requests and 21 documents, including derived effects, a reported
+HR alongside arm counts, and lexicon-versus-stated text labels. 311 backend tests (5 of them
+real-ES), 3 frontend test files, typecheck, the production build and Ruff passed.
+
 ## Public S3 migration
 
 The current implementation removes OpenAlex API fetching and live singleton/reference lookups. Literature ingestion uses unsigned public S3 Parquet reads. Search expands citations already present in Elasticsearch, with an offline S3 backfill command for missing references. The default scope is hypertension or kidney research across all years, retaining records without abstracts. ClinicalTrials.gov remains a separate keyless API source.

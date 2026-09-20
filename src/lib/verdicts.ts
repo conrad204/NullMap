@@ -1,11 +1,44 @@
-import type { Recommendation, Verdict } from "../types";
+import type { InconclusiveReason, Recommendation, Verdict } from "../types";
 
 export const VERDICT_ORDER: Verdict[] = [
   "effect",
   "credible_null",
+  "reported_null",
   "inconclusive",
   "failed",
   "unreported",
+];
+
+/** Inconclusive is not a finding, so it is reported as a count beside the bar, not in it. */
+export const BAR_VERDICTS: Verdict[] = VERDICT_ORDER.filter((verdict) => verdict !== "inconclusive");
+
+/** Ordered from "says something about the study" to "says something about what we could read". */
+export const INCONCLUSIVE_REASONS: { key: InconclusiveReason; label: string; detail: string }[] = [
+  {
+    key: "wide_interval",
+    label: "Too imprecise to call",
+    detail: "Numbers were reported, but the 95% interval includes both no effect and effects large enough to matter. Usually an underpowered study: the question is still open.",
+  },
+  {
+    key: "mixed_result",
+    label: "Conflicting primary results",
+    detail: "The report states results that point in different directions, and no interval is available to weigh them.",
+  },
+  {
+    key: "other_scale",
+    label: "Reported on another scale",
+    detail: "The study reports, say, a hazard ratio while your threshold is a standardized difference. The result is real but cannot be compared with this threshold.",
+  },
+  {
+    key: "no_result",
+    label: "No readable result",
+    detail: "No usable numbers and no stated outcome: a protocol, a non-comparative paper, a record without an abstract, or an abstract that does not say what was found. This reflects what could be read, not what the study found.",
+  },
+  {
+    key: "no_threshold",
+    label: "No valid threshold",
+    detail: "The meaningful-effect threshold was missing or invalid for this scale, so nothing could be compared with it.",
+  },
 ];
 
 interface VerdictMeta {
@@ -32,9 +65,16 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
     text: "text-v-null",
     tint: "bg-[color-mix(in_srgb,var(--v-null)_12%,transparent)]",
   },
+  reported_null: {
+    label: "Reported null · unverified",
+    description: "The abstract reports no significant difference, but no interval shows the effect is too small to matter. Not evidence of equivalence.",
+    bg: "bg-v-reported-null",
+    text: "text-v-reported-null",
+    tint: "bg-[color-mix(in_srgb,var(--v-reported-null)_12%,transparent)]",
+  },
   inconclusive: {
     label: "Inconclusive",
-    description: "Uncertainty spans both no effect and effects that could matter; text-only results are provisional.",
+    description: "Neither an effect nor a null could be established, because the result was too imprecise or could not be read.",
     bg: "bg-v-inconclusive",
     text: "text-v-inconclusive",
     tint: "bg-[color-mix(in_srgb,var(--v-inconclusive)_14%,transparent)]",

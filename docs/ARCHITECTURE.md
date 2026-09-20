@@ -157,11 +157,12 @@ Let δ be the SESOI on the study's effect scale, and CI the 95% interval.
 |---|---|
 | Meaningful effect | CI excludes zero and the point estimate is at least δ. If CI excludes zero but sits entirely inside ±δ, tag "significant but trivial". |
 | Credible evidence of no meaningful effect | CI lies entirely inside (−δ, +δ). This is equivalence-test logic, and it is what separates a real null from an underpowered one. |
-| Inconclusive | CI includes zero and also extends beyond ±δ. |
+| Reported null, magnitude unverified | No usable CI, and the report's own statement (or, failing that, the phrase lexicon) says no significant difference. Never counted as a credible null: without an interval an underpowered study looks the same. |
+| Inconclusive | CI includes zero and also extends beyond ±δ, or no result could be read at all. Each row records which (`wide_interval`, `mixed_result`, `other_scale`, `no_result`, `no_threshold`); only the first is a statement about the study. It is not a finding, so the UI reports it as a count with its reasons beside the verdict bar, never inside it. |
 | Failed for methodological reasons | Registry status TERMINATED, WITHDRAWN, or SUSPENDED (show `whyStopped`); actual enrollment under half of planned; `is_retracted`; or extraction flags no control arm. |
 | Completed, never reported | Status COMPLETED, primary completion more than 12 months ago, `hasResults` false, no linked RESULT publication, no paper mentioning the NCT ID. |
 
-When a study has only a p-value and N, back out an approximate standard error and mark the row "reconstructed". When it has nothing numeric, fall back to the classifier label and mark it "text only". Show these tiers in the UI. Judges from a quant fund and a biostatistics group will ask.
+Evidence tiers, best first: **numeric** (a reported estimate and CI), **derived** (a standard effect size computed from reported arm-level summaries: Hedges' g and the mean difference from means, SDs and arm sizes; log odds and risk ratios from event counts; hazard ratios are never derived, and a derived effect never replaces a reported interval on the requested scale), **reconstructed** (estimate plus an exact p-value), and **text only**. For text-only rows the bucket comes from `reported_result`, a three-valued statement the extraction model must support with a verbatim sentence, and only when that is absent from the index-time phrase lexicon. Show these tiers in the UI. Judges from a quant fund and a biostatistics group will ask.
 
 ## 8. Statistics and EV of pursuit
 
