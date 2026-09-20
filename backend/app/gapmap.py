@@ -107,6 +107,60 @@ def kmeans(vectors: np.ndarray, k: int, seed: int = 0, iterations: int = 40) -> 
     return labels
 
 
+def fit_projection(vectors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """A deterministic 2-D basis for drawing the map: PCA over centered vectors.
+
+    Returns ``(mean, basis)`` so centroids and idea vectors can be projected
+    through the same fit via :func:`project_with`. SVD is deterministic for a
+    given input, but the sign of each component is arbitrary, so every axis is
+    flipped until its largest-magnitude weight is positive — without that the
+    same map could render mirrored between builds.
+    """
+    mean = vectors.mean(axis=0, keepdims=True).astype(np.float32)
+    _, _, vt = np.linalg.svd(vectors - mean, full_matrices=False)
+    basis = np.zeros((2, vectors.shape[1]), dtype=np.float32)
+    rows = min(2, len(vt))  # a single document yields only one axis
+    basis[:rows] = vt[:rows]
+    for component in basis:
+        if component[np.argmax(np.abs(component))] < 0:
+            component *= -1
+    return mean, basis
+
+
+def project_with(mean: np.ndarray, basis: np.ndarray, vectors: np.ndarray) -> np.ndarray:
+    """Project ``vectors`` through a basis fitted by :func:`fit_projection`."""
+    return (np.atleast_2d(np.asarray(vectors, dtype=np.float32)) - mean) @ basis.T
+
+
+def project(vectors: np.ndarray) -> np.ndarray:
+    """2-D coordinates for ``vectors`` under a basis fitted on themselves."""
+    if not len(vectors):
+        return np.zeros((0, 2), dtype=np.float32)
+    mean, basis = fit_projection(vectors)
+    return project_with(mean, basis, vectors)
+
+
+def combine(positive: list[np.ndarray], negative: list[np.ndarray]) -> np.ndarray | None:
+    """Embedding arithmetic: a starting point plus added contexts, minus removed ones.
+
+    ``start - context + context`` is the document-level analogue of word2vec
+    analogy: the result points at the neighbourhood the combination implies,
+    and the corpus decides whether anything actually sits there. The sum is
+    renormalized because only direction carries meaning in a cosine space.
+    ``None`` when the terms cancel out — a zero-length vector has no direction,
+    and placing it would land somewhere meaningless.
+    """
+    total = np.zeros_like(np.asarray(positive[0], dtype=np.float64))
+    for vector in positive:
+        total += np.asarray(vector, dtype=np.float64)
+    for vector in negative:
+        total -= np.asarray(vector, dtype=np.float64)
+    norm = np.linalg.norm(total)
+    if norm < 1e-6:
+        return None
+    return (total / norm).astype(np.float32)
+
+
 def _bucket(document: dict) -> str:
     return str(document.get("query_bucket") or document.get("bucket") or "inconclusive")
 
@@ -207,17 +261,30 @@ def _corpus(documents: list[dict]) -> tuple[list[dict], np.ndarray]:
     )
 
 
-def _nearest(vector: np.ndarray, documents: list[dict], vectors: np.ndarray) -> dict:
+def nearest_neighbors(
+    vector: np.ndarray, documents: list[dict], vectors: np.ndarray, limit: int = 1
+) -> list[dict]:
+    """The ``limit`` closest sampled papers to a point, closest first.
+
+    Callers show these so a bare cosine never has to stand alone: the list of
+    real papers near a point is the legible form of "how occupied is this spot".
+    """
     similarity = vectors @ vector
-    position = int(similarity.argmax())
-    document = documents[position]
-    return {
-        "id": document.get("id", ""),
-        "title": document.get("title", ""),
-        "year": document.get("year"),
-        "bucket": _bucket(document),
-        "cosine": float(similarity[position]),
-    }
+    order = np.argsort(-similarity)[: max(1, limit)]
+    return [
+        {
+            "id": documents[index].get("id", ""),
+            "title": documents[index].get("title", ""),
+            "year": documents[index].get("year"),
+            "bucket": _bucket(documents[index]),
+            "cosine": float(similarity[index]),
+        }
+        for index in order
+    ]
+
+
+def _nearest(vector: np.ndarray, documents: list[dict], vectors: np.ndarray) -> dict:
+    return nearest_neighbors(vector, documents, vectors, limit=1)[0]
 
 
 def neighbour_threshold(centroids: np.ndarray) -> float:
@@ -312,19 +379,26 @@ def place(
     documents: list[dict],
     regions: list[dict],
     gaps: list[dict] | None = None,
+    nearest_limit: int = 5,
 ) -> dict:
     """Locate an idea on the map: how redundant it is and what surrounds it.
 
     ``redundancy`` is the cosine to the single closest indexed paper. It is the
     honest headline: most proposals are a near-duplicate of something already
-    published, and the nearest paper is shown so the claim can be checked by
-    reading it.
+    published, and the nearest papers are shown so the claim can be checked by
+    reading them.
     """
     corpus, vectors = _corpus(documents)
     query = normalize(np.asarray(vector, dtype=np.float32)[None, :])[0]
     if not corpus:
-        return {"redundancy": None, "nearest": None, "region": None, "nearestGap": None}
-    nearest = _nearest(query, corpus, vectors)
+        return {
+            "redundancy": None,
+            "nearest": None,
+            "neighbors": [],
+            "region": None,
+            "nearestGap": None,
+        }
+    neighbors = nearest_neighbors(query, corpus, vectors, limit=nearest_limit)
     region = None
     if regions:
         centroids = normalize(
@@ -335,8 +409,9 @@ def place(
         region = {**regions[position], "cosine": float(similarity[position])}
         region.pop("centroid", None)
     return {
-        "redundancy": nearest["cosine"],
-        "nearest": nearest,
+        "redundancy": neighbors[0]["cosine"],
+        "nearest": neighbors[0],
+        "neighbors": neighbors[1:],
         "region": region,
         "nearestGap": _nearest_gap(query, regions, gaps or []),
     }

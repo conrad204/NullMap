@@ -10,12 +10,6 @@ from app.main import app
 @pytest.fixture
 def client():
     class Repo:
-        def __init__(self):
-            self.saved = []
-
-        async def save_contribution(self, doc):
-            self.saved.append(doc)
-
         async def health(self):
             return {"connected": True, "studies": 12, "index": "test"}
 
@@ -59,53 +53,6 @@ def test_streamed_errors_do_not_expose_provider_details(client):
     app.state.pipeline = SimpleNamespace(search=fail)
     response = client.post("/search/stream", json={"idea": "Does vitamin D reduce depression?"})
     assert "event: error" in response.text and "secret" not in response.text
-
-
-def test_contribution_saved_as_draft_excluded_from_studies(client):
-    response = client.post(
-        "/contributions",
-        data={
-            "title": "A pilot trial",
-            "description": "A shelved controlled pilot experiment.",
-            "outcome": "inconclusive",
-            "ownershipAcknowledged": "true",
-        },
-        files={"files": ("../../notes.txt", b"original source notes", "text/plain")},
-    )
-    assert response.status_code == 201
-    stored = app.state.repository.saved[-1]
-    assert stored["record_kind"] == "contribution" and stored["status"] == "draft"
-    assert stored["attachments"][0]["name"] == "notes.txt"
-
-
-def test_contribution_requires_rights_acknowledgment(client):
-    response = client.post(
-        "/contributions",
-        data={
-            "title": "A pilot trial",
-            "description": "A shelved controlled pilot experiment.",
-            "outcome": "inconclusive",
-            "ownershipAcknowledged": "false",
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_upload_limit_enforced(client, monkeypatch):
-    from app.main import settings
-
-    monkeypatch.setattr(settings, "max_upload_bytes", 10)
-    response = client.post(
-        "/contributions",
-        data={
-            "title": "A pilot trial",
-            "description": "A shelved controlled pilot experiment.",
-            "outcome": "inconclusive",
-            "ownershipAcknowledged": "true",
-        },
-        files={"files": ("notes.txt", b"longer than limit", "text/plain")},
-    )
-    assert response.status_code == 413
 
 
 def test_extraction_cache_serializes_concurrent_requests():

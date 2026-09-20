@@ -18,6 +18,7 @@ keys.txt
 !.env.example
 data/
 artifacts/
+.runtime/
 *.pem
 *.key
 .playwright/

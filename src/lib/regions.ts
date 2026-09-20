@@ -63,3 +63,15 @@ export function regionName(titles: string[]): string {
   if (!first) return "Untitled region";
   return first.length > 70 ? `${first.slice(0, 69)}…` : first;
 }
+
+/**
+ * A bare cosine means nothing on its own, so it is paired with a plain band.
+ * These are heuristic landmarks for MiniLM document embeddings, not calibrated
+ * similarity scores — the neighbouring papers listed with it are the check.
+ */
+export function redundancyLabel(cosine: number): string {
+  if (cosine >= 0.8) return "Essentially already published";
+  if (cosine >= 0.6) return "Very close work exists";
+  if (cosine >= 0.45) return "Related territory";
+  return "Sparse territory";
+}

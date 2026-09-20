@@ -1,16 +1,12 @@
 import asyncio
-import base64
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
-from uuid import uuid4
 
 from elastic_transport import ConnectionError as ElasticConnectionError
 from elasticsearch import ApiError
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.gapmap_service import GapMapService
 from app.llm import LLMService
-from app.models import Bucket, MapRequest, NoveltyRequest, SearchRequest
+from app.models import MapRequest, NoveltyRequest, SearchRequest
 from app.novelty import NoveltyEngine
 from app.pipeline import SearchPipeline
 from app.repository import ElasticRepository
@@ -161,7 +157,10 @@ async def novelty(body: NoveltyRequest, request: Request):
 async def gap_map(body: MapRequest, request: Request):
     try:
         return await request.app.state.gapmap.assess(
-            idea=body.idea, cutoff_year=body.cutoffYear, refresh=body.refresh
+            idea=body.idea,
+            arithmetic=body.arithmetic,
+            cutoff_year=body.cutoffYear,
+            refresh=body.refresh,
         )
     except Exception as exc:
         logger.error("Gap map failed: %s", type(exc).__name__)
@@ -178,68 +177,6 @@ async def study_detail(study_id: str, request: Request):
     if not study or study.get("record_kind") != "study":
         raise HTTPException(status_code=404, detail="Study not found")
     return {k: v for k, v in study.items() if k not in ("embedding", "attachments")}
-
-
-@app.post("/contributions", status_code=201)
-@app.post("/api/contributions", status_code=201, include_in_schema=False)
-async def contribute(
-    request: Request,
-    title: Annotated[str, Form(min_length=4, max_length=300)],
-    description: Annotated[str, Form(min_length=20, max_length=20000)],
-    outcome: Annotated[Bucket, Form()],
-    ownershipAcknowledged: Annotated[bool, Form()],
-    files: Annotated[list[UploadFile] | None, File()] = None,
-):
-    if not ownershipAcknowledged:
-        raise HTTPException(
-            status_code=422, detail="Confirm that you have permission to contribute this material."
-        )
-    if not title.strip() or not description.strip():
-        raise HTTPException(status_code=422, detail="Title and description cannot be blank.")
-    if len(files or []) > settings.max_upload_files:
-        raise HTTPException(
-            status_code=413, detail=f"At most {settings.max_upload_files} files are allowed."
-        )
-    attachments = []
-    total = 0
-    for upload in files or []:
-        try:
-            content = await upload.read(settings.max_upload_bytes + 1)
-        finally:
-            await upload.close()
-        total += len(content)
-        if total > settings.max_upload_bytes:
-            raise HTTPException(status_code=413, detail="Combined uploads must be 5 MB or smaller.")
-        attachments.append(
-            {
-                "name": (upload.filename or "attachment").replace("\\", "/").split("/")[-1][:200],
-                "contentType": upload.content_type or "application/octet-stream",
-                "bytes": len(content),
-                "contentBase64": base64.b64encode(content).decode(),
-            }
-        )
-    identifier = f"c_{uuid4().hex}"
-    received = datetime.now(UTC).isoformat()
-    contribution = {
-        "id": identifier,
-        "record_kind": "contribution",
-        "source": "user",
-        "title": title.strip(),
-        "abstract": description.strip(),
-        "bucket": outcome,
-        "ownership_acknowledged": True,
-        "received_at": received,
-        "status": "draft",
-        "attachments": attachments,
-    }
-    try:
-        await request.app.state.repository.save_contribution(contribution)
-    except Exception as exc:
-        logger.error("Contribution storage failed: %s", type(exc).__name__)
-        raise HTTPException(
-            status_code=503, detail="The draft could not be saved. Please retry."
-        ) from None
-    return {"contributionId": identifier, "status": "ready", "receivedAt": received}
 
 
 if Path(settings.frontend_dist).is_dir():

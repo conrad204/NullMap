@@ -1,5 +1,5 @@
 import type {
-  ContributionReceipt, ContributionRequest, GapMap, MapRequest,
+  GapMap, MapRequest,
   SearchProgress, SearchRequest, SearchResult,
 } from "../types";
 import { readEventStream } from "./stream";
@@ -56,26 +56,6 @@ export async function searchIdea(
   }, signal);
   if (!result) throw new Error("Search ended before results arrived. Please retry.");
   return result;
-}
-
-export async function submitContribution(req: ContributionRequest, signal?: AbortSignal): Promise<ContributionReceipt> {
-  if (usingMockApi) return (await import("./mock")).mockSubmitContribution(req, signal);
-  const form = new FormData();
-  form.set("title", req.title);
-  form.set("description", req.description);
-  form.set("outcome", req.outcome);
-  form.set("ownershipAcknowledged", String(req.ownershipAcknowledged));
-  for (const file of req.files) form.append("files", file, file.name);
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/contributions`, { method: "POST", body: form, signal });
-  } catch (error) {
-    signal?.throwIfAborted();
-    if (error instanceof TypeError) throw new Error("Cannot reach the contribution service. Your form is still here; check your connection and retry.");
-    throw error;
-  }
-  if (!res.ok) throw await responseError(res, "Upload");
-  return await res.json() as ContributionReceipt;
 }
 
 export async function fetchMap(req: MapRequest, signal?: AbortSignal): Promise<GapMap> {

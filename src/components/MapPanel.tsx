@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
-import type { GapMap, MapGap, MapRegion, Verdict } from "../types";
+import type { GapMap, MapGap, MapRegion, MapRequest, Verdict } from "../types";
 import { fetchMap } from "../api/client";
 import { cx, formatCount, percent } from "../lib/format";
-import { REGION_META, REGION_ORDER, regionName } from "../lib/regions";
+import { REGION_META, REGION_ORDER, redundancyLabel, regionName } from "../lib/regions";
 import { VERDICT_META, VERDICT_ORDER } from "../lib/verdicts";
+import MapCanvas from "./MapCanvas";
 
 type State =
   | { kind: "loading" }
@@ -95,11 +96,12 @@ function GapCard({ gap, regions }: { gap: MapGap; regions: MapRegion[] }) {
 export default function MapPanel() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [idea, setIdea] = useState("");
+  const [arith, setArith] = useState({ start: "", remove: "", add: "" });
   const [invalid, setInvalid] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const load = useCallback(async (body: { idea?: string }) => {
+  const load = useCallback(async (body: MapRequest) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -120,8 +122,27 @@ export default function MapPanel() {
     void load({});
   }, [load]);
 
+  const terms = (raw: string) =>
+    raw.split(",").map((term) => term.trim()).filter(Boolean);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const start = arith.start.trim();
+    if (start) {
+      const remove = terms(arith.remove);
+      const add = terms(arith.add);
+      if (start.length < 2) {
+        setInvalid("The starting phrase needs at least two characters.");
+        return;
+      }
+      if (!remove.length && !add.length) {
+        setInvalid("Give the expression something to remove or to add — otherwise it is just the idea box.");
+        return;
+      }
+      setInvalid(null);
+      void load({ arithmetic: { start, remove, add } });
+      return;
+    }
     const trimmed = idea.trim();
     if (trimmed && trimmed.length < 8) {
       setInvalid("Describe the idea in at least eight characters, or leave the box empty for the map alone.");
@@ -169,6 +190,49 @@ export default function MapPanel() {
             className="field resize-y font-normal"
           />
         </label>
+
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm font-medium text-ink">Or steer with arithmetic</legend>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+            <input
+              aria-label="Start from"
+              value={arith.start}
+              onChange={(event) => {
+                setArith({ ...arith, start: event.target.value });
+                setInvalid(null);
+              }}
+              placeholder="vitamin D for depression"
+              className="field min-w-40 flex-1 font-normal"
+            />
+            <span aria-hidden>−</span>
+            <input
+              aria-label="Remove"
+              value={arith.remove}
+              onChange={(event) => {
+                setArith({ ...arith, remove: event.target.value });
+                setInvalid(null);
+              }}
+              placeholder="depression"
+              className="field min-w-28 flex-1 font-normal"
+            />
+            <span aria-hidden>+</span>
+            <input
+              aria-label="Add"
+              value={arith.add}
+              onChange={(event) => {
+                setArith({ ...arith, add: event.target.value });
+                setInvalid(null);
+              }}
+              placeholder="chronic kidney disease"
+              className="field min-w-28 flex-1 font-normal"
+            />
+          </div>
+          <p className="text-xs text-ink-3">
+            Each phrase is embedded and combined — start, minus, plus — then the map shows which
+            real papers sit nearest the implied point. Comma-separate several terms.
+          </p>
+        </fieldset>
+
         {invalid && (
           <p id="map-idea-error" role="alert" className="text-sm text-v-failed">
             {invalid}
@@ -189,6 +253,14 @@ export default function MapPanel() {
         {state.kind === "loading" && <p className="text-sm text-ink-2">Clustering the indexed corpus…</p>}
         {map && (
           <div className="flex flex-col gap-8">
+            {map.points.length > 0 && (
+              <MapCanvas
+                points={map.points}
+                regions={map.regions}
+                gaps={map.gaps}
+                placementPoint={map.placement?.point ?? null}
+              />
+            )}
             <div className="text-xs text-ink-3">
               <p>
                 {formatCount(map.coverage.sampled)} embedded studies of{" "}
@@ -205,15 +277,35 @@ export default function MapPanel() {
             </div>
             {placement?.nearest && placement.redundancy !== null && (
               <div className="rounded-control border border-line bg-surface p-5">
-                <p className="text-sm text-ink-2">Closest paper in the sample</p>
-                <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
-                  {placement.redundancy.toFixed(2)} cosine
+                {placement.expression && (
+                  <p className="text-sm text-ink-2">
+                    <span className="font-medium text-ink">{placement.expression.start}</span>
+                    {placement.expression.remove.map((term) => (
+                      <span key={`-${term}`}> − {term}</span>
+                    ))}
+                    {placement.expression.add.map((term) => (
+                      <span key={`+${term}`}> + {term}</span>
+                    ))}
+                  </p>
+                )}
+                <p className="text-sm text-ink-2">
+                  {placement.expression ? "lands in" : "Closest paper in the sample"}
                 </p>
-                <p className="mt-2 text-sm text-ink">{placement.nearest.title}</p>
-                <p className="mt-1 text-xs text-ink-3">
-                  {placement.nearest.year ?? "year unknown"} ·{" "}
-                  {VERDICT_META[placement.nearest.bucket as Verdict]?.label ?? placement.nearest.bucket}
+                <p className="mt-1 text-2xl font-semibold tracking-tight text-ink">
+                  {redundancyLabel(placement.redundancy)}
                 </p>
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {[placement.nearest, ...(placement.neighbors ?? [])].map((paper) => (
+                    <li key={paper.id} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-ink">{paper.title}</span>
+                      <span className="shrink-0 text-xs text-ink-3">
+                        {paper.year ?? "year unknown"} ·{" "}
+                        {VERDICT_META[paper.bucket as Verdict]?.label ?? paper.bucket} ·{" "}
+                        {paper.cosine.toFixed(2)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
                 {placement.region && (
                   <p className="mt-3 text-sm text-ink-2">
                     It lands in a{" "}

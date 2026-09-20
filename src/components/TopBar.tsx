@@ -3,7 +3,7 @@ import { Moon, Sun } from "@phosphor-icons/react";
 import { cx } from "../lib/format";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 
-export type Mode = "search" | "map" | "contribute";
+export type Mode = "search" | "map";
 
 interface Props {
   mode: Mode;
@@ -14,7 +14,6 @@ interface Props {
 const MODES: Array<{ id: Mode; label: string }> = [
   { id: "search", label: "Search" },
   { id: "map", label: "Map" },
-  { id: "contribute", label: "Contribute" },
 ];
 
 export default function TopBar({ mode, onModeChange, sampleData }: Props) {

@@ -162,7 +162,10 @@ Backfills keep separate provenance and do not claim completion of the main build
 
 `python -m app.ingest --help` exposes snapshot scans, registry fetching,
 normalization, classification, embedding, indexing, reference IDs, TEI full-text
-extraction, labelling and classifier training. For example:
+extraction, labelling, classifier training and the `pagerank` pass, which
+recomputes within-corpus citation PageRank (references outside the index are
+dropped) and bulk-updates the `pagerank`/`authority` rank-feature fields used
+by retrieval. For example:
 
 ```sh
 .venv/bin/python -m app.ingest snapshot --plan

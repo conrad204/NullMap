@@ -7,12 +7,17 @@ import pytest
 from app.gapmap import (
     build_regions,
     calibrate,
+    combine,
     find_gaps,
+    fit_projection,
     kmeans,
     label_region,
+    nearest_neighbors,
     neighbour_threshold,
     normalize,
     place,
+    project,
+    project_with,
 )
 
 
@@ -55,6 +60,45 @@ def test_kmeans_separates_two_clumps_and_is_deterministic():
 def test_kmeans_handles_fewer_points_than_clusters():
     vectors = normalize(np.array([unit(0.0), unit(2.0)], dtype=np.float32))
     assert sorted(kmeans(vectors, 5, seed=1).tolist()) == [0, 1]
+
+
+def test_project_is_deterministic_and_keeps_clumps_separate():
+    vectors = normalize(
+        np.array([unit(0.0), unit(0.02), unit(0.04), unit(3.0), unit(3.02)], dtype=np.float32)
+    )
+    coords = project(vectors)
+    assert coords.shape == (5, 2)
+    np.testing.assert_allclose(coords, project(vectors))
+    apart = float(np.linalg.norm(coords[0] - coords[3]))
+    assert float(np.linalg.norm(coords[0] - coords[1])) < apart
+    assert float(np.linalg.norm(coords[3] - coords[4])) < apart
+
+
+def test_fit_projection_fixes_the_sign_of_each_axis():
+    """SVD signs are arbitrary; the largest-magnitude weight is made positive."""
+    vectors = normalize(
+        np.array([unit(angle) for angle in (0.0, 0.02, 0.9, 1.0, 2.0, 2.2)], dtype=np.float32)
+    )
+    _, basis = fit_projection(vectors)
+    assert basis.shape == (2, 3)
+    for component in basis:
+        assert component[np.argmax(np.abs(component))] > 0
+
+
+def test_project_with_reuses_the_fitted_basis():
+    """Centroids and idea vectors land in the same plane as the documents."""
+    vectors = normalize(
+        np.array([unit(angle) for angle in (0.0, 0.02, 0.9, 1.0)], dtype=np.float32)
+    )
+    mean, basis = fit_projection(vectors)
+    np.testing.assert_allclose(project_with(mean, basis, vectors), project(vectors))
+    centroid = normalize(vectors[:2].mean(axis=0, keepdims=True))
+    xy = project_with(mean, basis, centroid)
+    np.testing.assert_allclose(xy[0], project(vectors)[:2].mean(axis=0), atol=1e-3)
+
+
+def test_project_on_an_empty_corpus_returns_no_coords():
+    assert project(np.zeros((0, 3), dtype=np.float32)).shape == (0, 2)
 
 
 @pytest.mark.parametrize(
@@ -213,3 +257,33 @@ def test_calibrate_without_later_papers_reports_nothing():
     documents = cluster("null", 0.0, "reported_null", 8, year=2018)
     report = calibrate(documents, cutoff_year=2020, regions=2, seed=2)
     assert report["future"] == 0 and report["labels"] == []
+
+
+def test_combine_adds_and_removes_direction():
+    """a + b − a lands on b: removing the start leaves the added direction."""
+    a, b = np.array(unit(0.0)), np.array(unit(0.8))
+    combined = combine([a, b], [a])
+    assert combined is not None
+    similarity = np.vstack([a, b]) @ combined
+    assert similarity.argmax() == 1
+
+
+def test_combine_returns_none_when_terms_cancel_out():
+    assert combine([np.array([1.0, 0.0])], [np.array([1.0, 0.0])]) is None
+
+
+def test_place_lists_the_closest_papers_after_the_nearest():
+    documents = cluster("left", 0.0, "effect", 4) + cluster("right", 0.8, "effect", 4)
+    built = build_regions(documents, regions=2, seed=2)
+    gaps = find_gaps(documents, built["regions"])
+    placement = place(unit(0.01), documents, built["regions"], gaps)
+    assert placement["nearest"]["id"].startswith("left")
+    assert len(placement["neighbors"]) == 4
+    cosines = [paper["cosine"] for paper in placement["neighbors"]]
+    assert cosines == sorted(cosines, reverse=True)
+
+
+def test_nearest_neighbors_returns_the_limit():
+    documents = cluster("a", 0.0, "effect", 5)
+    corpus_vectors = normalize(np.array([d["embedding"] for d in documents]))
+    assert len(nearest_neighbors(unit(0.01), documents, corpus_vectors, limit=3)) == 3

@@ -1,5 +1,5 @@
 /** Entirely fictional fixtures, reachable only when VITE_USE_MOCK=true. */
-import type { ContributionReceipt, ContributionRequest, SearchProgress, SearchRequest, SearchResult } from "../types";
+import type { SearchProgress, SearchRequest, SearchResult } from "../types";
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
@@ -14,11 +14,6 @@ export async function mockSearch(req: SearchRequest, onProgress?: (progress: Sea
     await wait(300, signal);
   }
   return { ...SAMPLE_RESULT, idea: req.idea, field: req.field ?? null, queryId: `demo_${Date.now()}`, completedAt: new Date().toISOString() };
-}
-export async function mockSubmitContribution(req: ContributionRequest, signal?: AbortSignal): Promise<ContributionReceipt> {
-  void req;
-  await wait(300, signal);
-  return { contributionId: `demo_${Date.now()}`, status: "queued", receivedAt: new Date().toISOString() };
 }
 export const SAMPLE_RESULT: SearchResult = {
   queryId: "illustrative_demo",

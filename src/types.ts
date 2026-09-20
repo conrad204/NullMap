@@ -14,7 +14,7 @@ export type Verdict =
   | "inconclusive"
   | "failed"
   | "unreported";
-export type Source = "openalex" | "clinicaltrials" | "ctgov" | "merged" | "user" | "arxiv" | "pubmed" | "osf";
+export type Source = "openalex" | "clinicaltrials" | "ctgov" | "merged" | "arxiv" | "pubmed" | "osf";
 export type EffectType = "SMD" | "MD" | "logOR" | "logRR" | "logHR";
 export interface EffectSize {
   metric: string;
@@ -184,19 +184,6 @@ export interface SearchResult {
   retrieval?: { mode: string; expanded: number };
   spin?: { eligible: number; disagreements: number };
 }
-export interface ContributionRequest {
-  title: string;
-  description: string;
-  outcome: Verdict;
-  files: File[];
-  ownershipAcknowledged: boolean;
-}
-export interface ContributionReceipt {
-  contributionId: string;
-  status: "queued" | "drafting" | "ready";
-  receivedAt: string;
-}
-
 /** Gap map: regions of the embedded corpus, described by what happened in them. */
 export type RegionLabel =
   | "active"
@@ -223,6 +210,20 @@ export interface MapRegion {
   exemplars: MapExemplar[];
   /** Present only on the region an idea was placed in. */
   cosine?: number;
+  /** Centroid projected into the map's 2-D plane. */
+  x: number;
+  y: number;
+}
+/** One sampled study's position in the map's 2-D plane. */
+export interface MapPoint {
+  id: string;
+  x: number;
+  y: number;
+  /** Id of the region this study was assigned to. */
+  region: number;
+  bucket: Verdict | string;
+  title: string;
+  year: number | null;
 }
 export interface MapNeighbour extends MapExemplar {
   cosine: number;
@@ -240,11 +241,22 @@ export interface MapGap {
   /** Present only when an idea was placed against the gaps. */
   cosine?: number;
 }
+export interface MapArithmetic {
+  start: string;
+  remove: string[];
+  add: string[];
+}
 export interface MapPlacement {
   redundancy: number | null;
   nearest: MapNeighbour | null;
+  /** The next-closest papers after `nearest`, so closeness can be judged by reading. */
+  neighbors?: MapNeighbour[];
   region: MapRegion | null;
   nearestGap: MapGap | null;
+  /** The idea projected into the map's 2-D plane. */
+  point?: { x: number; y: number } | null;
+  /** Echoed back when the placement came from an arithmetic expression. */
+  expression?: MapArithmetic;
 }
 export interface MapCalibrationRow {
   label: RegionLabel;
@@ -260,6 +272,7 @@ export interface GapMap {
   coverage: { sampled: number; corpus: number; regions: number };
   regions: MapRegion[];
   gaps: MapGap[];
+  points: MapPoint[];
   placement: MapPlacement | null;
   calibration: {
     version: string;
@@ -272,6 +285,8 @@ export interface GapMap {
 }
 export interface MapRequest {
   idea?: string;
+  /** start − remove + add over embeddings; placed on the map like an idea. */
+  arithmetic?: MapArithmetic;
   cutoffYear?: number;
   refresh?: boolean;
 }
