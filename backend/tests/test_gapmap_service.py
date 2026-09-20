@@ -1,6 +1,7 @@
 import asyncio
 import math
 
+import numpy as np
 import pytest
 
 from app.config import Settings
@@ -14,6 +15,7 @@ class FakeRepository:
         self.documents = documents
         self.corpus = len(documents) if corpus is None else corpus
         self.calls = 0
+        self.knn_calls: list[int] = []
 
     async def count_embedded(self) -> int:
         return self.corpus
@@ -23,6 +25,18 @@ class FakeRepository:
         documents = self.documents if limit <= 0 else self.documents[:limit]
         for start in range(0, len(documents), batch_size):
             yield [dict(document) for document in documents[start : start + batch_size]]
+
+    async def knn_studies(self, vector: list[float], limit: int, filters=None) -> list[dict]:
+        self.knn_calls.append(limit)
+        query = np.asarray(vector, dtype=np.float32)
+        ranked = sorted(
+            self.documents,
+            key=lambda document: -float(np.dot(query, np.asarray(document["embedding"]))),
+        )
+        return [
+            dict(document, cosine=float(np.dot(query, np.asarray(document["embedding"]))))
+            for document in ranked[:limit]
+        ]
 
 
 def service(documents: list[dict], corpus: int | None = None, **overrides) -> GapMapService:
@@ -44,6 +58,7 @@ def test_map_describes_regions_and_gaps_without_shipping_centroids():
         "regions": 2,
         "drawn": 16,
         "complete": True,
+        "scope": "corpus",
     }
     assert sorted(region["label"] for region in result["regions"]) == ["active", "null_saturated"]
     assert all("centroid" not in region for region in result["regions"])
@@ -156,6 +171,9 @@ def test_an_idea_is_placed_against_the_nearest_paper():
     built.embed = lambda text: _resolved(unit(0.01))
     result = asyncio.run(built.assess(idea="a new trial of the same thing"))
     placement = result["placement"]
+    assert built.repo.calls == 0, "a question must not scan the whole index"
+    assert built.repo.knn_calls == [built.config.gapmap_neighborhood]
+    assert result["coverage"]["scope"] == "neighborhood"
     assert placement["redundancy"] == pytest.approx(1.0, abs=0.01)
     assert placement["region"]["label"] == "null_saturated"
     assert "centroid" not in placement["region"]
@@ -191,6 +209,28 @@ def test_an_expression_that_cancels_out_warns_instead_of_placing():
     assert result["warnings"] == [
         "The expression cancels itself out; the combined vector has no direction."
     ]
+
+
+def test_a_question_builds_its_neighborhood_and_says_so():
+    """The map around a question is the N nearest studies, and the coverage says exactly that."""
+    documents = cluster("null", 0.0, "reported_null", 60) + cluster("effect", 0.8, "effect", 60)
+    built = service(documents, corpus=5000, gapmap_neighborhood=50)
+    built.embed = lambda text: _resolved(unit(0.01))
+    result = asyncio.run(built.assess(idea="a new trial of the same thing"))
+    assert built.repo.knn_calls == [50]
+    assert built.repo.calls == 0
+    coverage = result["coverage"]
+    assert coverage["scope"] == "neighborhood"
+    assert coverage["neighborhood"] == 50
+    assert coverage["clustered"] == 50 and coverage["corpus"] == 5000
+    assert coverage["drawn"] == len(result["points"]) == 50
+    assert result["warnings"] == [
+        "The map shows the 50 embedded studies nearest this question, out of 5000 in the "
+        "index: the question's neighborhood, not the whole index."
+    ]
+    assert all("sample" not in warning.lower() for warning in result["warnings"])
+    assert all(isinstance(edge[2], float) for edge in result["edges"])
+    assert len(result["edges"]) > 0
 
 
 def test_placement_is_impossible_without_embeddings():
