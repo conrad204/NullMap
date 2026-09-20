@@ -82,6 +82,10 @@ papers) and the trend ran on 4 effect studies, at about $0.02 for that search. T
 l’amour…"), which the screen cannot see through because it reads the abstract. Screening
 accuracy was not measured against human judgement. When the match set exceeds the screened
 page, bucket counts still describe unscreened keyword matches and the response says so.
+The screen now reaches 500 ranks (`SCREEN_LIMIT`, with retrieval widened to match via
+`repository.RETRIEVE_LIMIT`, at most 8 screening calls in flight). The figures above were
+measured at 160; cost and kept counts at 500 have not been re-measured. From payload size
+and configured prices a full 500-record screen is estimated at about $0.06.
 
 The Painless bucket script was checked for parity with `assign_bucket` on real Elasticsearch
 9.1.4 across 8 scale/margin requests and 21 documents, including derived effects, a reported

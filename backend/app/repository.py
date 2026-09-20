@@ -519,7 +519,12 @@ def authority_query(query: dict) -> dict:
     }
 
 
-def rrf_fuse(*rankings: list[dict], limit: int = 200) -> list[dict]:
+# How many ranked records one search carries forward. It has to cover the relevance screen
+# (pipeline.SCREEN_LIMIT): a shorter list would silently cap what can be screened.
+RETRIEVE_LIMIT = 500
+
+
+def rrf_fuse(*rankings: list[dict], limit: int = RETRIEVE_LIMIT) -> list[dict]:
     scores: dict[str, float] = {}
     docs = {}
     for ranking in rankings:
@@ -862,7 +867,7 @@ class ElasticRepository:
         return {"documents": self.hits(result), "corpus": total["count"]}
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
-        base = {"index": self.index, "size": 200, "source_excludes": ["embedding"]}
+        base = {"index": self.index, "size": RETRIEVE_LIMIT, "source_excludes": ["embedding"]}
         # Third ranking signal: citation authority over the same match set.
         authority = authority_query(query)
         if vector is None:
@@ -874,8 +879,8 @@ class ElasticRepository:
         knn = {
             "field": "embedding",
             "query_vector": vector,
-            "k": 200,
-            "num_candidates": 1000,
+            "k": RETRIEVE_LIMIT,
+            "num_candidates": 2 * RETRIEVE_LIMIT,
             "filter": query,
         }
         try:
@@ -883,7 +888,7 @@ class ElasticRepository:
                 **base,
                 retriever={
                     "rrf": {
-                        "rank_window_size": 200,
+                        "rank_window_size": RETRIEVE_LIMIT,
                         "rank_constant": 60,
                         "retrievers": [
                             {"standard": {"query": query}},

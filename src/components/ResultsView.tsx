@@ -54,12 +54,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         ? <EffectTrendPanel trend={result.effectTrend} />
         : result.overview ? <OverviewPanel overview={result.overview} />
         : matched > 0 && <p className="max-w-[65ch] border-l-2 border-line pl-4 text-sm leading-relaxed text-ink-2">No summary of effects is shown because none of the {formatCount(matched)} matching {matched === 1 ? "study" : "studies"} reported an effect, so there is no trend to describe. What each one did report is listed under the studies below.</p>}
-      {result.pico && <section className="border-l-2 border-accent pl-4">
-        <h2 className="text-sm font-medium text-ink">Meaningful-effect threshold: {result.pico.sesoi} {result.pico.effectType}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-ink-2">{result.pico.sesoiRationale}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-3">The threshold is proposed from your question and decides which results count as making a difference or as a confirmed no-difference. Text-only classifications remain provisional.</p>
-        <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>
-      </section>}
+      {result.pico && <details className="text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
