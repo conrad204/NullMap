@@ -9,6 +9,7 @@ its exact-quote validation work unchanged. Papers without a PMCID stay abstract-
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import xml.etree.ElementTree as ET
@@ -248,21 +249,31 @@ def flatten_jats(xml_text: str, abstract: str = "", *, max_lines: int = 160) -> 
     return result
 
 
+FETCH_CONCURRENCY = 8
+
+
 class FullTextClient:
     """Fetch and flatten one paper's Europe PMC full text; never raises for a missing paper."""
 
     def __init__(self, config: Settings = settings, transport: httpx.AsyncBaseTransport | None = None):
         self.config = config
         self.transport = transport
+        # One search can read a hundred papers; Europe PMC is a shared public service.
+        self.slots = asyncio.Semaphore(FETCH_CONCURRENCY)
 
     def pmcid(self, study: dict) -> str | None:
         return normalize_pmcid(study.get("pmcid"))
 
     async def fetch_xml(self, pmcid: str) -> str | None:
         url = f"{self.config.europepmc_url.rstrip('/')}/{pmcid}/fullTextXML"
-        async with httpx.AsyncClient(
-            timeout=self.config.fulltext_timeout, transport=self.transport, follow_redirects=True
-        ) as client:
+        async with (
+            self.slots,
+            httpx.AsyncClient(
+                timeout=self.config.fulltext_timeout,
+                transport=self.transport,
+                follow_redirects=True,
+            ) as client,
+        ):
             response = await client.get(url, headers={"Accept": "application/xml"})
         if response.status_code == 404:
             return None

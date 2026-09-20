@@ -12,9 +12,9 @@ interface Props {
   onFiltersChange: (filters: FilterState) => void;
 }
 const EXAMPLES = [
-  "Does intermittent fasting improve working memory in healthy adults?",
-  "Does vitamin D supplementation reduce depressive symptoms in adults?",
-  "Does metformin improve survival in adults with lung cancer?",
+  "Does azilsartan lower systolic blood pressure more than placebo in adults with essential hypertension?",
+  "Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis?",
+  "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease?",
 ];
 const DEFAULTS = { plannedN: 200, alpha: 0.05, valueSuccess: 100, valueNull: 20, studyCost: 30 };
 

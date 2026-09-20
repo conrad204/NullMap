@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
-import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
+import type { EffectTrend, InconclusiveReason, Paper, SearchResult, Source, Verdict } from "../types";
+import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
-import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
+import { cx, formatAuthors, formatCount } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
 
-type Filter = Verdict | "all";
+type Filter = BarGroupKey | "inconclusive" | "all";
+const filterVerdicts = (filter: Filter): Verdict[] => filter === "inconclusive" ? ["inconclusive"] : BAR_GROUPS.find((group) => group.key === filter)?.verdicts ?? [];
+const filterLabel = (filter: Filter) => filter === "inconclusive" ? VERDICT_META.inconclusive.label : BAR_GROUPS.find((group) => group.key === filter)?.label ?? "";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
 const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
@@ -36,7 +38,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   // Stated beside the active filters, not in the warnings list: a reader of filtered
   // results has to be told why unpublished trial records survived a citation bound.
   const exemption = registryExemptionNotice(result.filters, result.papers);
-  const shown = filter === "all" ? result.papers : result.papers.filter((paper) => paper.verdict === filter);
+  const shown = filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict));
   return (
     <div className="fade-up flex flex-col gap-10">
       <header>
@@ -54,18 +56,10 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         ? <EffectTrendPanel trend={result.effectTrend} />
         : result.overview ? <OverviewPanel overview={result.overview} />
         : matched > 0 && <p className="max-w-[65ch] border-l-2 border-line pl-4 text-sm leading-relaxed text-ink-2">No summary of effects is shown because none of the {formatCount(matched)} matching {matched === 1 ? "study" : "studies"} reported an effect, so there is no trend to describe. What each one did report is listed under the studies below.</p>}
-      {result.pico && <section className="border-l-2 border-accent pl-4">
-        <h2 className="text-sm font-medium text-ink">Meaningful-effect threshold: {result.pico.sesoi} {result.pico.effectType}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-ink-2">{result.pico.sesoiRationale}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-3">The threshold is proposed from your question and decides which results count as making a difference or as a confirmed no-difference. Text-only classifications remain provisional.</p>
-        <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>
-      </section>}
+      {result.pico && <details className="text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_minmax(245px,290px)]">
-        <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
-        <EstimatePanel estimate={result.estimate} statistics={result.statistics} />
-      </div>
+      <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
       <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
     </div>
@@ -112,26 +106,20 @@ function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
 }
 function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
+  const groups = BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) }));
   return <section>
     <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
-    <div role="img" aria-label={BAR_VERDICTS.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
+    <div role="img" aria-label={groups.map(({ group, total }) => `${total} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
       {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
-      {BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) })).filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className="flex min-w-1 basis-0 gap-px overflow-hidden rounded-mark">
-        {group.verdicts.filter((verdict) => counts[verdict] > 0).map((verdict) => <div key={verdict} style={{ flexGrow: counts[verdict] }} className={cx(VERDICT_META[verdict].bg, "basis-0 transition-opacity duration-300", filter !== "all" && filter !== verdict && "opacity-25")} />)}
-      </div>)}
+      {groups.filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className={cx(group.bg, "min-w-1 basis-0 rounded-mark transition-opacity duration-300", filter !== "all" && filter !== group.key && "opacity-25")} />)}
     </div>
-    <ul className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-3">{BAR_GROUPS.map((group) => <li key={group.key}>
-      <p className="flex items-baseline gap-2"><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0))}</span><span className="text-sm font-medium text-ink">{group.label}</span></p>
-      <ul className="mt-2 flex flex-col gap-0.5">{group.verdicts.map((verdict) => {
-        const meta = VERDICT_META[verdict];
-        return <li key={verdict}><button type="button" title={meta.description} onClick={() => onFilter(filter === verdict ? "all" : verdict)} aria-pressed={filter === verdict} className={cx("group -mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors", filter === verdict ? "bg-surface-2" : "hover:bg-surface-2/60")}>
-          <span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 rounded-mark", meta.bg)} />
-          <span className="font-mono text-sm tabular-nums text-ink">{formatCount(counts[verdict])}</span>
-          <span className="text-sm leading-snug text-ink-2 group-hover:text-ink">{meta.short}</span>
-        </button></li>;
-      })}</ul>
+    <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">{groups.map(({ group, total }) => <li key={group.key}>
+      <button type="button" title={group.description} onClick={() => onFilter(filter === group.key ? "all" : group.key)} aria-pressed={filter === group.key} className={cx("group -mx-2 flex w-[calc(100%+1rem)] flex-col gap-1.5 rounded-control p-2 text-left transition-colors", filter === group.key ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+        <span className="flex items-baseline gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 self-center rounded-mark", group.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(total)}</span><span className="text-sm font-medium text-ink">{group.label}</span></span>
+        <span className="text-xs leading-relaxed text-ink-3">{group.verdicts.length === 1 ? VERDICT_META[group.verdicts[0]].short : group.verdicts.map((verdict) => `${formatCount(counts[verdict])} ${VERDICT_META[verdict].short}`).join(" · ")}</span>
+      </button>
     </li>)}</ul>
-    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select a row to filter the displayed studies below.</p>
+    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select an answer to filter the displayed studies below.</p>
     <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
 }
@@ -152,28 +140,9 @@ function InconclusiveNote({ count, reasons, active, onToggle }: { count: number;
     </div>)}</dl>
   </div>;
 }
-function EstimatePanel({ estimate, statistics }: { estimate: PursuitEstimate; statistics?: Statistics }) {
-  const assurance = statistics ? statistics.assurance : estimate.pSuccess;
-  const ev = statistics ? statistics.expectedValue : estimate.expectedValue;
-  const rec = RECOMMENDATION_META[estimate.recommendation];
-  return <aside className="rounded-panel border border-line bg-surface p-5 shadow-panel">
-    <h2 className="text-sm font-medium text-ink-2">Your planned study</h2>
-    <div className="mt-4 flex flex-wrap items-baseline gap-x-2"><span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{assurance === null ? "—" : percent(assurance)}</span><span className="text-sm text-ink-2">assurance</span></div>
-    <p className="mt-2 text-xs leading-relaxed text-ink-3">Bayesian expected power to detect an effect under the model. This does not measure the chance of a meaningful benefit.</p>
-    <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
-      <div><dt className="text-ink-3">Expected value</dt><dd className="mt-0.5 font-mono tabular-nums text-ink">{ev === null ? "Unavailable" : signed(ev)}</dd></div>
-      <div><dt className="text-ink-3">Evidence confidence</dt><dd className="mt-0.5 capitalize text-ink">{estimate.confidence}</dd></div>
-      <div><dt className="text-ink-3">N for 80% assurance</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.requiredN != null ? formatCount(statistics.requiredN) : "Unavailable"}</dd></div>
-      <div><dt className="text-ink-3">Planned MDE</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.plannedMde != null ? statistics.plannedMde.toFixed(3) : "Unavailable"}</dd></div>
-    </dl>
-    <p className="mt-2 text-xs text-ink-3">EV uses your value and cost units. MDE is a standardized difference (SMD).</p>
-    <p className={cx("mt-5 inline-flex items-center rounded-control px-2.5 py-1 text-sm font-medium", rec.text, rec.tint)}>{assurance === null ? "More evidence needed" : rec.label}</p>
-    <ul className="mt-4 list-disc space-y-2 pl-4 text-sm leading-relaxed text-ink-2 marker:text-ink-3">{estimate.drivers.map((driver) => <li key={driver}>{driver}</li>)}</ul>
-  </aside>;
-}
 function PaperList({ papers, allDisplayed, filter, onClear }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void }) {
   return <section>
-    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${VERDICT_META[filter].label}`}</h2>{filter !== "all" && <button type="button" onClick={onClear} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
+    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={onClear} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
     {papers.length === 0 ? <p className="mt-4 text-sm leading-relaxed text-ink-2">{filter === "all" ? "No studies were returned for this question. Missing evidence cannot establish a null effect." : "No studies from this bucket are on the displayed page. Headline counts may include other matching records."}</p> : <ol className="mt-2">{papers.map((paper) => <PaperRow key={paper.id} paper={paper} />)}</ol>}
   </section>;
 }

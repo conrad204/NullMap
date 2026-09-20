@@ -70,8 +70,11 @@ def filter_phrases(filters: dict) -> list[str]:
 
 # The registry sweep can fill the first several dozen ranks with trials, so the screen has to
 # reach well past the displayed page or papers are cut before anyone judges them.
-SCREEN_LIMIT = 160
+SCREEN_LIMIT = 500
 SCREEN_BATCH = 40
+# A full screen is 13 calls; an unbounded burst risks a rate limit, which fails open to
+# unscreened results.
+SCREEN_CONCURRENCY = 8
 
 
 def recount(studies: list[dict], sesoi: float, effect_type: str) -> dict:
@@ -353,12 +356,20 @@ class SearchPipeline:
                 "outcome": (d.get("outcome") or "")[:120],
                 "abstract": (d.get("abstract") or "")[:280],
             }
-            for d in head
+            # Batch by id, not by rank: a study's verdict should not depend on which
+            # neighbours the ranking happened to put beside it. `kept` restores rank order.
+            for d in sorted(head, key=lambda d: d["id"])
         ]
+        slots = asyncio.Semaphore(SCREEN_CONCURRENCY)
+
+        async def screen_batch(batch: list[dict]) -> set[str]:
+            async with slots:
+                return await self.llm.screen(question, batch, usage)
+
         try:
             batches = await asyncio.gather(
                 *(
-                    self.llm.screen(question, rows[start : start + SCREEN_BATCH], usage)
+                    screen_batch(rows[start : start + SCREEN_BATCH])
                     for start in range(0, len(rows), SCREEN_BATCH)
                 )
             )

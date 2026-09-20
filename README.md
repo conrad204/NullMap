@@ -2,6 +2,8 @@
 
 Find prior clinical studies, inspect null and missing results, and explore whether a proposed study is adequately powered. The application combines OpenAlex papers and ClinicalTrials.gov records in one Elasticsearch index, with a React interface and a FastAPI service.
 
+New to the application? The [user guide](docs/USER_GUIDE.md) walks through every feature — search, the verdict buckets, the power panel, the gap map, and the API — and how to read the numbers honestly.
+
 OpenAlex ingestion uses its **public S3 Parquet snapshot**, with no OpenAlex API or API key. The default corpus scope is hypertension **or** kidney research across all years, including records without abstracts. Full imports run on the batch/compute host; the browser receives search results. The previous small demo index is preserved. A full replacement corpus has not been imported yet.
 
 See the [S3 ingestion guide](backend/app/ingest/README.md) for the remote workflow, exact scope, storage requirements, checkpoints and reference backfills. Running `python -m app.bootstrap` defaults to a manifest-only plan; scanning requires `--run` and an adequate explicit byte budget.
