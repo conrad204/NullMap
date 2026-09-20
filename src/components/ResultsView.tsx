@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
 import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
-import { BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
+import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
@@ -57,7 +57,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       {result.pico && <section className="border-l-2 border-accent pl-4">
         <h2 className="text-sm font-medium text-ink">Meaningful-effect threshold: {result.pico.sesoi} {result.pico.effectType}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-2">{result.pico.sesoiRationale}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-3">The threshold is proposed from your question and decides which results count as meaningful effects or credible nulls. Text-only classifications remain provisional.</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-3">The threshold is proposed from your question and decides which results count as making a difference or as a confirmed no-difference. Text-only classifications remain provisional.</p>
         <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>
       </section>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
@@ -114,18 +114,24 @@ function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
   return <section>
     <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
-    <div role="img" aria-label={BAR_VERDICTS.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].label}`).join(", ")} className="mt-3 flex h-3 w-full gap-px overflow-hidden rounded-mark">
-      {classified === 0 && <div className="w-full bg-surface-2" />}
-      {BAR_VERDICTS.filter((verdict) => counts[verdict] > 0).map((verdict) => <div key={verdict} style={{ flexGrow: counts[verdict] }} className={cx(VERDICT_META[verdict].bg, "transition-opacity duration-300", filter !== "all" && filter !== verdict && "opacity-25")} />)}
+    <div role="img" aria-label={BAR_VERDICTS.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
+      {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
+      {BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) })).filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className="flex min-w-1 basis-0 gap-px overflow-hidden rounded-mark">
+        {group.verdicts.filter((verdict) => counts[verdict] > 0).map((verdict) => <div key={verdict} style={{ flexGrow: counts[verdict] }} className={cx(VERDICT_META[verdict].bg, "basis-0 transition-opacity duration-300", filter !== "all" && filter !== verdict && "opacity-25")} />)}
+      </div>)}
     </div>
-    <ul className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">{BAR_VERDICTS.map((verdict) => {
-      const meta = VERDICT_META[verdict];
-      return <li key={verdict}><button type="button" onClick={() => onFilter(filter === verdict ? "all" : verdict)} aria-pressed={filter === verdict} className={cx("group -m-2 flex w-[calc(100%+1rem)] flex-col items-start gap-1 rounded-control p-2 text-left transition-colors", filter === verdict ? "bg-surface-2" : "hover:bg-surface-2/60")}>
-        <span className="flex items-center gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 rounded-mark", meta.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(counts[verdict])}</span></span>
-        <span className="text-sm leading-snug text-ink-2 group-hover:text-ink">{meta.label}</span>
-      </button></li>;
-    })}</ul>
-    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select a bucket to filter the displayed studies below.</p>
+    <ul className="mt-5 grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-3">{BAR_GROUPS.map((group) => <li key={group.key}>
+      <p className="flex items-baseline gap-2"><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0))}</span><span className="text-sm font-medium text-ink">{group.label}</span></p>
+      <ul className="mt-2 flex flex-col gap-0.5">{group.verdicts.map((verdict) => {
+        const meta = VERDICT_META[verdict];
+        return <li key={verdict}><button type="button" title={meta.description} onClick={() => onFilter(filter === verdict ? "all" : verdict)} aria-pressed={filter === verdict} className={cx("group -mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors", filter === verdict ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+          <span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 rounded-mark", meta.bg)} />
+          <span className="font-mono text-sm tabular-nums text-ink">{formatCount(counts[verdict])}</span>
+          <span className="text-sm leading-snug text-ink-2 group-hover:text-ink">{meta.short}</span>
+        </button></li>;
+      })}</ul>
+    </li>)}</ul>
+    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select a row to filter the displayed studies below.</p>
     <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
 }

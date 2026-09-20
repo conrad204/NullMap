@@ -65,7 +65,7 @@ export default function IdeaComposer({ hidden, onSubmit, filters, onFiltersChang
     <form onSubmit={handleSubmit} noValidate hidden={hidden} className="fade-up mx-auto w-full max-w-[720px] flex flex-col gap-6">
       <div className="text-center">
         <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-4xl">Check the file drawer before you run the study.</h1>
-        <p className="mx-auto mt-3 max-w-[52ch] text-balance leading-relaxed text-ink-2">Map prior clinical studies, distinguish credible nulls from uncertain results, and plan your next study.</p>
+        <p className="mx-auto mt-3 max-w-[52ch] text-balance leading-relaxed text-ink-2">Map prior clinical studies, separate confirmed no-difference results from uncertain ones, and plan your next study.</p>
       </div>
       <div className="flex flex-col gap-2">
         <div className={"prompt-box" + (error ? " prompt-box-invalid" : "")}>

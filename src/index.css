@@ -29,6 +29,8 @@
   --v-reported-null: light-dark(#5b74b8, #a3b5e0);
   --v-inconclusive: light-dark(#8e8e98, #83838d);
   --v-failed: light-dark(#c0463f, #e0655e);
+  /* Same hue as unreported: both are "no answer". --v-failed stays the error colour. */
+  --v-stopped: light-dark(#75500f, #a67b2c);
   --v-unreported: light-dark(#a8741a, #d9a43b);
 
   --shadow:
@@ -64,6 +66,7 @@
   --color-v-reported-null: var(--v-reported-null);
   --color-v-inconclusive: var(--v-inconclusive);
   --color-v-failed: var(--v-failed);
+  --color-v-stopped: var(--v-stopped);
   --color-v-unreported: var(--v-unreported);
 
   --shadow-panel: var(--shadow);
