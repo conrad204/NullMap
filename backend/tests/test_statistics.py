@@ -669,3 +669,61 @@ def test_a_model_group_never_overrides_scale_or_mean_difference_units():
                    for x, unit in zip("ABC", ["mmHg", "mmHg", "kPa"])]
     assert analyze_studies(mixed_units, {"effectType": "MD", "outcomeSd": 10}, None,
                            groups)["pools"] == []
+
+
+def text_study(sid, label):
+    return {"id": sid, "result_label": label, "has_control": True, "outcome": "Depression severity"}
+
+
+def test_pursuit_starts_at_even_odds_and_ignores_uninformative_records():
+    empty = analyze_studies([], plan())["pursuit"]
+    assert empty["pEffect"] == 0.5
+    assert empty["state"] == "unknown"
+    assert empty["ci"] == pytest.approx([0.025, 0.975])
+    quiet = analyze_studies(
+        [study("wide", estimate=0.1, low=-0.3, high=0.5), registry(id="r")], plan()
+    )["pursuit"]
+    assert quiet["posterior"] == [1.0, 1.0]
+    assert quiet["uninformative"] == 2
+
+
+def test_pursuit_weights_quoted_numbers_above_text_only_claims():
+    numeric = analyze_studies([study("null")], plan())["pursuit"]
+    text = analyze_studies([text_study("t", "null")], plan())["pursuit"]
+    assert numeric["failures"] == 1.0 and numeric["counted"]["credible_null"] == 1
+    assert text["failures"] == 0.5 and text["counted"]["reported_null"] == 1
+    assert text["pEffect"] > numeric["pEffect"]
+
+
+def test_pursuit_favours_null_after_consistent_credible_nulls():
+    result = analyze_studies([study(str(i)) for i in range(8)], plan())["pursuit"]
+    assert result["posterior"] == [1.0, 9.0]
+    assert result["pEffect"] == pytest.approx(0.1)
+    assert result["ci"][1] < 0.5
+    assert result["state"] == "favours_null"
+    assert result["conflict"] == 0
+
+
+def test_pursuit_marks_contradicting_studies_as_contested_not_settled():
+    studies = [study(f"e{i}", estimate=0.5, low=0.3, high=0.7) for i in range(4)]
+    studies += [study(f"n{i}") for i in range(4)]
+    result = analyze_studies(studies, plan())
+    pursuit = result["pursuit"]
+    assert pursuit["pEffect"] == pytest.approx(0.5)
+    assert pursuit["ci"][0] > 0.2 and pursuit["ci"][1] < 0.8
+    assert pursuit["conflict"] == pytest.approx(0.5)
+    assert pursuit["state"] == "contested"
+    assert any("contested" in warning for warning in result["warnings"])
+
+
+def test_pursuit_pool_probabilities_follow_the_predictive_distribution():
+    studies = [study(str(i), estimate=0.5, low=0.3, high=0.7) for i in range(3)]
+    pursuit = analyze_studies(studies, plan())["pursuit"]
+    assert pursuit["poolStudyIds"] == ["0", "1", "2"]
+    assert pursuit["pFavours"] > 0.99
+    assert pursuit["pMeaningful"] > 0.99
+    nulls = analyze_studies([study(str(i)) for i in range(3)], plan())["pursuit"]
+    assert nulls["pMeaningful"] < 0.01
+    # Two pools on the requested scale would make the choice ambiguous, so neither is used.
+    mixed = studies + [study(f"o{i}", outcome="Anxiety", estimate=0.5, low=0.3, high=0.7) for i in range(3)]
+    assert analyze_studies(mixed, plan())["pursuit"]["pMeaningful"] is None

@@ -1,12 +1,21 @@
-import type { EvidencePool, Paper, QueryCosts, SearchResult } from "../types";
-import { formatCount, percent, signed } from "../lib/format";
+import type { EvidencePool, Paper, Pursuit, PursuitState, QueryCosts, SearchResult } from "../types";
+import { cx, formatCount, percent, signed } from "../lib/format";
 import { effectForPool } from "../lib/effects";
+
+const PURSUIT_STATES: Record<PursuitState, { label: string; detail: string; tone: string }> = {
+  unknown: { label: "Nothing answers it yet", detail: "No read study gave a verdict either way, so the odds are still the 50/50 prior. A new study here would be the first answer, not a replication.", tone: "text-ink-2" },
+  open: { label: "Still open", detail: "The credible interval spans even odds: the record leans one way but a well-powered study could move it substantially.", tone: "text-v-unreported" },
+  contested: { label: "Contested", detail: "Studies disagree. A posterior near one half here means conflict, not a half-settled question; look for moderators (population, dose, outcome definition) before adding another undifferentiated trial.", tone: "text-v-failed" },
+  favours_effect: { label: "Leans towards a real effect", detail: "The credible interval lies above even odds. Another confirmatory trial adds less than a study that tests where or for whom the effect holds.", tone: "text-v-effect" },
+  favours_null: { label: "Leans towards no effect", detail: "The credible interval lies below even odds. Repeating the same design is unlikely to be worthwhile unless the prior studies were underpowered for your SESOI.", tone: "text-v-null" },
+};
 
 export default function EvidenceDetails({ result }: { result: SearchResult }) {
   const stats = result.statistics;
   return <>
     {stats && <section className="border-y border-line py-5">
       <h2 className="text-sm font-medium text-ink-2">Quantitative evidence</h2>
+      {stats.pursuit && <PursuitPanel pursuit={stats.pursuit} sesoi={result.pico?.sesoi} />}
       {stats.pools.length ? <div className="mt-4 space-y-6">{stats.pools.map((pool, index) => <ForestPlot key={`${pool.outcome}-${pool.effectType}-${index}`} pool={pool} papers={result.papers} sesoi={result.pico?.effectType === pool.effectType ? result.pico.sesoi : undefined} />)}</div>
         : <p className="mt-3 text-sm leading-relaxed text-ink-2">No compatible group of at least three studies was available to pool. A missing pooled estimate does not establish no effect.</p>}
       <div className="mt-5">
@@ -35,6 +44,37 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
     </details>}
     {result.costs && <Costs costs={result.costs} />}
   </>;
+}
+function PursuitPanel({ pursuit, sesoi }: { pursuit: Pursuit; sesoi?: number }) {
+  const state = PURSUIT_STATES[pursuit.state];
+  const [alpha, beta] = pursuit.posterior;
+  const counted = [
+    [pursuit.counted.effect, "effect"], [pursuit.counted.credible_null, "confirmed null"], [pursuit.counted.reported_null, "claimed null"],
+  ].filter(([count]) => (count as number) > 0).map(([count, label]) => `${formatCount(count as number)} ${label}`).join(" · ");
+  return <div className="mt-4 rounded-control border border-line p-4">
+    <h3 className="text-sm font-medium text-ink">Chance a real effect exists</h3>
+    <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pEffect)}</span>
+      <span className="font-mono text-xs text-ink-3">95% credible interval {percent(pursuit.ci[0])} – {percent(pursuit.ci[1])} · Beta({alpha.toFixed(2).replace(/\.?0+$/, "")}, {beta.toFixed(2).replace(/\.?0+$/, "")})</span>
+    </div>
+    <PosteriorStrip ci={pursuit.ci} mean={pursuit.pEffect} />
+    <p className={cx("mt-3 text-sm font-medium", state.tone)}>{state.label}</p>
+    <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-ink-2">{state.detail}</p>
+    <p className="mt-2 text-xs leading-relaxed text-ink-3">Updated from a 50/50 prior by {counted || "no verdicts"}{pursuit.uninformative > 0 ? `; ${formatCount(pursuit.uninformative)} inconclusive, stopped or unreported ${pursuit.uninformative === 1 ? "record" : "records"} left it unchanged` : ""}. Quoted numbers weigh 1, reconstructed uncertainty 0.75, text-only claims 0.5.{pursuit.conflict > 0 ? ` ${percent(pursuit.conflict)} of the evidence weight sits on the minority side.` : ""}</p>
+    {pursuit.pMeaningful !== null && pursuit.pFavours !== null && <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-3">
+      <div className="flex items-baseline gap-2"><dd className="order-1 font-mono text-xl tabular-nums leading-none text-ink">{percent(pursuit.pMeaningful)}</dd><dt className="order-2 text-xs text-ink-2">chance the pooled true effect reaches the SESOI{sesoi !== undefined ? ` (±${sesoi})` : ""} in either direction</dt></div>
+      <div className="flex items-baseline gap-2"><dd className="order-1 font-mono text-xl tabular-nums leading-none text-ink">{percent(pursuit.pFavours)}</dd><dt className="order-2 text-xs text-ink-2">chance it is positive as coded</dt></div>
+      <p className="basis-full text-xs leading-relaxed text-ink-3">From the {pursuit.poolStudyIds.length}-study pool's predictive distribution Normal(pooled mean, τ² + SE²); these use the numbers, the headline uses the verdicts.</p>
+    </dl>}
+  </div>;
+}
+function PosteriorStrip({ ci, mean }: { ci: [number, number]; mean: number }) {
+  const x = (value: number) => `${(value * 100).toFixed(1)}%`;
+  return <div className="relative mt-3 h-2 w-full rounded-mark bg-surface-2" role="img" aria-label={`Posterior mean ${percent(mean)}, 95% credible interval ${percent(ci[0])} to ${percent(ci[1])}.`}>
+    <div className="absolute inset-y-0 rounded-mark bg-accent/30" style={{ left: x(ci[0]), width: x(ci[1] - ci[0]) }} />
+    <div className="absolute inset-y-0 w-0.5 bg-accent" style={{ left: x(mean) }} />
+    <div className="absolute inset-y-0 w-px bg-ink-3" style={{ left: "50%" }} title="even odds" />
+  </div>;
 }
 function ForestPlot({ pool, papers, sesoi }: { pool: EvidencePool; papers: Paper[]; sesoi?: number }) {
   const studies = papers.filter((paper) => pool.studyIds.includes(paper.id)).flatMap((paper) => {

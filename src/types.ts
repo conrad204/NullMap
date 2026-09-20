@@ -162,8 +162,29 @@ export interface EffectTrend {
   patterns: string[];
   scope: string;
 }
+export type PursuitState = "unknown" | "open" | "contested" | "favours_effect" | "favours_null";
+/** Beta(1, 1) prior updated by tier-weighted verdicts: the chance a real effect exists, as the record stands. */
+export interface Pursuit {
+  prior: [number, number];
+  posterior: [number, number];
+  pEffect: number;
+  ci: [number, number];
+  successes: number;
+  failures: number;
+  counted: { effect: number; credible_null: number; reported_null: number };
+  uninformative: number;
+  /** Share of the informative weight on the minority side; 0.5 is a perfect split. */
+  conflict: number;
+  state: PursuitState;
+  /** Predictive probability that the pooled true effect reaches the SESOI in either direction; null without one matching pool. */
+  pMeaningful: number | null;
+  pFavours: number | null;
+  poolStudyIds: string[];
+  method: string;
+}
 export interface Statistics {
   pools: EvidencePool[];
+  pursuit?: Pursuit;
   assurance: number | null;
   requiredN: number | null;
   expectedValue: number | null;

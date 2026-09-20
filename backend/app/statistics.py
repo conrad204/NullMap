@@ -34,6 +34,7 @@ from statistics import NormalDist
 from typing import Any
 
 import numpy as np
+from scipy.stats import beta as beta_dist
 from scipy.stats import t as student_t
 from statsmodels.stats.meta_analysis import combine_effects
 
@@ -54,6 +55,11 @@ _MAX_PLAUSIBLE_SMD = 5.0
 EGGER_MIN_STUDIES = 10
 # Conventional screening level for asymmetry tests, which are underpowered at 0.05.
 EGGER_ALPHA = 0.10
+# Pseudo-observations one verdict adds to the Beta posterior, by how its numbers were read.
+# A quoted CI is one observation; a text-only claim is half of one.
+PURSUIT_TIER_WEIGHTS = {"numeric": 1.0, "derived": 1.0, "reconstructed": 0.75, "text_only": 0.5}
+# Share of the informative weight on the minority side above which the record is contested.
+PURSUIT_CONFLICT_SHARE = 0.3
 
 
 def _number(value: Any) -> float | None:
@@ -592,6 +598,82 @@ def _egger(effects: np.ndarray, ses: np.ndarray) -> dict | None:
     }
 
 
+def _pursuit(
+    classifications: list[dict], pools: list[dict], margin: float | None, kind: str | None
+) -> dict:
+    """Posterior probability that a real effect exists, from a Beta(1, 1) prior.
+
+    Every verdict that answers the yes/no question moves the posterior: ``effect`` is a
+    success, ``credible_null`` and ``reported_null`` are failures, weighted by how the
+    numbers were read (``PURSUIT_TIER_WEIGHTS``). Inconclusive, failed and unreported
+    records carry no information about the answer and leave the prior alone. Studies
+    are treated as exchangeable, so contradicting results narrow the interval around
+    one half rather than widening it; the ``conflict`` share and the ``contested`` state
+    report that explicitly instead of hiding it in a confident-looking 50%.
+
+    With a numeric pool, ``pMeaningful`` is the probability under the predictive
+    Normal(pooled mean, tau² + SE²) that the true effect reaches the SESOI in either
+    direction, and ``pFavours`` the probability that it is positive as coded.
+    """
+    successes = failures = 0.0
+    counted = {"effect": 0, "credible_null": 0, "reported_null": 0}
+    uninformative = 0
+    for verdict in classifications:
+        weight = PURSUIT_TIER_WEIGHTS.get(verdict["evidence_tier"], 0.5)
+        bucket = verdict["bucket"]
+        if bucket == "effect":
+            successes += weight
+        elif bucket in {"credible_null", "reported_null"}:
+            failures += weight
+        else:
+            uninformative += 1
+            continue
+        counted[bucket] += 1
+    alpha, beta = 1.0 + successes, 1.0 + failures
+    informative = successes + failures
+    low, high = (float(value) for value in beta_dist.ppf([0.025, 0.975], alpha, beta))
+    conflict = min(successes, failures) / informative if informative else 0.0
+    if informative == 0:
+        state = "unknown"
+    elif conflict >= PURSUIT_CONFLICT_SHARE and informative >= 3:
+        state = "contested"
+    elif low <= 0.5 <= high:
+        state = "open"
+    else:
+        state = "favours_effect" if low > 0.5 else "favours_null"
+    result = {
+        "prior": [1.0, 1.0],
+        "posterior": [alpha, beta],
+        "pEffect": alpha / (alpha + beta),
+        "ci": [low, high],
+        "successes": successes,
+        "failures": failures,
+        "counted": counted,
+        "uninformative": uninformative,
+        "conflict": conflict,
+        "state": state,
+        "pMeaningful": None,
+        "pFavours": None,
+        "poolStudyIds": [],
+        "method": (
+            "Beta(1, 1) prior updated with tier-weighted verdicts; 95% equal-tailed credible "
+            "interval. Pool probabilities integrate Normal(pooled mean, tau² + SE²)."
+        ),
+    }
+    matching = [pool for pool in pools if pool["effectType"] == kind]
+    if margin is not None and len(matching) == 1:
+        pool = matching[0]
+        spread = math.sqrt(pool["tau2"] + pool["se"] ** 2)
+        if spread > 0:
+            result.update(
+                pMeaningful=_NORMAL.cdf((-margin - pool["estimate"]) / spread)
+                + (1 - _NORMAL.cdf((margin - pool["estimate"]) / spread)),
+                pFavours=1 - _NORMAL.cdf(-pool["estimate"] / spread),
+                poolStudyIds=pool["studyIds"],
+            )
+    return result
+
+
 def _pool(group: list[tuple[dict, dict, str]], key: tuple) -> dict:
     effects = np.array([row[1]["analysis_estimate"] for row in group], dtype=float)
     ses = np.array([row[1]["analysis_se"] for row in group], dtype=float)
@@ -769,6 +851,7 @@ def analyze_studies(
     groups: dict[tuple, list] = defaultdict(list)
     seen: set[str] = set()
     unique_studies = []
+    classifications: list[dict] = []
     ordered_studies = sorted(studies, key=lambda row: row.get("source") not in {"ctgov", "merged"})
     for position, study in enumerate(ordered_studies):
         sid = _study_id(study, position)
@@ -788,7 +871,10 @@ def analyze_studies(
         seen.update(aliases)
         unique_studies.append(study)
         classification = assign_bucket(study, plan.get("sesoi", 0.2), plan.get("effectType", "SMD"))
-        if study.get("is_review") or classification["bucket"] in {"failed", "unreported"}:
+        if study.get("is_review"):
+            continue
+        classifications.append(classification)
+        if classification["bucket"] in {"failed", "unreported"}:
             continue
         if classification["analysis_se"] is None or classification["analysis_estimate"] is None:
             continue
@@ -887,8 +973,29 @@ def analyze_studies(
             "may affect pooled estimates and assurance."
         )
 
+    pursuit = _pursuit(
+        classifications,
+        pools,
+        _margin(plan.get("sesoi", 0.2), plan.get("effectType", "SMD")),
+        _analysis_type(plan.get("effectType", "SMD")),
+    )
+    if pursuit["state"] == "contested":
+        warnings.append(
+            f"The record is contested: {pursuit['conflict']:.0%} of the informative evidence "
+            "weight sits on the minority side. A posterior near one half here means the studies "
+            "disagree, not that the question is half-settled; look for moderators before pooling."
+        )
+    assumptions.append(
+        "The chance a real effect exists starts from a Beta(1, 1) prior (50/50) and counts each "
+        "effect verdict as a success and each credible or reported null as a failure, weighted "
+        "1 for quoted numbers, 0.75 for reconstructed uncertainty and 0.5 for text-only claims. "
+        "Inconclusive, stopped and unreported records do not move it. Studies are assumed "
+        "exchangeable, so it is a summary of the record, not a probability of clinical benefit."
+    )
+
     result = {
         "pools": pools,
+        "pursuit": pursuit,
         "assurance": None,
         "requiredN": None,
         "expectedValue": None,
