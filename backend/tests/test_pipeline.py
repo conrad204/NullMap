@@ -254,7 +254,7 @@ class FakeLLM:
         self.trend_table = deepcopy(table)
         if getattr(self, "trend_error", None):
             raise self.trend_error
-        return SimpleNamespace(summary="Most favour the intervention.", patterns=["BP fell"])
+        return SimpleNamespace(summary="Most favor the intervention.", patterns=["BP fell"])
 
 
 def test_empty_no_key_search_returns_coverage_gap_without_fabricated_probability():
@@ -1011,7 +1011,7 @@ def test_full_text_disabled_never_fetches_and_uses_the_abstract():
     asyncio.run(exercise())
 
 
-def test_inconclusive_is_summarised_with_the_reasons_it_could_not_be_classified():
+def test_inconclusive_is_summarized_with_the_reasons_it_could_not_be_classified():
     from app.pipeline import inconclusive_sentence
 
     assert inconclusive_sentence(0, {"no_result": 0}) == ""
@@ -1044,7 +1044,7 @@ def test_effect_trend_counts_directions_in_code_and_pools_model_grouped_outcomes
         trend = result["effectTrend"]
         assert (trend["favoursIntervention"], trend["favoursComparator"], trend["unclear"]) == (
             2, 1, 0)
-        assert trend["studied"] == 3 and trend["summary"] == "Most favour the intervention."
+        assert trend["studied"] == 3 and trend["summary"] == "Most favor the intervention."
         # The model is told about the nulls and sees quotes, never raw abstracts.
         assert llm.trend_table["context"]["reportedNulls"] == 1
         assert all("abstract" not in row and row["quote"] for row in llm.trend_table["rows"])
@@ -1276,7 +1276,7 @@ def test_tags_that_cancel_the_question_out_warn_and_leave_the_ranking_unsteered(
     question = STEER_VECTORS[QUESTION]
     unsteered = asyncio.run(pipeline.aim(question, ConceptSteer(negative=["vitamin D"]), warnings))
     assert unsteered == question
-    assert any("cancelled the question out" in warning for warning in warnings)
+    assert any("canceled the question out" in warning for warning in warnings)
 
 
 def test_concept_tags_without_embeddings_are_reported_rather_than_silently_dropped():

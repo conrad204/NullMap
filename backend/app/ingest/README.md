@@ -78,7 +78,7 @@ the printed manifest and host capacity. Repeat the same command and directory
 to resume. There is no default year or record cap. The registry condition query
 includes all statuses and study types and exhausts its cursor. Snapshot records
 are normalized, weakly classified, embedded, linked across batches and indexed.
-Bootstrap performs no paid LLM labelling or extraction.
+Bootstrap performs no paid LLM labeling or extraction.
 
 For a bounded smoke test:
 
@@ -162,7 +162,7 @@ Backfills keep separate provenance and do not claim completion of the main build
 
 `python -m app.ingest --help` exposes snapshot scans, registry fetching,
 normalization, classification, embedding, indexing, reference IDs, TEI full-text
-extraction, labelling, classifier training and the `pagerank` pass, which
+extraction, labeling, classifier training and the `pagerank` pass, which
 recomputes within-corpus citation PageRank (references outside the index are
 dropped) and bulk-updates the `pagerank`/`authority` rank-feature fields used
 by retrieval. For example:
@@ -203,7 +203,7 @@ operation use `--skip-embeddings` and serve with `EMBEDDINGS_ENABLED=false`.
 Keep indexing and query embedding models identical.
 
 The default classifier remains the auditable phrase heuristic. The earlier small
-LLM-labelled pilot failed evaluation and was not promoted. Labelling and model
+LLM-labeled pilot failed evaluation and was not promoted. Labeling and model
 training remain explicit experiments; see the historical
 [validation record](../../../docs/VALIDATION.md) and
 [registry fixture provenance](../../tests/fixtures/README.md).

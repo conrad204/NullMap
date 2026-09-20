@@ -37,7 +37,7 @@ export interface Paper {
   rationale: string;
   /** Set only when verdict is "inconclusive". */
   inconclusiveReason?: InconclusiveReason | null;
-  /** Which arm the reported primary result favours; a significant result is not always a benefit. */
+  /** Which arm the reported primary result favors; a significant result is not always a benefit. */
   resultDirection?: ResultDirection | null;
   sampleSize: number | null;
   effectSize: EffectSize | null;
@@ -179,7 +179,7 @@ export interface EffectTrend {
   patterns: string[];
   scope: string;
 }
-/** Which arm the effects favour, over the full match set, unlike EffectTrend's read studies. */
+/** Which arm the effects favor, over the full match set, unlike EffectTrend's read studies. */
 export interface EffectDirections {
   favoursIntervention: number;
   favoursComparator: number;
@@ -333,7 +333,7 @@ export interface MapPoint {
   title: string;
   year: number | null;
 }
-export interface MapNeighbour extends MapExemplar {
+export interface MapNeighbor extends MapExemplar {
   cosine: number;
 }
 export interface MapGap {
@@ -343,7 +343,7 @@ export interface MapGap {
   support: number;
   band: number;
   separation: number;
-  nearest: MapNeighbour;
+  nearest: MapNeighbor;
   exemplars: MapExemplar[][];
   discouraged: boolean;
   /** Present only when an idea was placed against the gaps. */
@@ -356,9 +356,9 @@ export interface MapArithmetic {
 }
 export interface MapPlacement {
   redundancy: number | null;
-  nearest: MapNeighbour | null;
+  nearest: MapNeighbor | null;
   /** The next-closest papers after `nearest`, so closeness can be judged by reading. */
-  neighbors?: MapNeighbour[];
+  neighbors?: MapNeighbor[];
   region: MapRegion | null;
   nearestGap: MapGap | null;
   /** The idea projected into the map's 2-D plane. */

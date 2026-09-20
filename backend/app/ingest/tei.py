@@ -572,7 +572,7 @@ def _paragraph_findings(paragraph: Paragraph) -> list[Finding]:
     if not sentences:
         return []
     # "Scan the paragraphs around": a null/positive confirmation anywhere in the
-    # paragraph colours every statistic reported in it.
+    # paragraph colors every statistic reported in it.
     null_context = any(NULL_RE.search(s) or NONSIGNIFICANT_RE.search(s) for s in sentences)
     significant_context = any(_positive_lexical(s) for s in sentences)
     findings: list[Finding] = []

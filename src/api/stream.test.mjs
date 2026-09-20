@@ -24,13 +24,13 @@ test('supports multiple events in one chunk, multiline data, and final untermina
 });
 
 test('aborting a pending read cancels transport and rejects with AbortError', async () => {
-  let cancelled = false;
-  const body = new ReadableStream({ cancel() { cancelled = true; } });
+  let canceled = false;
+  const body = new ReadableStream({ cancel() { canceled = true; } });
   const controller = new AbortController();
   const pending = readEventStream(body, () => assert.fail('no event expected'), controller.signal);
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
-  assert.equal(cancelled, true);
+  assert.equal(canceled, true);
   assert.equal(body.locked, false);
 });
 

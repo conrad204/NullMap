@@ -19,7 +19,7 @@ export function headline(
   provisional: boolean,
   /** Read studies with a comparison group; omitted when the API does not report it. */
   controlled?: number,
-  /** Splits the effects by the arm they favoured, so a difference is never read as a benefit. */
+  /** Splits the effects by the arm they favored, so a difference is never read as a benefit. */
   directions?: EffectDirections,
 ): Headline {
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
@@ -51,7 +51,7 @@ export function headline(
   }
   const caveat = provisional ? " These are claims read from abstracts; their size is unverified." : "";
   const split = directions && directions.favoursComparator > 0
-    ? ` Not all in the same direction: ${directions.favoursIntervention} favoured the intervention, ${directions.favoursComparator} favoured the comparator.`
+    ? ` Not all in the same direction: ${directions.favoursIntervention} favored the intervention, ${directions.favoursComparator} favored the comparator.`
     : "";
   const found =
     nulls === 0 ? `${counts.effect === 1 ? "It reports" : `All ${counts.effect} report`} an effect.${caveat}`

@@ -84,7 +84,7 @@ def _kind(heading: str) -> str:
 
 
 def parse_jats(xml: str) -> dict[str, str]:
-    """JATS body into `{section kind: text}`; unrecognised headings keep their own name."""
+    """JATS body into `{section kind: text}`; unrecognized headings keep their own name."""
     try:
         root = ElementTree.fromstring(xml)
     except ElementTree.ParseError as exc:

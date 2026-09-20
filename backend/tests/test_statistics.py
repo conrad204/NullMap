@@ -608,7 +608,7 @@ def test_quoted_reported_result_outranks_the_phrase_lexicon_but_never_an_interva
         ("percent change", None),
     ],
 )
-def test_free_text_effect_scales_are_normalised_without_confusing_log_or_standardized(raw, scale):
+def test_free_text_effect_scales_are_normalized_without_confusing_log_or_standardized(raw, scale):
     result = assign_bucket({"effect_type": raw, "estimate": 1.1, "ci_low": 1.0, "ci_high": 1.2})
     assert result["analysis_effect_type"] == scale
 
