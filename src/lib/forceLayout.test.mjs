@@ -125,12 +125,19 @@ test('a pinned node stays under the pointer and is let go on release', () => {
   layout.update([point('a', 0, 0), point('b', 0.01, 0)]);
   const a = layout.indexOf('a');
   layout.pin(a, 7, 7);
-  for (let i = 0; i < 20; i += 1) layout.tick(10);
+  // Held still long enough for the graph to cool completely around it.
+  layout.settle(10, 10_000);
   assert.deepEqual([layout.xAt(a), layout.yAt(a)], [7, 7]);
   assert.ok(layout.isPinned(a));
+  assert.ok(layout.settled, 'the graph has gone cold while the node was held');
   layout.release(a);
+  assert.ok(!layout.settled, 'letting go warms the graph so the node can move again');
   layout.settle(10, 10_000);
-  assert.ok(Math.hypot(layout.xAt(a), layout.yAt(a)) < 7, 'released, it drifts back toward its anchor');
+  assert.ok(!layout.isPinned(a));
+  assert.ok(
+    Math.hypot(layout.xAt(a), layout.yAt(a)) < Math.hypot(7, 7) - 1,
+    'released, it drifts back toward its anchor',
+  );
 });
 
 test('nearest finds the node under a point and nothing outside the radius', () => {

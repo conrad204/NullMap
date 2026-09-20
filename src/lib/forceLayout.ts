@@ -300,9 +300,11 @@ export class ForceLayout {
     this.alpha = Math.max(this.alpha, this.options.reheat);
   }
 
+  /** Lets a held node go; the graph warms up enough to take it back in. */
   release(i: number): void {
     this.fixedX[i] = NaN;
     this.fixedY[i] = NaN;
+    this.alpha = Math.max(this.alpha, this.options.reheat);
   }
 
   isPinned(i: number): boolean {
