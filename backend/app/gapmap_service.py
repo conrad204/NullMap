@@ -1,18 +1,21 @@
-"""Serves the gap map: cluster the whole embedded index, describe it, place ideas on it.
+"""Serves the gap map: cluster the studies around a question, describe them, place the question.
 
-The map is a property of the corpus, not of a query, so it is computed once and
-cached. Placing an idea then costs one query embedding and two matrix products,
-which is what makes the "where does this land" answer instant while still being
-computed over every embedded paper rather than the ten a chat model can read.
+A map with a question is built from that question's neighborhood: the
+``gapmap_neighborhood`` studies nearest its vector, fetched by kNN, clustered
+and drawn. That is a few hundred documents, so the build takes about a second
+and the picture is one a reader can take in. Its coverage says exactly that —
+the N nearest studies out of the embedded index — and never more.
 
-Covering the whole index means the build is long enough to be worth watching, so
-it is written as a stream: documents are scanned in pages, provisional centroids
-move as pages arrive, and full-corpus k-means then runs to convergence, emitting
-the real intermediate state after every iteration. Nothing emitted is
-interpolated or replayed — a partial map is labelled partial, and only the final
-event describes the whole corpus. Measured on the live index (2,096,736 embedded
-studies): 264 s end to end — roughly 130 s to scan at sixteen slices and 25
-bounded k-means iterations over the whole corpus in the rest, peaking at 6.9 GB.
+Without a question there is nothing to center on, so the map falls back to the
+whole embedded index. Covering the whole index means the build is long enough
+to be worth watching, so it is written as a stream: documents are scanned in
+pages, provisional centroids move as pages arrive, and full-corpus k-means then
+runs to convergence, emitting the real intermediate state after every iteration.
+Nothing emitted is interpolated or replayed — a partial map is labelled partial,
+and only the final event describes the whole corpus. Measured on the live index
+(2,096,736 embedded studies): 264 s end to end — roughly 130 s to scan at sixteen
+slices and 25 bounded k-means iterations over the whole corpus in the rest,
+peaking at 6.9 GB.
 """
 
 from __future__ import annotations
@@ -48,6 +51,9 @@ from app.models import MapArithmetic
 logger = logging.getLogger(__name__)
 
 Progress = Callable[[dict], Awaitable[None]]
+
+# Question maps kept in memory beside the corpus map.
+MAP_CACHE = 16
 
 
 def _public(region: dict) -> dict:
@@ -144,10 +150,11 @@ class GapMapService:
         self.repo = repository
         self.config = config
         self.embedder = QueryEmbedder(config)
-        self._built: dict | None = None
+        # One cached map per question (keyed by its vector) plus the corpus map.
+        self._maps: dict[bytes | None, dict] = {}
         self._lock = asyncio.Lock()
         self._subscribers: set[asyncio.Queue] = set()
-        self._task: asyncio.Task | None = None
+        self._tasks: dict[bytes | None, asyncio.Task] = {}
         # The plane the current build is drawing on, so a streamed question can be
         # placed on the same one before the build finishes.
         self._basis: tuple[np.ndarray, np.ndarray] | None = None
@@ -163,26 +170,94 @@ class GapMapService:
                 continue
             queue.put_nowait(payload)
 
-    async def build(self, refresh: bool = False) -> dict:
-        """The cached map, building it (once, shared) if it is not there yet.
+    @property
+    def _built(self) -> dict | None:
+        """The cached corpus map, if it has been built."""
+        return self._maps.get(None)
+
+    async def build(self, refresh: bool = False, vector: np.ndarray | None = None) -> dict:
+        """The cached map for this question (or the corpus), building it once if needed.
 
         The build is a task of its own rather than a coroutine of whichever
         request arrived first: a viewer who closes the tab after twenty seconds
-        must not throw away a three-minute clustering run that other viewers,
-        and the cache, are waiting for.
+        must not throw away a clustering run that other viewers, and the cache,
+        are waiting for.
         """
-        if self._built is not None and not refresh:
-            return self._built
+        key = None if vector is None else np.asarray(vector, dtype=np.float32).tobytes()
+        if key in self._maps and not refresh:
+            return self._maps[key]
         async with self._lock:
-            if self._built is not None and not refresh:
-                return self._built
-            if self._task is None or self._task.done():
-                self._task = asyncio.create_task(self._build())
-            task = self._task
-        self._built = await asyncio.shield(task)
-        return self._built
+            if key in self._maps and not refresh:
+                return self._maps[key]
+            task = self._tasks.get(key)
+            if task is None or task.done():
+                task = asyncio.create_task(self._build(vector))
+                self._tasks[key] = task
+        built = await asyncio.shield(task)
+        if len(self._maps) >= MAP_CACHE and key not in self._maps:
+            for stale in [k for k in self._maps if k is not None][: len(self._maps) - MAP_CACHE + 1]:
+                del self._maps[stale]
+        self._maps[key] = built
+        return built
 
-    async def _build(self) -> dict:
+    async def _build(self, vector: np.ndarray | None) -> dict:
+        if vector is None:
+            return await self._build_corpus()
+        return await self._build_neighborhood(vector)
+
+    async def _build_neighborhood(self, vector: np.ndarray) -> dict:
+        """Fetch the studies nearest the question, cluster them, describe the result."""
+        counting = asyncio.create_task(self.repo.count_embedded())
+        size = self.config.gapmap_neighborhood
+        query = normalize(np.asarray(vector, dtype=np.float32)[None, :])[0]
+        documents = await self.repo.knn_studies(query.tolist(), size)
+        build = MapBuild(0, capacity=size)
+        build.add(documents)
+        stride = max(1, len(build) // max(1, self.config.gapmap_points))
+        drawn = [
+            row
+            for row in range(len(build))
+            if _drawn(str(build.documents[row].get("id", row)), stride)
+        ]
+        basis: tuple[np.ndarray, np.ndarray] | None = None
+        if len(build):
+            basis = await asyncio.to_thread(fit_projection, build.vectors)
+            self._basis = basis
+        corpus = max(0, await counting)
+        build.corpus = max(corpus, len(build))
+        scope = {"scope": "neighborhood", "neighborhood": size}
+        centroids = None
+        labels = np.zeros(len(build), dtype=np.int64)
+        iteration = 0
+        emitted = 0
+        if len(build):
+            steps = kmeans_steps(
+                build.vectors,
+                self.config.gapmap_regions,
+                seed=self.config.gapmap_seed,
+                iterations=self.config.gapmap_iterations,
+            )
+            while True:
+                step = await asyncio.to_thread(next, steps, None)
+                if step is None:
+                    break
+                centroids, labels = step
+                iteration += 1
+                if basis is not None:
+                    emitted = await self._emit_partial(
+                        build,
+                        centroids,
+                        basis,
+                        drawn,
+                        emitted,
+                        len(build),
+                        iteration=iteration,
+                        labels=labels,
+                        extra={"coverage": scope},
+                    )
+        return await self._finish(build, centroids, labels, basis, drawn, iteration, scope)
+
+    async def _build_corpus(self) -> dict:
         """Scan the embedded corpus, cluster it, and describe the result."""
         # Counted beside the scan rather than before it: the count is a query of
         # its own over two million documents, and nothing can be drawn while it
@@ -284,6 +359,22 @@ class GapMapService:
                         labels=labels,
                     )
 
+        return await self._finish(
+            build, centroids, labels, basis, drawn, iteration, {"scope": "corpus"}
+        )
+
+    async def _finish(
+        self,
+        build: MapBuild,
+        centroids: np.ndarray | None,
+        labels: np.ndarray,
+        basis: tuple[np.ndarray, np.ndarray] | None,
+        drawn: list[int],
+        iteration: int,
+        scope: dict,
+    ) -> dict:
+        """Describe a clustered build: regions, gaps, drawn points, edges, coverage."""
+        corpus = build.corpus
         clusters_used = len(centroids) if centroids is not None else 0
         regions = await asyncio.to_thread(
             describe_regions, build.documents, build.vectors, labels, clusters_used
@@ -316,11 +407,13 @@ class GapMapService:
                 "regions": len(regions),
                 "drawn": len(points),
                 "complete": True,
+                **scope,
             },
             "version": MAP_VERSION,
         }
         logger.info(
-            "Gap map built over %s of %s embedded studies in %s regions after %s iterations",
+            "Gap map (%s) built over %s of %s embedded studies in %s regions after %s iterations",
+            scope.get("scope"),
             len(build),
             corpus,
             len(regions),
@@ -483,15 +576,10 @@ class GapMapService:
             placement["point"] = {"x": float(coords[0, 0]), "y": float(coords[0, 1])}
         return placement
 
-    async def _place_expression(
-        self, expression: MapArithmetic, built: dict, warnings: list[str]
-    ) -> dict | None:
-        """Place ``start − remove + add``: embed each phrase, combine, locate.
-
-        The combined vector is treated like any other point on the map — what
-        comes back are the real papers nearest it, so the honesty of the answer
-        does not depend on how cleanly the analogy worked.
-        """
+    async def _expression_vector(
+        self, expression: MapArithmetic, warnings: list[str]
+    ) -> np.ndarray | None:
+        """The unit vector of ``start − remove + add``: embed each phrase, combine."""
         terms = [expression.start, *expression.remove, *expression.add]
         vectors = await asyncio.gather(*(self.embed(term) for term in terms))
         if any(vector is None for vector in vectors):
@@ -505,7 +593,16 @@ class GapMapService:
             warnings.append(
                 "The expression cancels itself out; the combined vector has no direction."
             )
-            return None
+        return combined
+
+    async def _place_expression(
+        self, expression: MapArithmetic, combined: np.ndarray | list[float], built: dict
+    ) -> dict:
+        """Place the combined vector like any other point on the map.
+
+        What comes back are the real papers nearest it, so the honesty of the
+        answer does not depend on how cleanly the analogy worked.
+        """
         placement = await asyncio.to_thread(
             place,
             combined,
@@ -528,10 +625,23 @@ class GapMapService:
         cutoff_year: int | None = None,
         refresh: bool = False,
     ) -> dict:
-        built = await self.build(refresh=refresh)
         warnings: list[str] = []
+        vector: np.ndarray | list[float] | None = None
+        if arithmetic is not None:
+            vector = await self._expression_vector(arithmetic, warnings)
+        elif idea:
+            vector = await self.embed(idea)
+            if vector is None:
+                warnings.append("Embeddings are disabled, so the idea could not be placed.")
+        built = await self.build(refresh=refresh, vector=vector)
         coverage = built["coverage"]
-        if coverage["corpus"] > coverage["clustered"]:
+        if coverage.get("scope") == "neighborhood":
+            warnings.append(
+                f"The map shows the {coverage['clustered']} embedded studies nearest this "
+                f"question, out of {coverage['corpus']} in the index: the question's "
+                "neighborhood, not the whole index."
+            )
+        elif coverage["corpus"] > coverage["clustered"]:
             warnings.append(
                 f"The map clusters {coverage['clustered']} of {coverage['corpus']} "
                 "embedded studies, not the whole index."
@@ -542,22 +652,18 @@ class GapMapService:
                 f"draws {coverage['drawn']} of them."
             )
         placement = None
-        if arithmetic is not None:
-            placement = await self._place_expression(arithmetic, built, warnings)
-        elif idea:
-            vector = await self.embed(idea)
-            if vector is None:
-                warnings.append("Embeddings are disabled, so the idea could not be placed.")
-            else:
-                placement = await asyncio.to_thread(
-                    place,
-                    vector,
-                    built["documents"],
-                    built["regions"],
-                    built["gaps"],
-                    vectors=built["vectors"],
-                )
-                placement = self._decorate(placement, vector, built)
+        if vector is not None and arithmetic is not None:
+            placement = await self._place_expression(arithmetic, vector, built)
+        elif vector is not None:
+            placement = await asyncio.to_thread(
+                place,
+                vector,
+                built["documents"],
+                built["regions"],
+                built["gaps"],
+                vectors=built["vectors"],
+            )
+            placement = self._decorate(placement, vector, built)
         calibration = None
         if cutoff_year is not None:
             calibration = await asyncio.to_thread(
@@ -615,9 +721,12 @@ class GapMapService:
         self, idea: str | None, arithmetic: MapArithmetic | None
     ) -> np.ndarray | None:
         """The unit vector of this viewer's question, if there is one to embed."""
-        if arithmetic is not None or not idea:
+        if arithmetic is not None:
+            vector = await self._expression_vector(arithmetic, [])
+        elif idea:
+            vector = await self.embed(idea)
+        else:
             return None
-        vector = await self.embed(idea)
         if vector is None:
             return None
         return normalize(np.asarray(vector, dtype=np.float32)[None, :])[0]

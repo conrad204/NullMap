@@ -128,6 +128,7 @@ def test_map_route_returns_the_service_payload(client):
         "regions": 2,
         "drawn": 16,
         "complete": True,
+        "scope": "corpus",
     }
     assert sorted(region["label"] for region in body["regions"]) == ["active", "null_saturated"]
 
