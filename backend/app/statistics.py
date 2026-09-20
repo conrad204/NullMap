@@ -14,6 +14,8 @@ References:
 - https://doi.org/10.1002/pst.175 (assurance as expected power).
 - Cochrane Handbook 6.4-6.5 and Hedges (1981): effect sizes from reported arm-level
   means/SDs or event counts, with the small-sample correction for standardized differences.
+- Egger et al. (1997), BMJ 315:629 (regression test for funnel-plot asymmetry), applied
+  only to pools of at least ten studies as Cochrane Handbook 13.3.5.3 recommends.
 
 Assurance here is two-sided statistical significance, including effects in the
 unfavourable direction. It is not a probability of clinically meaningful benefit.
@@ -32,6 +34,7 @@ from statistics import NormalDist
 from typing import Any
 
 import numpy as np
+from scipy.stats import t as student_t
 from statsmodels.stats.meta_analysis import combine_effects
 
 _NORMAL = NormalDist()
@@ -47,6 +50,10 @@ INCONCLUSIVE_REASONS = (
     "wide_interval", "mixed_result", "no_result", "other_scale", "no_threshold", "review"
 )
 _MAX_PLAUSIBLE_SMD = 5.0
+# Funnel-plot asymmetry tests have little power below ten studies (Cochrane 13.3.5.3).
+EGGER_MIN_STUDIES = 10
+# Conventional screening level for asymmetry tests, which are underpowered at 0.05.
+EGGER_ALPHA = 0.10
 
 
 def _number(value: Any) -> float | None:
@@ -543,9 +550,52 @@ def _study_id(study: dict, position: int) -> str:
     return str(study.get("id") or study.get("study_id") or f"study-{position + 1}")
 
 
+def _egger(effects: np.ndarray, ses: np.ndarray) -> dict | None:
+    """Egger's regression test for funnel-plot asymmetry, or None when it cannot be run.
+
+    The standard normal deviate ``estimate / se`` is regressed on precision ``1 / se``
+    by ordinary least squares; the intercept is the asymmetry, zero under symmetry.
+    Asymmetry has many causes besides publication bias (heterogeneity, small-study
+    effects, chance), so the result is reported, never used to adjust an estimate.
+    """
+    k = len(effects)
+    if k < EGGER_MIN_STUDIES:
+        return None
+    precision = 1.0 / ses
+    deviate = effects / ses
+    centre = float(precision.mean())
+    spread = float(np.sum((precision - centre) ** 2))
+    # Studies of near-identical precision give a funnel with no vertical extent.
+    if not math.isfinite(spread) or spread <= 0:
+        return None
+    slope = float(np.sum((precision - centre) * (deviate - deviate.mean())) / spread)
+    intercept = float(deviate.mean() - slope * centre)
+    degrees = k - 2
+    residual_variance = float(np.sum((deviate - intercept - slope * precision) ** 2)) / degrees
+    se = math.sqrt(residual_variance * (1 / k + centre * centre / spread))
+    if not math.isfinite(intercept) or not math.isfinite(se) or se <= 0:
+        return None
+    statistic = intercept / se
+    critical = float(student_t.ppf(0.975, degrees))
+    p_value = float(2 * student_t.sf(abs(statistic), degrees))
+    return {
+        "intercept": intercept,
+        "se": se,
+        "ci": [intercept - critical * se, intercept + critical * se],
+        "t": statistic,
+        "df": degrees,
+        "pValue": p_value,
+        "slope": slope,
+        "asymmetric": p_value < EGGER_ALPHA,
+        "alpha": EGGER_ALPHA,
+        "method": "Egger regression of the standard normal deviate on precision (OLS)",
+    }
+
+
 def _pool(group: list[tuple[dict, dict, str]], key: tuple) -> dict:
     effects = np.array([row[1]["analysis_estimate"] for row in group], dtype=float)
-    variances = np.square([row[1]["analysis_se"] for row in group])
+    ses = np.array([row[1]["analysis_se"] for row in group], dtype=float)
+    variances = np.square(ses)
     # statsmodels DL can emit invalid interim random-effect weights for negative
     # tau²; use its estimator, then recompute all weights with tau² clamped at 0.
     with python_warnings.catch_warnings(), np.errstate(all="ignore"):
@@ -570,6 +620,7 @@ def _pool(group: list[tuple[dict, dict, str]], key: tuple) -> dict:
         "comparator": comparator,
         "direction": direction or "as reported",
         "method": "DerSimonian-Laird (nonnegative tau²), normal 95% CI",
+        "egger": _egger(effects, ses),
     }
 
 
@@ -798,11 +849,27 @@ def analyze_studies(
         warnings.append(
             "No eligible meta-analysis pool; assurance and expected value are unavailable."
         )
-    if len(unique_studies) < 10:
-        warnings.append(
-            "Fewer than 10 retrieved independent studies; funnel-plot tests are unreliable "
-            "and are not performed."
+    if any(pool["egger"] for pool in pools):
+        assumptions.append(
+            "Egger's test regresses each study's estimate/SE on its precision 1/SE; a nonzero "
+            "intercept is funnel asymmetry, which publication bias, small-study effects or "
+            "heterogeneity can all produce. No pooled estimate is adjusted for it."
         )
+    for pool in pools:
+        egger = pool["egger"]
+        if egger is None:
+            warnings.append(
+                f"Funnel asymmetry was not tested for {pool['outcome']} ({pool['effectType']}): "
+                f"Egger's test needs at least {EGGER_MIN_STUDIES} studies of differing precision "
+                f"and this pool has {pool['k']}."
+            )
+        elif egger["asymmetric"]:
+            warnings.append(
+                f"Egger's test indicates funnel asymmetry for {pool['outcome']} "
+                f"({pool['effectType']}): intercept {egger['intercept']:.2f} "
+                f"(p = {egger['pValue']:.3f}); small studies report systematically different "
+                "effects, so the pooled estimate may reflect publication bias."
+            )
     drawer = _file_drawer(unique_studies, file_drawer)
     if file_drawer is None:
         warnings.append(

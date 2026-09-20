@@ -105,6 +105,7 @@ Six buckets: `effect`, `credible_null`, `reported_null`, `inconclusive`, `failed
 - Evidence tiers are `numeric` > `derived` > `reconstructed` > `text_only`. `derive_effects` computes Hedges' g / MD from arm means, SDs and sizes and log OR / log RR from event counts; it imputes nothing, never derives an HR, discards |d| > 5 as a standard error reported as an SD, and never replaces a reported interval on the requested scale. Documents store the scale-neutral `stored_analysis` plus `derived_<scale>_*` fields so `BUCKET_SCRIPT` can bucket any query scale; the real-ES parity test must keep agreeing with `assign_bucket`.
 - OR/RR/HR are analyzed on the log scale; a ratio SESOI is a multiplicative margin > 1. Never pool across effect types or mix raw ratios with logs (the frontend mirrors this in `src/lib/effects.ts`).
 - Pooling needs ≥3 compatible primary studies (DerSimonian–Laird via statsmodels, τ² clamped ≥0). Without a pool, assurance and required N are `null`, not invented.
+- Each pool carries `egger`: Egger's regression test for funnel asymmetry (`statistics._egger`), or `null` below `EGGER_MIN_STUDIES` studies or without spread in precision. It is a caveat only — it flags possible publication bias in a warning and is never used to adjust a pooled estimate.
 - Reconstruction from p-value needs an estimate plus an exact (not bounded) p. p-value inequalities and CI levels are preserved as `p_value_operator` / `ci_level`.
 - Assurance is expected two-sided power, not probability of clinical benefit.
 

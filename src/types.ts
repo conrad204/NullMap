@@ -104,6 +104,19 @@ export interface Pico {
   sesoiRationale: string;
   effectType: string;
 }
+/** Egger regression of each study's estimate/SE on its precision 1/SE; the intercept is the asymmetry. */
+export interface EggerTest {
+  intercept: number;
+  se: number;
+  ci: [number, number];
+  t: number;
+  df: number;
+  pValue: number;
+  slope: number;
+  asymmetric: boolean;
+  alpha: number;
+  method: string;
+}
 export interface EvidencePool {
   effectType: string;
   outcome: string;
@@ -116,6 +129,8 @@ export interface EvidencePool {
   studyIds: string[];
   /** "model" when a language model judged these outcomes comparable; the numbers are still computed. */
   grouping?: "model";
+  /** null when the pool has fewer than ten studies, or too little spread in precision, to test. */
+  egger?: EggerTest | null;
 }
 export type ResultDirection = "favours_intervention" | "favours_comparator" | "unclear";
 /** What the effect-reporting studies have in common. Counts are computed; only the prose is generated. */
