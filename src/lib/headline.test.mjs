@@ -30,3 +30,14 @@ test('studies without any readable result are not called results', () => {
   assert.equal(result.title, 'This has been tried before, but no results are available');
   assert.match(result.detail, /^5 matching studies, none with a readable result: 4 completed trials never reported results, 1 had no clear result\.$/);
 });
+
+test('matches without any controlled comparison are not called a prior attempt', () => {
+  const result = headline(counts({ failed: 1, inconclusive: 3 }), false, 0);
+  assert.equal(result.title, 'Related work exists, but nothing tested this directly');
+  assert.match(result.detail, /^4 matching studies, none a controlled comparison of the intervention: 1 failed or stopped early, 3 had no clear result\./);
+  // A controlled trial that never reported is a real attempt, and an older API omits the count.
+  assert.equal(headline(counts({ unreported: 2 }), false, 2).title, 'This has been tried before, but no results are available');
+  assert.equal(headline(counts({ unreported: 2 }), false).title, 'This has been tried before, but no results are available');
+  // Results outrank the control count: a stated result already required a comparison group.
+  assert.equal(headline(counts({ effect: 1 }), false, 0).title, 'This has been tested before');
+});

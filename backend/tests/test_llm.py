@@ -412,3 +412,25 @@ def test_trend_prose_may_only_repeat_numbers_from_its_table():
     assert kept.patterns == ["Reductions near 5.2 mmHg"]
     with pytest.raises(ValueError, match="absent from the table: 9.8"):
         asyncio.run(exercise("Reports describe falls of 9.8 mmHg."))
+
+
+def test_overview_keeps_only_notes_for_supplied_studies_and_rejects_invented_numbers():
+    from app.models import Overview
+
+    async def exercise(summary):
+        service = LLMService(Settings(_env_file=None, openai_api_key=""))
+
+        async def structured(schema, prompt, data, purpose, usage, large=False):
+            assert purpose == "overview" and large
+            return Overview.model_validate({"summary": summary, "notes": [
+                {"id": "A", "note": "Observational study of blood levels."},
+                {"id": "A", "note": "Repeated."}, {"id": "ZZ", "note": "Not a supplied study."},
+                {"id": "B", "note": " "}]})
+
+        service.structured = structured
+        return await service.overview({"question": {}, "rows": [{"id": "A"}, {"id": "B"}]}, Usage())
+
+    kept = asyncio.run(exercise("Nothing here tested the supplement against a control."))
+    assert [(n.id, n.note) for n in kept.notes] == [("A", "Observational study of blood levels.")]
+    with pytest.raises(ValueError, match="Overview introduced a number"):
+        asyncio.run(exercise("About 40% improved."))

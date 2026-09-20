@@ -385,6 +385,46 @@ class SearchPipeline:
             )
             return {}
 
+    async def overview(
+        self, question: dict, studies: list[dict], verdicts: dict, usage: Usage, warnings: list[str]
+    ) -> dict | None:
+        """Generated account of what the matches are, from extracted facts and verdicts only."""
+        if not studies or not self.config.openai_api_key:
+            return None
+        rows = [
+            {
+                "id": d["id"],
+                "title": (d.get("title") or "")[:200],
+                "source": "registry" if d.get("source") in ("ctgov", "merged") else "paper",
+                "design": (d.get("design") or d.get("study_design") or "")[:120],
+                "population": (d.get("population") or "")[:160],
+                "intervention": (d.get("intervention") or "")[:160],
+                "comparator": (d.get("comparator") or "")[:120],
+                "outcome": (d.get("outcome") or "")[:200],
+                "hasControlArm": d.get("has_control"),
+                "registryStatus": d.get("overall_status"),
+                "verdict": verdicts[d["id"]]["bucket"],
+                "why": verdicts[d["id"]]["rationale"],
+            }
+            for d in studies[:12]
+        ]
+        try:
+            result = await self.llm.overview({"question": question, "rows": rows}, usage)
+        except Exception as exc:
+            logger.warning("Overview unavailable: %s", type(exc).__name__)
+            warnings.append("The generated overview of matched studies was unavailable.")
+            return None
+        titles = {row["id"]: row["title"] for row in rows}
+        return {
+            "summary": result.summary,
+            "notes": [
+                {"id": item.id, "title": titles[item.id], "note": item.note}
+                for item in result.notes
+            ],
+            "scope": f"Generated from the extracted facts and verdicts of the {len(rows)} "
+            "matched studies read in detail; it introduces no findings or numbers of its own.",
+        }
+
     async def effect_trend(
         self,
         idea: str,
@@ -588,6 +628,11 @@ class SearchPipeline:
         effect_trend = await self.effect_trend(
             request.idea, studies, verdicts, aggregation, stats, usage, warnings
         )
+        overview = None
+        if not (effect_trend and effect_trend["summary"]):
+            # No trend to describe: say instead what the matches are and why none answers it.
+            overview = await self.overview(question, studies, verdicts, usage, warnings)
+        controlled = sum(d.get("has_control") is True for d in studies)
         if mode == "bm25" and not any("BM25" in warning for warning in warnings):
             warnings.append(
                 "This deployment is configured for BM25 retrieval; enable local embeddings for hybrid search."
@@ -703,6 +748,10 @@ class SearchPipeline:
             "warnings": list(dict.fromkeys(warnings)),
             "alternativeRoutes": alternatives,
             "effectTrend": effect_trend,
+            "overview": overview,
+            # Read studies with an identified comparison group; without one, nothing here
+            # tested the question, however many records matched.
+            "evidenceBase": {"read": len(studies), "controlled": controlled},
             "retrieval": {
                 "mode": mode,
                 "expanded": len(expanded),

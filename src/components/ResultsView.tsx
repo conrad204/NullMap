@@ -30,14 +30,13 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const reasons = result.inconclusiveReasons ?? countReasons(result.papers);
   // Provisional when no displayed effect is backed by numbers.
   const effects = result.papers.filter((paper) => paper.verdict === "effect");
-  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"));
+  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled);
+  const matched = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const shown = filter === "all" ? result.papers : result.papers.filter((paper) => paper.verdict === filter);
   return (
     <div className="fade-up flex flex-col gap-10">
       <header>
-        <p className="text-sm text-ink-3">Research question</p>
-        <p className="mt-1 max-w-[60ch] text-lg leading-snug text-ink sm:text-xl">{result.idea}</p>
-        <p className="mt-3 text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
+        <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
       </header>
@@ -45,11 +44,14 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         <h2 className="text-2xl leading-tight tracking-tight text-ink sm:text-3xl">{answer.title}</h2>
         <p className="mt-2 max-w-[65ch] leading-relaxed text-ink-2">{answer.detail}</p>
       </section>
-      {result.effectTrend && <EffectTrendPanel trend={result.effectTrend} />}
+      {result.effectTrend
+        ? <EffectTrendPanel trend={result.effectTrend} />
+        : result.overview ? <OverviewPanel overview={result.overview} />
+        : matched > 0 && <p className="max-w-[65ch] border-l-2 border-line pl-4 text-sm leading-relaxed text-ink-2">No summary of effects is shown because none of the {formatCount(matched)} matching {matched === 1 ? "study" : "studies"} reported an effect, so there is no trend to describe. What each one did report is listed under the studies below.</p>}
       {result.pico && <section className="border-l-2 border-accent pl-4">
         <h2 className="text-sm font-medium text-ink">Meaningful-effect threshold: {result.pico.sesoi} {result.pico.effectType}</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink-2">{result.pico.sesoiRationale}</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-3">Change the SESOI in your study plan and search again to recalculate. Text-only classifications remain provisional.</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-3">The threshold is proposed from your question and decides which results count as meaningful effects or credible nulls. Text-only classifications remain provisional.</p>
         <details className="mt-3 text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>
       </section>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
@@ -62,6 +64,17 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
     </div>
   );
+}
+function OverviewPanel({ overview }: { overview: NonNullable<SearchResult["overview"]> }) {
+  return <section className="border-l-2 border-line pl-4">
+    <h2 className="text-sm font-medium text-ink">What these studies are, and why none settles it</h2>
+    <p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{overview.summary}</p>
+    {overview.notes.length > 0 && <dl className="mt-4 max-w-[70ch] space-y-3">{overview.notes.map(({ id, title, note }) => <div key={id}>
+      <dt className="text-sm leading-snug text-ink">{title}</dt>
+      <dd className="mt-0.5 text-sm leading-relaxed text-ink-2">{note}</dd>
+    </div>)}</dl>}
+    <p className="mt-3 max-w-[70ch] text-xs leading-relaxed text-ink-3">No trend of effects is shown because too few matching studies reported one. {overview.scope}</p>
+  </section>;
 }
 function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
   const split = [
@@ -130,7 +143,7 @@ function EstimatePanel({ estimate, statistics }: { estimate: PursuitEstimate; st
       <div><dt className="text-ink-3">N for 80% assurance</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.requiredN != null ? formatCount(statistics.requiredN) : "Unavailable"}</dd></div>
       <div><dt className="text-ink-3">Planned MDE</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.plannedMde != null ? statistics.plannedMde.toFixed(3) : "Unavailable"}</dd></div>
     </dl>
-    <p className="mt-2 text-xs text-ink-3">EV uses your value and cost units. MDE uses the selected effect scale.</p>
+    <p className="mt-2 text-xs text-ink-3">EV uses your value and cost units. MDE is a standardized difference (SMD).</p>
     <p className={cx("mt-5 inline-flex items-center rounded-control px-2.5 py-1 text-sm font-medium", rec.text, rec.tint)}>{assurance === null ? "More evidence needed" : rec.label}</p>
     <ul className="mt-4 list-disc space-y-2 pl-4 text-sm leading-relaxed text-ink-2 marker:text-ink-3">{estimate.drivers.map((driver) => <li key={driver}>{driver}</li>)}</ul>
   </aside>;

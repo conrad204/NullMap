@@ -8,55 +8,39 @@
   Radius rule: controls 8px, panels 12px, small marks 4px. Nothing else.
 */
 :root {
+  /* Follows the OS until the top-bar toggle sets data-theme (see lib/theme.ts). */
   color-scheme: light dark;
 
-  --bg: #f6f6f7;
-  --surface: #fcfcfc;
-  --surface-2: #eeeef1;
-  --line: #e2e2e6;
-  --line-strong: #c6c6ce;
-  --ink: #16161a;
-  --ink-2: #55555e;
-  --ink-3: #75757e;
+  --bg: light-dark(#f6f6f7, #0e0e11);
+  --surface: light-dark(#fcfcfc, #16161a);
+  --surface-2: light-dark(#eeeef1, #1e1e23);
+  --line: light-dark(#e2e2e6, #27272d);
+  --line-strong: light-dark(#c6c6ce, #3b3b44);
+  --ink: light-dark(#16161a, #f2f2f4);
+  --ink-2: light-dark(#55555e, #a6a6ae);
+  --ink-3: light-dark(#75757e, #8b8b95);
 
-  --accent: #2a55c2;
-  --accent-soft: #e6ecfa;
-  --on-accent: #fbfbfc;
+  --accent: light-dark(#2a55c2, #7a9ff2);
+  --accent-soft: light-dark(#e6ecfa, #1a2440);
+  --on-accent: light-dark(#fbfbfc, #0e0e11);
 
-  --v-effect: #1e8a5a;
-  --v-null: #2a55c2;
-  --v-reported-null: #5b74b8;
-  --v-inconclusive: #8e8e98;
-  --v-failed: #c0463f;
-  --v-unreported: #a8741a;
+  --v-effect: light-dark(#1e8a5a, #4cc08a);
+  --v-null: light-dark(#2a55c2, #7a9ff2);
+  --v-reported-null: light-dark(#5b74b8, #a3b5e0);
+  --v-inconclusive: light-dark(#8e8e98, #83838d);
+  --v-failed: light-dark(#c0463f, #e0655e);
+  --v-unreported: light-dark(#a8741a, #d9a43b);
 
-  --shadow: 0 1px 2px rgb(22 22 26 / 0.05), 0 10px 28px -14px rgb(22 22 26 / 0.14);
+  --shadow:
+    0 1px 2px light-dark(rgb(22 22 26 / 0.05), rgb(0 0 0 / 0.4)),
+    0 10px 28px -14px light-dark(rgb(22 22 26 / 0.14), rgb(0 0 0 / 0.6));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e0e11;
-    --surface: #16161a;
-    --surface-2: #1e1e23;
-    --line: #27272d;
-    --line-strong: #3b3b44;
-    --ink: #f2f2f4;
-    --ink-2: #a6a6ae;
-    --ink-3: #8b8b95;
-
-    --accent: #7a9ff2;
-    --accent-soft: #1a2440;
-    --on-accent: #0e0e11;
-
-    --v-effect: #4cc08a;
-    --v-null: #7a9ff2;
-    --v-reported-null: #a3b5e0;
-    --v-inconclusive: #83838d;
-    --v-failed: #e0655e;
-    --v-unreported: #d9a43b;
-
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 28px -14px rgb(0 0 0 / 0.6);
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -175,8 +159,28 @@
     border-color: var(--v-failed);
   }
 
+  /* The composer's question box: the textarea and its submit row share one focus ring. */
+  .prompt-box {
+    border-radius: var(--radius-panel);
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
+  }
+  .prompt-box:focus-within {
+    border-color: var(--accent);
+    box-shadow:
+      var(--shadow),
+      0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  .prompt-box-invalid {
+    border-color: var(--v-failed);
+  }
+
   .fade-up {
-    animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) var(--fade-delay, 0ms) both;
   }
   .skeleton {
     background: var(--surface-2);

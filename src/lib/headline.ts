@@ -14,7 +14,12 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
  * counts as the verdict bar. `provisional` is true when the reported effects rest on
  * abstract wording, not numbers, so the headline never claims more than the rows do.
  */
-export function headline(counts: Record<Verdict, number>, provisional: boolean): Headline {
+export function headline(
+  counts: Record<Verdict, number>,
+  provisional: boolean,
+  /** Read studies with a comparison group; omitted when the API does not report it. */
+  controlled?: number,
+): Headline {
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
   if (total === 0) {
     return {
@@ -29,6 +34,13 @@ export function headline(counts: Record<Verdict, number>, provisional: boolean):
     counts.failed && `${counts.failed} failed or stopped early`,
     counts.inconclusive && `${counts.inconclusive} had no clear result`,
   ].filter(Boolean).join(", ");
+  if (reported === 0 && controlled === 0) {
+    // Matching records are not tests: with no comparison group among them, nothing tried this.
+    return {
+      title: "Related work exists, but nothing tested this directly",
+      detail: `${plural(total, "matching study", "matching studies")}, none a controlled comparison of the intervention: ${silent}. Observational or single-arm work can motivate a trial; it does not answer the question.`,
+    };
+  }
   if (reported === 0) {
     return {
       title: "This has been tried before, but no results are available",

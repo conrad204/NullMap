@@ -174,6 +174,10 @@ export interface SearchResult {
   costs?: QueryCosts;
   warnings?: string[];
   effectTrend?: EffectTrend | null;
+  /** Shown instead of a trend when too few studies reported an effect: what the matches are and why none answers the question. */
+  overview?: { summary: string; notes: { id: string; title: string; note: string }[]; scope: string } | null;
+  /** Studies read in detail, and how many had an identified comparison group. */
+  evidenceBase?: { read: number; controlled: number } | null;
   /** Relevance screen over keyword matches; `complete` means the counts cover relevant studies only. */
   screening?: { screened: number; relevant: number; complete: boolean } | null;
   alternativeRoutes?: { label: string; reason: string; evidenceCount: number }[];

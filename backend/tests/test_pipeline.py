@@ -195,6 +195,14 @@ class FakeLLM:
         keep = getattr(self, "relevant", None)
         return {row["id"] for row in rows} if keep is None else set(keep)
 
+    async def overview(self, table, usage):
+        self.overview_table = deepcopy(table)
+        if getattr(self, "overview_error", None):
+            raise self.overview_error
+        notes = [SimpleNamespace(id=row["id"], note="Observational; no comparison group.")
+                 for row in table["rows"]]
+        return SimpleNamespace(summary="None of these tested the intervention.", notes=notes)
+
     async def group_outcomes(self, question, rows, usage):
         self.grouping_rows = deepcopy(rows)
         return dict(getattr(self, "groups", {}))
@@ -904,5 +912,48 @@ def test_relevance_screen_fails_open_and_nothing_relevant_reads_as_no_prior_stud
         assert empty["papers"] == [] and empty["totalScanned"] == 0
         assert sum(empty["bucketCounts"].values()) == 0 and empty["effectTrend"] is None
         assert none.extract_calls == 0
+
+    asyncio.run(exercise())
+
+
+def test_overview_explains_matches_when_there_is_no_trend_and_counts_controlled_studies():
+    async def exercise():
+        rows = [paper("OBS", title="Vitamin D levels and depression", result_label="no_result_stated"),
+                paper("RCT", result_label="null", has_control=True)]
+        llm = FakeLLM()
+        settings = config(extraction_limit=0)
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert result["effectTrend"] is None
+        assert result["overview"]["summary"] == "None of these tested the intervention."
+        assert [n["title"] for n in result["overview"]["notes"]] == [
+            "Vitamin D levels and depression", "Vitamin D trial"]
+        assert result["evidenceBase"] == {"read": 2, "controlled": 1}
+        # The model gets verdicts and extracted fields, never the abstract.
+        row = llm.overview_table["rows"][0]
+        assert "abstract" not in row and row["verdict"] == "inconclusive" and row["why"]
+        assert llm.overview_table["question"]["intervention"]
+
+    asyncio.run(exercise())
+
+
+def test_overview_is_skipped_when_a_trend_was_written_and_degrades_to_a_warning():
+    async def exercise():
+        settings = config(extraction_limit=0)
+        settings.openai_api_key = "test"
+        trend_rows = [_effect("A", "Depression", 0.5, "favours_intervention"),
+                      _effect("B", "Depression", 0.4, "favours_intervention")]
+        llm = FakeLLM()
+        with_trend = await SearchPipeline(MemoryRepository(trend_rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert with_trend["effectTrend"]["summary"] and with_trend["overview"] is None
+        assert not hasattr(llm, "overview_table")
+        down = FakeLLM()
+        down.overview_error = RuntimeError("model down")
+        failed = await SearchPipeline(MemoryRepository([paper("X")]), down, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert failed["overview"] is None
+        assert any("overview of matched studies was unavailable" in w for w in failed["warnings"])
 
     asyncio.run(exercise())

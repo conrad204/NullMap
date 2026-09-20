@@ -120,6 +120,18 @@ class OutcomeGroups(BaseModel):
     groups: list[OutcomeGroup]
 
 
+class StudyNote(BaseModel):
+    id: str
+    note: str
+
+
+class Overview(BaseModel):
+    """What the matched studies are and how each bears on the question."""
+
+    summary: str
+    notes: list[StudyNote]
+
+
 class EffectTrend(BaseModel):
     summary: str
     patterns: list[str]
