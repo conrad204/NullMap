@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 from dataclasses import asdict, dataclass, field
 
@@ -73,6 +74,16 @@ def to_candidate(document: dict, relation: str) -> Candidate | None:
         referenced_works=document.get("referenced_works") or [],
         embedding=document.get("embedding"),
     )
+
+
+def _title_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def _same_title(left: str, right: str) -> bool:
+    """Compare titles through punctuation, case and markup differences between sources."""
+    first, second = _title_key(left), _title_key(right)
+    return bool(first) and bool(second) and (first == second or first in second or second in first)
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -184,6 +195,14 @@ class NoveltyEngine:
             "textSource": text.source,
             "textChars": text.chars,
         }
+        # OpenAlex merges of MAG records can attach a DOI to another work's title and year,
+        # so the publisher record wins for anything shown next to the text we actually read.
+        if text.title and not _same_title(text.title, candidate.title):
+            row.update(title=text.title, indexTitle=candidate.title, metadataConflict=True)
+            warnings.append(
+                f"Index metadata disagreed with the publisher record for '{text.title[:60]}'; "
+                "the resolved title is shown."
+            )
         if text.availability == "unavailable" or not self.config.openai_api_key:
             return row
         body = text.evidence_text()

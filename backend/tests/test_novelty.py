@@ -101,8 +101,9 @@ class StubEmbedder:
 
 
 class StubFullText:
-    def __init__(self, availability="full_text"):
+    def __init__(self, availability="full_text", title=""):
         self.availability = availability
+        self.title = title
         self.fetched = []
 
     async def fetch(self, paper_id, doi="", pmid="", abstract=""):
@@ -112,6 +113,7 @@ class StubFullText:
             self.availability,
             source="europepmc:PMC1",
             sections=parse_jats(JATS) if self.availability == "full_text" else {"abstract": abstract},
+            title=self.title,
         )
 
     async def close(self):
@@ -198,6 +200,22 @@ def test_full_run_reads_full_text_and_returns_a_verdict():
     assert report["papers"][0]["coverage"] == "tests_claim"
     assert "did not differ" in report["papers"][0]["quotes"][0]
     assert report["gaps"] == ["primary patient blasts"]
+
+
+def test_the_publisher_title_wins_when_the_index_disagrees():
+    """OpenAlex merges of MAG records can hang a DOI off another work's title."""
+    resolved = "Hypertension Management in Patients with Chronic Kidney Disease"
+    instance = engine(
+        config=Settings(openai_api_key="k"),
+        fulltext=StubFullText(title=resolved),
+        llm=StubLLM(),
+    )
+    report = asyncio.run(instance.assess("Ruxolitinib reduces viability in leukemia cells", 20, 1))
+    paper = report["papers"][0]
+    assert paper["title"] == resolved
+    assert paper["indexTitle"].startswith("JAK2")
+    assert paper["metadataConflict"] is True
+    assert any("disagreed" in warning for warning in report["warnings"])
 
 
 def test_deterministic_verdict_when_narration_fails():

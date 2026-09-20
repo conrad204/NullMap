@@ -40,6 +40,7 @@ class FullText:
     availability: str  # full_text | abstract_only | unavailable
     source: str = ""
     sections: dict[str, str] = field(default_factory=dict)
+    title: str = ""  # as the publisher record states it, which the index can contradict
 
     @property
     def chars(self) -> int:
@@ -164,6 +165,7 @@ class FullTextClient:
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("Full-text lookup failed for %s: %s", paper_id, type(exc).__name__)
             return fallback
+        fallback.title = str(record.get("title") or "")
         pmcid = record.get("pmcid")
         if not pmcid or record.get("isOpenAccess") != "Y":
             return fallback
@@ -179,4 +181,10 @@ class FullTextClient:
             return fallback
         if abstract and "abstract" not in sections:
             sections["abstract"] = abstract
-        return FullText(paper_id, "full_text", source=f"europepmc:{pmcid}", sections=sections)
+        return FullText(
+            paper_id,
+            "full_text",
+            source=f"europepmc:{pmcid}",
+            sections=sections,
+            title=fallback.title,
+        )
