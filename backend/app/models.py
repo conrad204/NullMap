@@ -1,8 +1,8 @@
 """Validated public requests and evidence-constrained LLM schemas."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Bucket = Literal[
     "effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported"
@@ -135,9 +135,35 @@ class NoveltyRequest(BaseModel):
     read: int = Field(default=5, ge=1, le=12)
 
 
+class MapArithmetic(BaseModel):
+    """Embedding arithmetic on idea phrases: start − remove + add.
+
+    The terms are embedded separately and combined; the map then reports which
+    real papers sit nearest the implied point. It is a way of asking "has this
+    combination been run", not a proof that the analogy holds.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    start: str = Field(min_length=2, max_length=4000)
+    remove: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        default_factory=list, max_length=6
+    )
+    add: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        default_factory=list, max_length=6
+    )
+
+    @model_validator(mode="after")
+    def _has_an_operation(self):
+        if not self.remove and not self.add:
+            raise ValueError("An expression needs something to remove or to add.")
+        return self
+
+
 class MapRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
     idea: str | None = Field(default=None, min_length=8, max_length=4000)
+    # When both are sent, the expression is placed and the idea is ignored.
+    arithmetic: MapArithmetic | None = None
     cutoffYear: int | None = Field(default=None, ge=1900, le=2100)
     refresh: bool = False
 

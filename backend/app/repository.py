@@ -81,6 +81,10 @@ def index_mapping(dimensions: int = 384) -> dict:
             properties[derived_field(scale, name)] = {"type": "double"}
     for name in "year cited_by_count".split():
         properties[name] = {"type": "integer"}
+    # Citation-authority signals. rank_feature rejects non-positive values, so
+    # writers log-scale and leave the field absent instead of storing 0.
+    for name in ("authority", "pagerank"):
+        properties[name] = {"type": "rank_feature"}
     for name in (
         "is_retracted is_review has_results has_linked_publication has_control spin_flag "
         "possible_abstract_spin reporting_missing significant_but_trivial abstract_available"
@@ -100,7 +104,6 @@ def index_mapping(dimensions: int = 384) -> dict:
     for name in (
         "registry_analyses",
         "extraction_evidence",
-        "attachments",
         "metadata",
         "linked_papers",
         "snapshot_provenance",
@@ -415,6 +418,28 @@ def lexical_query(pico: dict, idea: str, expanded_ids: list[str] | None = None) 
     }
 
 
+def authority_query(query: dict) -> dict:
+    """Rank the query's own match set by combined citation authority.
+
+    Each ``rank_feature`` leaf contributes a saturation-scaled function of the
+    stored log signals (``authority`` = log citation count, ``pagerank`` =
+    within-corpus citation graph), and the ``should`` clauses sum them. The
+    main query stays a filter, so authority re-ranks relevant hits only —
+    an unrelated famous paper must not enter results on reputation alone.
+    Documents with neither signal simply absent themselves from this leg.
+    """
+    return {
+        "bool": {
+            "filter": [query],
+            "should": [
+                {"rank_feature": {"field": "authority"}},
+                {"rank_feature": {"field": "pagerank"}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+
+
 def rrf_fuse(*rankings: list[dict], limit: int = 200) -> list[dict]:
     scores: dict[str, float] = {}
     docs = {}
@@ -568,6 +593,19 @@ def _prepare_document(incoming: dict, existing: dict | None = None) -> dict:
             day=min(completion.day, calendar.monthrange(completion.year + 1, completion.month)[1]),
         )
         doc["reporting_due_date"] = anniversary.isoformat()
+    # rank_feature rejects non-positive values, so authority is absent rather
+    # than 0. pagerank is written only by the offline citation-graph pass and
+    # survives reingest through the {**old, **incoming} merge above.
+    cited_by = doc.get("cited_by_count")
+    if (
+        isinstance(cited_by, (int, float))
+        and not isinstance(cited_by, bool)
+        and math.isfinite(cited_by)
+        and cited_by > 0
+    ):
+        doc["authority"] = math.log1p(cited_by)
+    else:
+        doc.pop("authority", None)
     return doc
 
 
@@ -741,10 +779,15 @@ class ElasticRepository:
         return {"documents": self.hits(result), "corpus": total["count"]}
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
-        base = {"index": self.index, "size": 200, "source_excludes": ["embedding", "attachments"]}
+        base = {"index": self.index, "size": 200, "source_excludes": ["embedding"]}
+        # Third ranking signal: citation authority over the same match set.
+        authority = authority_query(query)
         if vector is None:
-            result = await self.client.search(**base, query=query)
-            return self.hits(result), "bm25"
+            lexical, ranked = await asyncio.gather(
+                self.client.search(**base, query=query),
+                self.client.search(**base, query=authority),
+            )
+            return rrf_fuse(self.hits(lexical), self.hits(ranked)), "bm25"
         knn = {
             "field": "embedding",
             "query_vector": vector,
@@ -759,7 +802,11 @@ class ElasticRepository:
                     "rrf": {
                         "rank_window_size": 200,
                         "rank_constant": 60,
-                        "retrievers": [{"standard": {"query": query}}, {"knn": knn}],
+                        "retrievers": [
+                            {"standard": {"query": query}},
+                            {"knn": knn},
+                            {"standard": {"query": authority}},
+                        ],
                     }
                 },
             )
@@ -771,10 +818,15 @@ class ElasticRepository:
                 term in message for term in ("rrf", "rank fusion", "retriever")
             ):
                 raise
-            lexical, semantic = await asyncio.gather(
-                self.client.search(**base, query=query), self.client.search(**base, knn=knn)
+            lexical, semantic, ranked = await asyncio.gather(
+                self.client.search(**base, query=query),
+                self.client.search(**base, knn=knn),
+                self.client.search(**base, query=authority),
             )
-            return rrf_fuse(self.hits(lexical), self.hits(semantic)), "hybrid_client_rrf"
+            return (
+                rrf_fuse(self.hits(lexical), self.hits(semantic), self.hits(ranked)),
+                "hybrid_client_rrf",
+            )
 
     async def screen_population(self, ids: list[str], pico: dict) -> set[str]:
         """Apply the same population guard to expanded rows and aggregate counts."""
@@ -805,7 +857,7 @@ class ElasticRepository:
             query={
                 "bool": {"must": [query], "filter": [{"terms": {"source": ["ctgov", "merged"]}}]}
             },
-            source_excludes=["embedding", "attachments"],
+            source_excludes=["embedding"],
         )
         return self.hits(result)
 
@@ -1002,9 +1054,3 @@ class ElasticRepository:
                 "disagreements": aggs["spin_candidates"]["spin"]["doc_count"],
             },
         }
-
-    async def save_contribution(self, contribution: dict) -> None:
-        await self.ensure_index()
-        await self.client.index(
-            index=self.index, id=contribution["id"], document=contribution, refresh="wait_for"
-        )

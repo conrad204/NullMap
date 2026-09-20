@@ -78,7 +78,6 @@ and decoding, not corpus completeness.
 6. Explain the registry reporting gap. These trials have unknown outcomes. It is a measured count within the indexed registry/linking coverage, not an estimate that every unreported trial was null.
 7. Change N or SESOI and rerun. Explain how the study plan changes assurance and EV, and how SESOI changes the interpretation of the evidence. Assurance is Bayesian expected statistical power under the stated model, not the probability of a clinically meaningful benefit. Show N for 80% assurance only when returned.
 8. Expand **Query cost**, record the first run, then repeat the identical query. Compare actual token counts, extraction-cache hits, new extractions, and estimated model spend. The “read 200 abstracts,” cold, and warm columns are modeled cost comparisons; a second observed run is needed to support a measured cache-saving claim.
-9. Optionally upload a small, non-sensitive example contribution. The current flow stores files and notes as a draft with a receipt. It does not promise an autonomous manuscript, email delivery, or publication. Mock uploads explicitly save nothing.
 
 ## Capture evidence for the presentation
 
@@ -120,4 +119,4 @@ When service access is unavailable, use a separately labeled illustrative run:
 VITE_USE_MOCK=true npm run dev
 ```
 
-`?state=results` displays fictional fixtures only in that explicitly enabled mode. A banner states that all studies, findings, and costs are illustrative and that uploads are not saved. This mode demonstrates the interface and must not be used as evidence of search quality, scientific findings, API access, or cost savings.
+`?state=results` displays fictional fixtures only in that explicitly enabled mode. A banner states that all studies, findings, and costs are illustrative. This mode demonstrates the interface and must not be used as evidence of search quality, scientific findings, API access, or cost savings.

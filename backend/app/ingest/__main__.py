@@ -122,6 +122,13 @@ def parser() -> argparse.ArgumentParser:
     index.add_argument("--resume", action="store_true")
     index.add_argument("--sesoi", type=float, default=0.2)
     index.add_argument("--effect-type", default="SMD")
+    pagerank = commands.add_parser(
+        "pagerank",
+        help="Recompute within-corpus citation PageRank and update authority rank features",
+    )
+    pagerank.add_argument("--damping", type=float, default=0.85)
+    pagerank.add_argument("--iterations", type=int, default=30)
+    pagerank.add_argument("--batch-size", type=int, default=500)
     references = commands.add_parser("reference-ids", help="Collect missing review-reference IDs for S3 backfill")
     references.add_argument("--input", type=Path, nargs="+", required=True)
     references.add_argument("--output", type=Path, required=True)
@@ -303,6 +310,19 @@ async def run(args) -> dict:
                 state["links_version"] = 1
                 atomic_json(checkpoint, state)
             return state
+        finally:
+            await repository.close()
+    elif args.command == "pagerank":
+        from app.ingest.pagerank import update_authority
+        from app.repository import ElasticRepository
+        repository = ElasticRepository()
+        try:
+            return await update_authority(
+                repository,
+                damping=args.damping,
+                iterations=args.iterations,
+                batch_size=args.batch_size,
+            )
         finally:
             await repository.close()
     else:

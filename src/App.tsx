@@ -7,7 +7,6 @@ import ResultsView from "./components/ResultsView";
 import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
 import ErrorNotice from "./components/ErrorNotice";
-import ContributePanel from "./components/ContributePanel";
 import MapPanel from "./components/MapPanel";
 import { SAMPLE_RESULT } from "./api/mock";
 
@@ -19,12 +18,11 @@ type Status =
 
 /**
  * Dev affordance while there is no backend: deep-link into a UI state.
- *   ?mode=map | contribute
+ *   ?mode=map
  *   ?state=results | loading | error
  */
 function modeFromUrl(): Mode {
-  const requested = new URLSearchParams(window.location.search).get("mode");
-  return requested === "contribute" || requested === "map" ? requested : "search";
+  return new URLSearchParams(window.location.search).get("mode") === "map" ? "map" : "search";
 }
 
 function initialFromUrl(): { mode: Mode; status: Status } {
@@ -132,10 +130,8 @@ export default function App() {
               {status.kind === "done" && <ResultsView key={status.result.queryId} result={status.result} />}
             </section>
           </div>
-        ) : mode === "map" ? (
-          <MapPanel />
         ) : (
-          <ContributePanel />
+          <MapPanel />
         )}
       </main>
     </div>

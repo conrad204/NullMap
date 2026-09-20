@@ -117,7 +117,7 @@ The repository tests opt into real Elasticsearch only when `NULLMAP_TEST_ELASTIC
 
 ## Architecture and interpretation
 
-The implementation follows [the architecture proposal](docs/ARCHITECTURE.md), updated for S3-only literature ingestion: index-time classification and embeddings; hybrid BM25/vector retrieval; indexed review-reference expansion; separate full-match aggregations; structured registry parsing; quoted, cached paper extraction; and pure-Python statistical analysis. Elasticsearch stores studies, vectors, extraction caches, and contribution drafts. Missing review references are reported and can be backfilled by an offline S3 pass. No additional database or queue is required.
+The implementation follows [the architecture proposal](docs/ARCHITECTURE.md), updated for S3-only literature ingestion: index-time classification and embeddings; hybrid BM25/vector retrieval fused with citation authority; indexed review-reference expansion; separate full-match aggregations; structured registry parsing; quoted, cached paper extraction; and pure-Python statistical analysis. Elasticsearch stores studies, vectors, and extraction caches. Missing review references are reported and can be backfilled by an offline S3 pass. No additional database or queue is required.
 
 The current classifier is an explicitly heuristic phrase lexicon. A small trained pilot achieved 56.25% agreement on 16 held-out LLM-labelled abstracts and missed both held-out nulls, so it was not promoted. These are model-agreement metrics, not human-validated clinical accuracy. The new anonymous S3 path was checked with a 20-record scan from one 3.6 MB public part. Full-snapshot processing has not been run.
 
@@ -127,7 +127,7 @@ The current classifier is an explicitly heuristic phrase lexicon. A small traine
 - OR/RR/HR values remain inspectable as raw ratios; inference uses their logarithms and a compatible log-scale SESOI. Confidence levels and p-value inequalities are preserved.
 - Approximate reconstruction requires an estimate and an exact eligible p-value under stated assumptions; p-value bounds and sample size alone do not justify manufacturing an effect or interval.
 - Assurance is expected two-sided statistical power under the stated model, not the probability of meaningful clinical benefit. EV uses the user's success value, null-result value, and cost in common units.
-- Paper facts select numbered source sentences, or numbered full-text lines and table rows when Europe PMC has the paper; code supplies exact quotations and rejects unsupported numeric values. Discussion and conclusion sections are never offered as evidence. Narration is deterministic when a compatible numerical pool is unavailable. Registry facts retain their JSON paths. Contributions are stored drafts with receipts, not automatic publications or emails.
+- Paper facts select numbered source sentences, or numbered full-text lines and table rows when Europe PMC has the paper; code supplies exact quotations and rejects unsupported numeric values. Discussion and conclusion sections are never offered as evidence. Narration is deterministic when a compatible numerical pool is unavailable. Registry facts retain their JSON paths.
 
 See the [ingestion guide](backend/app/ingest/README.md) for checkpoints, scope rules, snapshot budgets, reference backfills and source limitations. The [demo guide](docs/DEMO.md) explains the workflow; the [validation record](docs/VALIDATION.md) distinguishes the S3 migration checks from historical demo measurements.
 

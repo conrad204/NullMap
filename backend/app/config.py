@@ -55,8 +55,6 @@ class Settings(BaseSettings):
     gapmap_sample: int = Field(default=6000, ge=100, le=10000)
     gapmap_regions: int = Field(default=80, ge=2, le=200)
     gapmap_seed: int = 0
-    max_upload_bytes: int = 5 * 1024 * 1024
-    max_upload_files: int = 3
     max_concurrent_searches: int = 4
     frontend_dist: str = str(Path(__file__).resolve().parents[2] / "dist")
     cors_origins: list[str] = ["http://localhost:5173"]

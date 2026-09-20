@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -46,6 +47,25 @@ def test_mapping_includes_every_runtime_numeric_field_and_actual_spin_flag():
     assert fields["analysis_effect_type"]["type"] == "keyword"
     assert fields["possible_abstract_spin"]["type"] == "boolean"
     assert fields["reporting_due_date"]["type"] == "date"
+    assert fields["authority"]["type"] == "rank_feature"
+    assert fields["pagerank"]["type"] == "rank_feature"
+
+
+def test_authority_is_log_scaled_and_never_written_nonpositive():
+    prepared = _prepare_document(document(cited_by_count=99))
+    assert prepared["authority"] == pytest.approx(math.log1p(99))
+    assert "authority" not in _prepare_document(document(cited_by_count=0))
+    assert "authority" not in _prepare_document(document())
+    # A refresh that drops the count must not leave a stale feature behind.
+    stale = _prepare_document(document(), document(cited_by_count=0, authority=2.0))
+    assert "authority" not in stale
+
+
+def test_pagerank_survives_reingest_untouched():
+    original = document(pagerank=1.23, cited_by_count=10)
+    updated = _prepare_document(document(cited_by_count=99), original)
+    assert updated["pagerank"] == 1.23
+    assert updated["authority"] == pytest.approx(math.log1p(99))
 
 
 def test_reingest_retains_verified_cache_only_for_unchanged_abstract():
@@ -159,13 +179,47 @@ def test_rrf_falls_back_only_for_license_failure_including_403():
                 error(AuthorizationException, "current license is non-compliant for [RRF]", 403),
                 response,
                 response,
+                response,
             ]
         )
     )
     repo = ElasticRepository(Settings(_env_file=None), client=client)
     _, mode = asyncio.run(repo.retrieve(lexical_query({}, "vitamin d"), [1.0, 0.0, 0.0]))
     assert mode == "hybrid_client_rrf"
-    assert client.search.call_count == 3
+    # Three legs re-run client-side: BM25, kNN, and citation authority.
+    assert client.search.call_count == 4
+
+
+def test_hybrid_retriever_adds_an_authority_leg_scoped_to_the_query():
+    client = SimpleNamespace(search=AsyncMock(return_value={"hits": {"hits": []}}))
+    repo = ElasticRepository(Settings(_env_file=None), client=client)
+    query = lexical_query({}, "vitamin d")
+    _, mode = asyncio.run(repo.retrieve(query, [1.0, 0.0, 0.0]))
+    assert mode == "hybrid_rrf"
+    retrievers = client.search.call_args.kwargs["retriever"]["rrf"]["retrievers"]
+    assert [next(iter(leg)) for leg in retrievers] == ["standard", "knn", "standard"]
+    authority = retrievers[2]["standard"]["query"]
+    assert authority["bool"]["filter"] == [query]
+    fields = [clause["rank_feature"]["field"] for clause in authority["bool"]["should"]]
+    assert fields == ["authority", "pagerank"]
+    assert authority["bool"]["minimum_should_match"] == 1
+
+
+def test_bm25_retrieval_is_fused_with_the_authority_ranking():
+    seen = []
+
+    async def search(**kwargs):
+        seen.append(kwargs)
+        return {"hits": {"hits": []}}
+
+    repo = ElasticRepository(Settings(_env_file=None), client=SimpleNamespace(search=search))
+    _, mode = asyncio.run(repo.retrieve({"match_all": {}}, None))
+    assert mode == "bm25"
+    assert len(seen) == 2
+    assert seen[0]["query"] == {"match_all": {}}
+    authority = seen[1]["query"]
+    assert authority["bool"]["filter"] == [{"match_all": {}}]
+    assert "rank_feature" in str(authority["bool"]["should"])
 
 
 @pytest.mark.parametrize(
@@ -853,11 +907,11 @@ def test_real_elasticsearch_embedded_sample_returns_vectors_and_the_corpus_size(
                 + [
                     document("no_vector"),
                     document("review", embedding=[0.0, 1.0, 0.0], is_review=True),
-                    document("contribution", record_kind="contribution", embedding=[0.0, 0.0, 1.0]),
+                    document("draft", record_kind="draft", embedding=[0.0, 0.0, 1.0]),
                 ]
             )
             sample = await repo.sample_embedded(limit=4, seed=7)
-            assert sample["corpus"] == 7  # six works plus the review, never the contribution
+            assert sample["corpus"] == 7  # six works plus the review, never the non-study draft
             assert len(sample["documents"]) == 4
             assert all(len(doc["embedding"]) == 3 for doc in sample["documents"])
             assert all(doc["id"] != "no_vector" for doc in sample["documents"])

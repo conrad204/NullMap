@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 nullMap (HackMIT 2026) finds prior clinical studies, surfaces null and unreported results, and estimates whether a proposed study is adequately powered. Three independent pieces live in one repo:
 
-- **`backend/`** — FastAPI service + offline ingestion (Python 3.12, `uv`). Elasticsearch is the only datastore: documents, vectors, LLM extraction cache, contribution drafts.
+- **`backend/`** — FastAPI service + offline ingestion (Python 3.12, `uv`). Elasticsearch is the only datastore: documents, vectors, LLM extraction cache.
 - **`src/`** — React 19 + Vite + Tailwind 4 frontend (root `package.json`).
 - **`evidence_workflow/`** — a standalone `hatchling` package for heterogeneity-aware meta-analysis and "research redundancy" scoring. It shares no code with `backend/`; it was added separately and has its own README, tests, and CLI. Its statistical policy differs from the backend on purpose (REML + Hartung–Knapp, reconstructed effects only in sensitivity analyses), so do not copy rules between the two without checking.
 
@@ -88,7 +88,7 @@ Registry primary-outcome numbers are authoritative and never overwritten by pape
 
 ### API surface (`backend/app/main.py`)
 
-Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`, `/novelty`, `/map`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/novelty`, `/map`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405.
 
 ### Gap map (`backend/app/gapmap.py`, `gapmap_service.py`)
 

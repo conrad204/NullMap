@@ -7,7 +7,7 @@ import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
 
 type Filter = Verdict | "all";
-const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", user: "Contribution", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
+const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
 const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
 const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
