@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { EMPTY_DRAFT, EMPTY_STATE, afterSearch, describeFilters, filterError, loadFilterState, parseFilters, saveFilterState } from './filters.ts';
+import { EMPTY_DRAFT, EMPTY_STATE, afterSearch, describeFilters, filterError, loadFilterState, parseFilters, registryExemptionNotice, saveFilterState } from './filters.ts';
 
 const draft = (values) => ({ ...EMPTY_DRAFT, ...values });
+const applied = (values) => ({ description: [], registryCitationExemption: true, matchedBeforeFilters: null, excluded: null, ...values });
 
 test('an untouched form sends no filter at all', () => {
   assert.equal(parseFilters(EMPTY_DRAFT), undefined);
@@ -33,6 +34,28 @@ test('active bounds are labelled for display beside the question', () => {
   assert.deepEqual(describeFilters({ minCitations: 5 }), ['\u2265 5 citations']);
   assert.deepEqual(describeFilters({ maxCitations: 50 }), ['\u2264 50 citations']);
   assert.deepEqual(describeFilters({ yearFrom: 2015, minCitations: 5, maxCitations: 50 }), ['Published 2015 or later', '5\u201350 citations']);
+});
+
+test('the registry exemption is stated only when a citation bound kept trial records', () => {
+  const trials = [{ source: 'clinicaltrials' }, { source: 'openalex' }];
+  // No citation bound at all: nothing to explain.
+  assert.equal(registryExemptionNotice(null, trials), null);
+  assert.equal(registryExemptionNotice(applied({ registryCitationExemption: false, registryExempted: 3 }), trials), null);
+  // A bound applied, but no registry row was exempted by it.
+  assert.equal(registryExemptionNotice(applied({ registryExempted: 0 }), trials), null);
+  assert.equal(registryExemptionNotice(applied({ registryExempted: null }), [{ source: 'openalex' }]), null);
+
+  const counted = registryExemptionNotice(applied({ registryExempted: 4 }), trials);
+  assert.match(counted, /^4 matching ClinicalTrials\.gov records are included without meeting the citation filter\./);
+  assert.match(counted, /carry no citation count/);
+  assert.doesNotMatch(counted, /could not be counted/);
+  assert.match(registryExemptionNotice(applied({ registryExempted: 1 }), trials), /^1 matching ClinicalTrials\.gov record is included/);
+  // An uncounted exemption says so instead of estimating, as long as trial rows are shown.
+  const uncounted = registryExemptionNotice(applied({ registryExempted: null }), trials);
+  assert.match(uncounted, /^Matching ClinicalTrials\.gov records are included/);
+  assert.match(uncounted, /could not be counted/);
+  // An older API omits the field entirely; the displayed trial rows still justify the notice.
+  assert.match(registryExemptionNotice(applied({}), [{ source: 'merged' }]), /could not be counted/);
 });
 
 test('only sticky filters survive a search; the toggle itself always does', () => {

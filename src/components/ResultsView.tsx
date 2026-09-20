@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowUpRight, Funnel } from "@phosphor-icons/react";
+import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
+import { registryExemptionNotice } from "../lib/filters";
 import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
 import { BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
 import { headline } from "../lib/headline";
@@ -32,6 +33,9 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const effects = result.papers.filter((paper) => paper.verdict === "effect");
   const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled);
   const matched = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  // Stated beside the active filters, not in the warnings list: a reader of filtered
+  // results has to be told why unpublished trial records survived a citation bound.
+  const exemption = registryExemptionNotice(result.filters, result.papers);
   const shown = filter === "all" ? result.papers : result.papers.filter((paper) => paper.verdict === filter);
   return (
     <div className="fade-up flex flex-col gap-10">
@@ -39,6 +43,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
         {result.filters && <AppliedFilterNote filters={result.filters} />}
+        {exemption && <p className="mt-2 max-w-[78ch] rounded-control border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2"><Info size={14} className="mr-1.5 inline align-[-2px] text-ink-3" aria-hidden />{exemption}</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
       </header>
       <section aria-label="Has this been tested before?">
@@ -68,14 +73,13 @@ export default function ResultsView({ result }: { result: SearchResult }) {
 }
 /** A filtered report describes a subset of the index, so say which subset and what it cost. */
 function AppliedFilterNote({ filters }: { filters: NonNullable<SearchResult["filters"]> }) {
-  const { description, excluded, matchedBeforeFilters, registryCitationExemption } = filters;
+  const { description, excluded, matchedBeforeFilters } = filters;
   return <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2">
     <Funnel size={14} className="text-ink-3" aria-hidden />
     <span>Filtered corpus: {description.join(" · ")}.</span>
     <span className="text-ink-3">{excluded !== null && matchedBeforeFilters !== null
       ? `${formatCount(excluded)} of ${formatCount(matchedBeforeFilters)} otherwise-matching records were excluded before counting.`
-      : "How many records the filters excluded could not be counted."}
-      {registryCitationExemption ? " Registry trials have no citation count and are exempt from the citation bounds." : ""}</span>
+      : "How many records the filters excluded could not be counted."}</span>
   </p>;
 }
 function OverviewPanel({ overview }: { overview: NonNullable<SearchResult["overview"]> }) {

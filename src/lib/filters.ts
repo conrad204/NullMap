@@ -1,4 +1,4 @@
-import type { SearchFilters } from "../types";
+import type { AppliedFilters, SearchFilters, Source } from "../types";
 
 /** The composer's raw inputs. An empty string means "no bound", not zero. */
 export interface FilterDraft {
@@ -68,6 +68,30 @@ export function describeFilters(filters: SearchFilters | undefined): string[] {
   else if (minCitations !== undefined) labels.push(`\u2265 ${minCitations} citations`);
   else if (maxCitations !== undefined) labels.push(`\u2264 ${maxCitations} citations`);
   return labels;
+}
+
+const REGISTRY_SOURCES: Source[] = ["clinicaltrials", "ctgov", "merged"];
+
+/**
+ * Why trial records survived a citation filter, or null when that needs no saying.
+ *
+ * Only shown when a citation bound actually applied and registry rows are actually
+ * involved: either the backend counted the rows it exempted, or — when that count
+ * was unavailable — registry rows are visible in the studies themselves. A missing
+ * count is stated as missing rather than estimated.
+ */
+export function registryExemptionNotice(
+  filters: AppliedFilters | null | undefined,
+  papers: { source: Source }[],
+): string | null {
+  if (!filters?.registryCitationExemption) return null;
+  const exempted = filters.registryExempted ?? null;
+  const shown = papers.filter((paper) => REGISTRY_SOURCES.includes(paper.source)).length;
+  if (exempted === 0 || (exempted === null && shown === 0)) return null;
+  const subject = exempted === null
+    ? "Matching ClinicalTrials.gov records are"
+    : `${exempted} matching ClinicalTrials.gov ${exempted === 1 ? "record is" : "records are"}`;
+  return `${subject} included without meeting the citation filter. Unpublished trial registrations carry no citation count, so the requirement cannot apply to them; excluding them would drop exactly the terminated and never-reported trials this search looks for.${exempted === null ? " How many were exempted could not be counted." : ""}`;
 }
 
 /** What the form holds once a search is under way: sticky values stay, the rest clear. */

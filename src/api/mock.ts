@@ -1,5 +1,6 @@
 /** Entirely fictional fixtures, reachable only when VITE_USE_MOCK=true. */
 import type { SearchProgress, SearchRequest, SearchResult } from "../types";
+import { describeFilters } from "../lib/filters";
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
@@ -13,7 +14,21 @@ export async function mockSearch(req: SearchRequest, onProgress?: (progress: Sea
     onProgress?.({ stage, message: "Illustrative demo — simulating a search; no sources are being queried." });
     await wait(300, signal);
   }
-  return { ...SAMPLE_RESULT, idea: req.idea, field: req.field ?? null, queryId: `demo_${Date.now()}`, completedAt: new Date().toISOString() };
+  return { ...SAMPLE_RESULT, idea: req.idea, field: req.field ?? null, queryId: `demo_${Date.now()}`, completedAt: new Date().toISOString(), filters: mockFilters(req.filters) };
+}
+/** Echoes the requested bounds so the filtered-corpus notices are visible in the demo.
+ *  The counts are as fictional as the rest of this file; the 2 registry rows are its own. */
+function mockFilters(filters: SearchRequest["filters"]): SearchResult["filters"] {
+  if (!filters) return null;
+  const citationBound = filters.minCitations !== undefined || filters.maxCitations !== undefined;
+  return {
+    ...filters,
+    description: describeFilters(filters),
+    registryCitationExemption: citationBound,
+    registryExempted: citationBound ? 2 : null,
+    matchedBeforeFilters: SAMPLE_RESULT.totalScanned + 5,
+    excluded: 5,
+  };
 }
 export const SAMPLE_RESULT: SearchResult = {
   queryId: "illustrative_demo",

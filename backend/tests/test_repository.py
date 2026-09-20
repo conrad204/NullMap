@@ -20,6 +20,7 @@ from app.repository import (
     index_mapping,
     lexical_query,
     population_query,
+    registry_citation_exemption_query,
 )
 from app.statistics import assign_bucket
 
@@ -777,6 +778,15 @@ def test_each_bound_is_independent_and_an_empty_filter_set_is_not_a_filter(filte
     assert filter_clauses(filters) == expected
 
 
+def test_the_exemption_query_counts_registry_rows_the_bound_would_have_removed():
+    assert registry_citation_exemption_query({"match_all": {}}, {"yearFrom": 2015}) is None
+    assert registry_citation_exemption_query({"match_all": {}}, None) is None
+    query = registry_citation_exemption_query({"match_all": {}}, {"minCitations": 5})["bool"]
+    assert query["must"] == [{"match_all": {}}]
+    assert query["filter"] == [{"terms": {"source": ["ctgov", "merged"]}}]
+    assert query["must_not"] == [{"range": {"cited_by_count": {"gte": 5}}}]
+
+
 def test_a_zero_citation_floor_is_a_bound_and_not_an_absent_one():
     # 0 is falsy but meaningful: it excludes papers with no stored citation count.
     clause = filter_clauses({"minCitations": 0})[0]["bool"]["should"][0]
@@ -957,6 +967,10 @@ def test_real_elasticsearch_filters_agree_across_retrieval_registry_sweep_and_co
             assert aggregate["total"] == 2
             assert [row["year"] for row in aggregate["yearCounts"]] == [2020]
             assert await repo.count_studies(lexical_query(pico, idea)) == len(rows)
+            # The trial is in the match set only because the citation bound skips it.
+            assert (
+                await repo.count_studies(registry_citation_exemption_query(query, filters))
+            ) == 1
             # Expanded review references are screened against the same bounds.
             assert await repo.screen_population(
                 ["recent_cited", "recent_obscure", "old_cited", "undated"], pico, filters

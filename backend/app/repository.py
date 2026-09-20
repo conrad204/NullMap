@@ -288,6 +288,36 @@ def population_query(pico: dict) -> dict | None:
 CITATION_EXEMPT_SOURCES = ("ctgov", "merged")
 
 
+def citation_range(filters: dict | None) -> dict | None:
+    """The citation bound on its own, or None when the request set neither end."""
+    if not filters:
+        return None
+    bounds = {}
+    if filters.get("minCitations") is not None:
+        bounds["gte"] = int(filters["minCitations"])
+    if filters.get("maxCitations") is not None:
+        bounds["lte"] = int(filters["maxCitations"])
+    return {"range": {"cited_by_count": bounds}} if bounds else None
+
+
+def registry_citation_exemption_query(query: dict, filters: dict | None) -> dict | None:
+    """Rows in the match set only because citation bounds skip the registry.
+
+    Counting these makes the exemption visible: it is the number of trial records
+    the citation requirement would have removed had it applied to them.
+    """
+    bound = citation_range(filters)
+    if bound is None:
+        return None
+    return {
+        "bool": {
+            "must": [query],
+            "filter": [{"terms": {"source": list(CITATION_EXEMPT_SOURCES)}}],
+            "must_not": [bound],
+        }
+    }
+
+
 def filter_clauses(filters: dict | None) -> list[dict]:
     """Pre-search corpus restrictions, as filter clauses over the full match set.
 
@@ -306,17 +336,13 @@ def filter_clauses(filters: dict | None) -> list[dict]:
         dates["lte"] = f"{int(filters['yearTo']):04d}-12-31"
     if dates:
         clauses.append({"range": {"publication_date": dates}})
-    citations = {}
-    if filters.get("minCitations") is not None:
-        citations["gte"] = int(filters["minCitations"])
-    if filters.get("maxCitations") is not None:
-        citations["lte"] = int(filters["maxCitations"])
-    if citations:
+    citations = citation_range(filters)
+    if citations is not None:
         clauses.append(
             {
                 "bool": {
                     "should": [
-                        {"range": {"cited_by_count": citations}},
+                        citations,
                         {"terms": {"source": list(CITATION_EXEMPT_SOURCES)}},
                     ],
                     "minimum_should_match": 1,

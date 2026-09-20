@@ -18,6 +18,7 @@ from app.repository import (
     filter_clauses,
     lexical_query,
     population_query,
+    registry_citation_exemption_query,
     rrf_fuse,
 )
 from app.statistics import INCONCLUSIVE_REASONS, analyze_studies, assign_bucket
@@ -530,7 +531,12 @@ class SearchPipeline:
         return trend
 
     async def corpus_filters(
-        self, filters: dict, unfiltered_query: dict, matched: int, warnings: list[str]
+        self,
+        filters: dict,
+        unfiltered_query: dict,
+        filtered_query: dict,
+        matched: int,
+        warnings: list[str],
     ) -> dict:
         """Report what the pre-search filters removed, and that the counts are a subset.
 
@@ -555,11 +561,18 @@ class SearchPipeline:
             "count, bucket share, histogram and file-drawer figure here describes that filtered "
             f"subset of the index rather than all matching evidence.{detail}"
         )
-        if filters.get("minCitations") is not None or filters.get("maxCitations") is not None:
+        exemption = registry_citation_exemption_query(filtered_query, filters)
+        exempted = None
+        if exemption is not None:
+            try:
+                exempted = await self.repo.count_studies(exemption)
+            except Exception as exc:
+                logger.warning("Registry exemption count unavailable: %s", type(exc).__name__)
+            count = f"{exempted} matching registry rows are" if exempted is not None else "They are"
             warnings.append(
-                "ClinicalTrials.gov records carry no citation count, so registry rows are exempt "
-                "from the citation bounds. Filtering on citations would otherwise remove the "
-                "terminated and never-reported trials this search exists to surface."
+                f"ClinicalTrials.gov records carry no citation count, so {count} kept despite the "
+                "citation bounds. Filtering on citations would otherwise remove the terminated and "
+                "never-reported trials this search exists to surface."
             )
         if filters.get("yearFrom") is not None or filters.get("yearTo") is not None:
             warnings.append(
@@ -570,8 +583,9 @@ class SearchPipeline:
         return {
             **{key: filters.get(key) for key in bounds},
             "description": phrases,
-            "registryCitationExemption": filters.get("minCitations") is not None
-            or filters.get("maxCitations") is not None,
+            "registryCitationExemption": exemption is not None,
+            # Registry rows the citation bound would have removed had it applied to them.
+            "registryExempted": exempted,
             "matchedBeforeFilters": total,
             "excluded": excluded,
         }
@@ -703,6 +717,7 @@ class SearchPipeline:
             applied_filters = await self.corpus_filters(
                 filters,
                 lexical_query(pico.model_dump(), request.idea, expansion_ids or None),
+                query,
                 aggregation["total"],
                 warnings,
             )

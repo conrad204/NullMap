@@ -96,7 +96,10 @@ bounds are mandatory `filter` clauses an expanded review reference cannot escape
 citation floor is treated as a bound rather than an absence, that the same bounds reach
 retrieval, the registry sweep and the aggregation, that the comparison count drops them so the
 excluded figure is attributable, that a failed count is reported as uncounted rather than zero,
-and that an empty filter object produces no `filters` payload and no warning. The real
+that a citation bound counts the registry rows it exempted and a date-only filter neither
+exempts nor counts anything, that the exemption notice appears only when a bound applied and
+registry rows were kept, and that an empty filter object produces no `filters` payload and no
+warning. The real
 Elasticsearch parity test for filtered retrieval/sweep/aggregation agreement
 (`test_real_elasticsearch_filters_agree_across_retrieval_registry_sweep_and_counts`) was
 **skipped**: no Elasticsearch was running in this environment. **No filtered search has been

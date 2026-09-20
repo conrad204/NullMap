@@ -84,6 +84,7 @@ class MemoryRepository:
         self.count_queries = []
         # What the same match set contains without the request's filters.
         self.unfiltered_total = 0
+        self.count_results: list[int] = []
         self.count_error = None
 
     async def ensure_index(self):
@@ -113,7 +114,8 @@ class MemoryRepository:
         self.count_queries.append(deepcopy(query))
         if self.count_error:
             raise self.count_error
-        return self.unfiltered_total
+        # Successive counts: the unfiltered match set, then the exempted registry rows.
+        return self.count_results.pop(0) if self.count_results else self.unfiltered_total
 
     async def cache_extraction(self, identifier, extraction):
         self.cache_writes.append((identifier, deepcopy(extraction)))
@@ -299,7 +301,6 @@ def test_corpus_filters_constrain_retrieval_the_registry_sweep_and_the_counts():
         for clause in expected:
             assert clause in query["bool"]["filter"]
     # The comparison count deliberately drops the bounds; otherwise nothing is attributable.
-    assert len(repo.count_queries) == 1
     assert "publication_date" not in str(repo.count_queries[0])
     applied = result["filters"]
     assert (applied["yearFrom"], applied["minCitations"]) == (2015, 5)
@@ -311,6 +312,42 @@ def test_corpus_filters_constrain_retrieval_the_registry_sweep_and_the_counts():
     assert any("no citation count" in warning for warning in result["warnings"])
     assert any("no publication date" in warning for warning in result["warnings"])
     assert "Restricted before searching" in result["countScope"]
+
+
+def test_a_citation_bound_counts_the_registry_rows_it_exempted():
+    repo = MemoryRepository([paper(), paper("trial", source="ctgov", nct_ids=["NCT00000001"])])
+    repo.count_results = [40, 7]
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(
+                idea="Does vitamin D reduce depression?",
+                filters=SearchFilters(minCitations=5),
+            )
+        )
+    )
+    assert result["filters"]["matchedBeforeFilters"] == 40
+    assert result["filters"]["registryExempted"] == 7
+    # The exemption count asks the opposite question: registry rows failing the bound.
+    exemption = repo.count_queries[1]["bool"]
+    assert exemption["filter"] == [{"terms": {"source": ["ctgov", "merged"]}}]
+    assert exemption["must_not"] == [{"range": {"cited_by_count": {"gte": 5}}}]
+    assert any("7 matching registry rows are kept" in w for w in result["warnings"])
+
+
+def test_a_date_only_filter_neither_exempts_nor_counts_registry_rows():
+    repo = MemoryRepository([paper()])
+    repo.unfiltered_total = 4
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(
+                idea="Does vitamin D reduce depression?", filters=SearchFilters(yearTo=2020)
+            )
+        )
+    )
+    assert result["filters"]["registryCitationExemption"] is False
+    assert result["filters"]["registryExempted"] is None
+    assert len(repo.count_queries) == 1
+    assert not any("citation" in warning for warning in result["warnings"])
 
 
 def test_an_empty_filter_object_never_claims_a_narrowed_corpus():
@@ -339,7 +376,10 @@ def test_a_filtered_search_admits_when_it_cannot_count_what_was_excluded():
     )
     assert result["filters"]["matchedBeforeFilters"] is None
     assert result["filters"]["excluded"] is None
+    assert result["filters"]["registryExempted"] is None
     assert any("could not be counted" in warning for warning in result["warnings"])
+    # Without a count the exemption is still stated, just without a number.
+    assert any("They are kept despite the citation bounds" in w for w in result["warnings"])
 
 
 def test_filters_screen_expanded_review_references_without_a_population():

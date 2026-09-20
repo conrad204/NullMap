@@ -86,6 +86,8 @@ export interface AppliedFilters extends SearchFilters {
   description: string[];
   /** Registry rows have no citation count, so citation bounds never apply to them. */
   registryCitationExemption: boolean;
+  /** Matching registry rows the citation bound would have removed had it applied. */
+  registryExempted?: number | null;
   matchedBeforeFilters: number | null;
   excluded: number | null;
 }
