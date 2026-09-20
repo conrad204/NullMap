@@ -41,15 +41,16 @@ From top to bottom:
 
 **Coverage & limitations.** Read this box before the numbers. It lists everything that qualifies the report: BM25 fallback, unscreened counts, missing review references, sample limits. These are not boilerplate; each one appears only when it is true of this search.
 
-**What prior work found.** A bar over the full match set (not just the displayed page), grouped into three answers:
+**What prior work found.** A bar over the full match set (not just the displayed page), grouped into four answers:
 
 | Answer | Buckets inside it | What it means |
 | --- | --- | --- |
-| Made a difference | effect | The groups ended up different — in *either* direction, so this includes harm. Check each study's stated direction before reading it as benefit. |
+| Favoured the intervention | effect, direction `favours_intervention` | The groups ended up different and the study's own report puts the intervention ahead. The direction is only as good as the sentence it was quoted from. |
+| Favoured the comparator | effect, direction `favours_comparator` | The same evidence rules, the other way round: this is where harm from the intervention appears. |
 | Made no difference | confirmed + claimed | **Confirmed** means a confidence interval sits entirely inside the equivalence bounds: any effect is too small to matter. **Claimed** means the abstract says "no significant difference" without an interval to back it — that is a claim, not evidence of equivalence, and often just an underpowered study. |
 | No answer | stopped/flawed + never reported | Trials stopped early, retracted, or completed more than a year ago with no posted results and no linked publication. **Outcomes here are unknown, not negative.** |
 
-A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found. Click any bucket to filter the study list below.
+An effect whose report never said which arm it favoured is counted beside the bar under its own label rather than folded into benefit or harm. A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found. Click any bucket to filter the study list below.
 
 **What the reported effects have in common** (or, when too few studies reported an effect, an overview of what the matches are and why none settles the question). Direction counts — how many effects favour the intervention versus the comparator — are computed in code; the accompanying prose is generated from extracted facts and quotes and is rejected if it introduces numbers not in its table.
 

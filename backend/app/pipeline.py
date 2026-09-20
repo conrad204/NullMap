@@ -14,6 +14,7 @@ from app.llm import LLMService, Usage
 from app.models import Pico, SearchRequest
 from app.repository import (
     BUCKETS,
+    EFFECT_DIRECTIONS,
     ElasticRepository,
     filter_clauses,
     lexical_query,
@@ -116,12 +117,21 @@ def recount(studies: list[dict], sesoi: float, effect_type: str) -> dict:
     """Bucket counts over screened studies, replacing the keyword-match aggregation."""
     counts = dict.fromkeys(BUCKETS, 0)
     reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+    directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
     for study in studies:
         verdict = assign_bucket(study, sesoi, effect_type)
         counts[verdict["bucket"]] += 1
         if verdict["inconclusive_reason"]:
             reasons[verdict["inconclusive_reason"]] += 1
-    return {"total": len(studies), "bucketCounts": counts, "inconclusiveReasons": reasons}
+        if verdict["bucket"] == "effect":
+            key = study.get("result_direction") or "unclear"
+            directions[EFFECT_DIRECTIONS.get(key, "unclear")] += 1
+    return {
+        "total": len(studies),
+        "bucketCounts": counts,
+        "inconclusiveReasons": reasons,
+        "effectDirections": directions,
+    }
 
 
 def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
@@ -963,6 +973,8 @@ class SearchPipeline:
             "pico": pico.model_dump(),
             "bucketCounts": aggregation["bucketCounts"],
             "inconclusiveReasons": aggregation.get("inconclusiveReasons"),
+            # Over the full match set, unlike effectTrend, which covers the studies read.
+            "effectDirections": aggregation.get("effectDirections"),
             "yearCounts": aggregation["yearCounts"],
             "countScope": count_scope,
             # Null unless a bound was set, so a result can never look filtered when it is not.

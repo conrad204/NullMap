@@ -11,7 +11,7 @@ from app.config import Settings
 from app.llm import Usage, indexed_to_extraction, validate_extraction
 from app.models import Extraction, IndexedExtraction, Pico, SearchFilters, SearchRequest
 from app.pipeline import SearchPipeline
-from app.repository import BUCKETS, filter_clauses
+from app.repository import BUCKETS, EFFECT_DIRECTIONS, filter_clauses
 from app.statistics import INCONCLUSIVE_REASONS, assign_bucket
 
 
@@ -145,15 +145,20 @@ class MemoryRepository:
             if not row.get("is_review") and row.get("record_kind") != "linked_publication"
         ]
         reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+        directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
         for row in rows:
             verdict = assign_bucket(row, sesoi, effect_type)
             counts[verdict["bucket"]] += 1
             if verdict["inconclusive_reason"]:
                 reasons[verdict["inconclusive_reason"]] += 1
+            if verdict["bucket"] == "effect":
+                key = row.get("result_direction") or "unclear"
+                directions[EFFECT_DIRECTIONS.get(key, "unclear")] += 1
         return {
             "total": len(rows),
             "bucketCounts": counts,
             "inconclusiveReasons": reasons,
+            "effectDirections": directions,
             "yearCounts": [],
             "nullTerms": [],
             "fileDrawer": {"completed": 0, "unreported": 0, "overdue": 0, "share": None},
@@ -1060,6 +1065,32 @@ def test_effect_trend_keeps_counts_when_the_model_fails_and_is_absent_without_ef
         none = await SearchPipeline(MemoryRepository([paper("N")]), FakeLLM(), settings).search(
             SearchRequest(idea="Does vitamin D reduce depression?"))
         assert none["effectTrend"] is None
+
+    asyncio.run(exercise())
+
+
+def test_effect_directions_cover_the_full_match_set_and_survive_a_recount():
+    async def exercise():
+        rows = [_effect("A", "Depression", 0.5, "favours_intervention"),
+                _effect("B", "Depression", -0.5, "favours_comparator"),
+                _effect("C", "Depression", 0.6, None),
+                paper("D", result_label="null", has_control=True)]
+        settings = config(extraction_limit=0)
+        result = await SearchPipeline(MemoryRepository(rows), FakeLLM(), settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        directions = result["effectDirections"]
+        assert directions == {"favoursIntervention": 1, "favoursComparator": 1, "unclear": 1}
+        assert sum(directions.values()) == result["bucketCounts"]["effect"]
+        # The trend describes the studies read; the directions describe every match.
+        assert result["effectTrend"]["totalEffects"] == 3
+        screened = FakeLLM()
+        screened.relevant = {"A", "D"}
+        settings.openai_api_key = "test"
+        recounted = await SearchPipeline(MemoryRepository(rows), screened, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert recounted["effectDirections"] == {
+            "favoursIntervention": 1, "favoursComparator": 0, "unclear": 0}
+        assert sum(recounted["effectDirections"].values()) == recounted["bucketCounts"]["effect"]
 
     asyncio.run(exercise())
 
