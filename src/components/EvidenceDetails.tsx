@@ -39,12 +39,15 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
       {!!result.nullTerms?.length && <><p className="mt-3 text-sm text-ink-2">Terms over-represented in credible-null abstracts</p><div className="mt-2 flex flex-wrap gap-2">{result.nullTerms.map(({ term, count }) => <span key={term} className="rounded-control bg-surface-2 px-2 py-1 text-xs text-ink">{term} <span className="font-mono text-ink-3">{formatCount(count)}</span></span>)}</div><p className="mt-2 text-xs text-ink-3">An Elasticsearch text association; this does not establish that the term causes a null result.</p></>}
       {!!result.alternativeRoutes?.length && <ul className="mt-4 space-y-4">{result.alternativeRoutes.map((route) => <li key={route.label}><h3 className="text-sm font-medium text-ink">{route.label}</h3><p className="mt-1 text-sm leading-relaxed text-ink-2">{route.reason}</p><p className="mt-1 text-xs text-ink-3">{formatCount(route.evidenceCount)} indexed studies supporting this suggestion</p></li>)}</ul>}
     </section>}
-    {!!result.yearCounts?.length && <details className="text-sm">
-      <summary className="cursor-pointer font-medium text-ink-2">Matching studies by year</summary>
-      <YearHistogram counts={result.yearCounts} />
-    </details>}
-    {result.costs && <Costs costs={result.costs} />}
   </>;
+}
+
+/** Kept out of the evidence block so the page can put these utilities after the map. */
+export function YearBreakdown({ counts }: { counts: { year: number; count: number }[] }) {
+  return <details className="text-sm">
+    <summary className="cursor-pointer font-medium text-ink-2">Matching studies by year</summary>
+    <YearHistogram counts={counts} />
+  </details>;
 }
 const RECOMMENDATIONS: Record<Recommendation, { label: string; tone: string }> = {
   pursue: { label: "Worth pursuing as posed", tone: "text-v-effect" },
@@ -202,7 +205,7 @@ function YearHistogram({ counts }: { counts: { year: number; count: number }[] }
   </div>;
 }
 function usd(value: number) { return `$${value.toFixed(value < 0.01 ? 5 : 3)}`; }
-function Costs({ costs }: { costs: QueryCosts }) {
+export function Costs({ costs }: { costs: QueryCosts }) {
   return <details className="rounded-control border border-line p-4 text-sm">
     <summary className="cursor-pointer font-medium text-ink-2">Query cost <span className="ml-2 font-mono text-ink">{usd(costs.estimatedUsd)}</span><span className="ml-2 text-xs font-normal text-ink-3">{costs.calls} model calls · {(costs.latencyMs / 1000).toFixed(1)}s</span></summary>
     <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-xs"><caption className="mb-2 text-left text-ink-3">Estimated model cost comparison</caption><thead><tr className="border-b border-line text-ink-3"><th className="pb-2 pr-3 font-normal">Read 200 abstracts</th><th className="pb-2 pr-3 font-normal">Cold pipeline</th><th className="pb-2 font-normal">Warm pipeline</th></tr></thead><tbody><tr className="font-mono text-ink"><td className="pt-2 pr-3">{usd(costs.naiveEstimatedUsd)}</td><td className="pt-2 pr-3">{usd(costs.coldEstimatedUsd)}</td><td className="pt-2">{usd(costs.warmEstimatedUsd)}</td></tr></tbody></table></div>
