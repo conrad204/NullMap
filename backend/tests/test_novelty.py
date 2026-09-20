@@ -101,9 +101,10 @@ class StubEmbedder:
 
 
 class StubFullText:
-    def __init__(self, availability="full_text", title=""):
+    def __init__(self, availability="full_text", title="", year=None):
         self.availability = availability
         self.title = title
+        self.year = year
         self.fetched = []
 
     async def fetch(self, paper_id, doi="", pmid="", abstract=""):
@@ -114,6 +115,7 @@ class StubFullText:
             source="europepmc:PMC1",
             sections=parse_jats(JATS) if self.availability == "full_text" else {"abstract": abstract},
             title=self.title,
+            year=self.year,
         )
 
     async def close(self):
@@ -207,7 +209,7 @@ def test_the_publisher_title_wins_when_the_index_disagrees():
     resolved = "Hypertension Management in Patients with Chronic Kidney Disease"
     instance = engine(
         config=Settings(openai_api_key="k"),
-        fulltext=StubFullText(title=resolved),
+        fulltext=StubFullText(title=resolved, year=2022),
         llm=StubLLM(),
     )
     report = asyncio.run(instance.assess("Ruxolitinib reduces viability in leukemia cells", 20, 1))
@@ -215,6 +217,7 @@ def test_the_publisher_title_wins_when_the_index_disagrees():
     assert paper["title"] == resolved
     assert paper["indexTitle"].startswith("JAK2")
     assert paper["metadataConflict"] is True
+    assert (paper["year"], paper["indexYear"]) == (2022, 2021)
     assert any("disagreed" in warning for warning in report["warnings"])
 
 

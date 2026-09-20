@@ -40,7 +40,9 @@ class FullText:
     availability: str  # full_text | abstract_only | unavailable
     source: str = ""
     sections: dict[str, str] = field(default_factory=dict)
-    title: str = ""  # as the publisher record states it, which the index can contradict
+    # As the publisher record states them, which the index can contradict.
+    title: str = ""
+    year: int | None = None
 
     @property
     def chars(self) -> int:
@@ -166,6 +168,7 @@ class FullTextClient:
             logger.warning("Full-text lookup failed for %s: %s", paper_id, type(exc).__name__)
             return fallback
         fallback.title = str(record.get("title") or "")
+        fallback.year = int(year) if (year := str(record.get("pubYear") or "")).isdigit() else None
         pmcid = record.get("pmcid")
         if not pmcid or record.get("isOpenAccess") != "Y":
             return fallback
@@ -187,4 +190,5 @@ class FullTextClient:
             source=f"europepmc:{pmcid}",
             sections=sections,
             title=fallback.title,
+            year=fallback.year,
         )

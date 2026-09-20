@@ -199,9 +199,11 @@ class NoveltyEngine:
         # so the publisher record wins for anything shown next to the text we actually read.
         if text.title and not _same_title(text.title, candidate.title):
             row.update(title=text.title, indexTitle=candidate.title, metadataConflict=True)
+            if text.year and text.year != candidate.year:
+                row.update(year=text.year, indexYear=candidate.year)
             warnings.append(
                 f"Index metadata disagreed with the publisher record for '{text.title[:60]}'; "
-                "the resolved title is shown."
+                "the resolved title and year are shown."
             )
         if text.availability == "unavailable" or not self.config.openai_api_key:
             return row
