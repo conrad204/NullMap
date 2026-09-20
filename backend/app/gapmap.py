@@ -54,11 +54,11 @@ NEIGHBOUR_FLOOR = 0.35
 # papers the thinner of the two parent cores holds. A ratio, because an absolute
 # cosine cannot express "between": every midpoint is close to its own parents.
 GAP_OCCUPANCY = 0.1
-# A core, a band and the other core are sampled with balls of a quarter of the
-# centroid separation, which makes the three disjoint by construction.
-BALL_FRACTION = 0.25
+# Below this share of readable outcomes a region says nothing about the science,
+# only about what the index could read.
+READABLE_SHARE = 0.1
 
-REGION_LABELS = ("active", "contested", "null_saturated", "dark", "thin")
+REGION_LABELS = ("active", "contested", "null_saturated", "dark", "unread", "thin")
 NULL_BUCKETS = ("credible_null", "reported_null")
 
 
@@ -117,7 +117,14 @@ def _is_primary(document: dict) -> bool:
 
 
 def label_region(counts: Counter, attempts: int) -> str:
-    """Name the kind of absence a region represents, most specific rule first."""
+    """Name the kind of absence a region represents, most specific rule first.
+
+    ``unread`` is the label for a region whose documents carry no readable
+    outcome at all — registrations, retractions and unreadable reports. It exists
+    because the fallback must not be ``active``: measured against the live index,
+    every region held only ``inconclusive``/``failed``/``unreported`` documents,
+    and calling those "active" would assert a literature that was never read.
+    """
     if attempts < MIN_REGION_ATTEMPTS:
         return "thin"
     nulls = sum(counts[bucket] for bucket in NULL_BUCKETS)
@@ -128,6 +135,8 @@ def label_region(counts: Counter, attempts: int) -> str:
         return "null_saturated"
     if min(nulls, effects) / attempts >= CONTESTED_SHARE:
         return "contested"
+    if (nulls + effects) / attempts < READABLE_SHARE:
+        return "unread"
     return "active"
 
 
@@ -229,11 +238,17 @@ def find_gaps(
 ) -> list[dict]:
     """Bands between neighbouring regions that the indexed corpus barely occupies.
 
-    Occupancy is counted, not measured by distance: a ball of a quarter of the
-    centroid separation is placed on each core and on the midpoint, and the band
-    is open when it holds almost nothing while both cores are populated. Distance
-    alone cannot express this — a midpoint is always near its own parents, so an
-    absolute cosine threshold either rejects every gap or accepts every one.
+    Occupancy is counted, not measured by distance: the two regions' own members
+    are given to whichever of the two centroids and their midpoint they are
+    closest to, and the band is open when the midpoint keeps almost nothing while
+    both parents keep plenty. Pairs whose midpoint is better described by some
+    third region are skipped — that band is occupied, by a whole literature.
+
+    Distance alone cannot express any of this: a midpoint is always near its own
+    parents, so an absolute cosine threshold either rejects every gap or accepts
+    every one, and a fixed-radius ball around each point holds nothing at all in
+    a real high-dimensional corpus (measured against the live index: every such
+    ball was empty, so no pair could ever have been a gap).
 
     ``support`` is the thinner parent core: a band between two substantial
     literatures is a combination many people were positioned to try and did not.
@@ -246,6 +261,7 @@ def find_gaps(
     centroids = normalize(np.vstack([region["centroid"] for region in regions]).astype(np.float32))
     if neighbour_cosine is None:
         neighbour_cosine = neighbour_threshold(centroids)
+    assigned = (vectors @ centroids.T).argmax(axis=1)
     gaps = []
     for left in range(len(regions)):
         for right in range(left + 1, len(regions)):
@@ -253,12 +269,22 @@ def find_gaps(
             if separation < neighbour_cosine:
                 continue
             midpoint = normalize(((centroids[left] + centroids[right]) / 2)[None, :])[0]
-            ball = float(np.cos(np.arccos(separation) * BALL_FRACTION))
-            cores = [int((vectors @ centroids[side] >= ball).sum()) for side in (left, right)]
-            support = min(cores)
+            to_midpoint = centroids @ midpoint
+            others = np.delete(to_midpoint, [left, right])
+            if len(others) and others.max() >= min(to_midpoint[left], to_midpoint[right]):
+                continue  # a third literature already sits in the band
+            members = (assigned == left) | (assigned == right)
+            owner = np.vstack(
+                [
+                    vectors[members] @ centroids[left],
+                    vectors[members] @ centroids[right],
+                    vectors[members] @ midpoint,
+                ]
+            ).argmax(axis=0)
+            support = min(int((owner == 0).sum()), int((owner == 1).sum()))
             if not support:
                 continue
-            band = int((vectors @ midpoint >= ball).sum())
+            band = int((owner == 2).sum())
             if band > occupancy * support:
                 continue
             parents = [regions[left], regions[right]]

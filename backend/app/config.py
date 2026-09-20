@@ -48,8 +48,12 @@ class Settings(BaseSettings):
     fulltext_timeout: float = 20.0
     fulltext_max_lines: int = Field(default=160, ge=20, le=600)
     # Gap map: a deterministic random sample of embedded studies, clustered once.
-    gapmap_sample: int = Field(default=4000, ge=100, le=10000)
-    gapmap_regions: int = Field(default=24, ge=2, le=200)
+    # The region count is a resolution, and what counts as an empty band depends on
+    # it: measured on 6000 documents of the live index, 24 regions leave the corpus
+    # continuous (no band under the occupancy threshold) while 80 keep a median of
+    # 64 primary attempts per region and still expose bands.
+    gapmap_sample: int = Field(default=6000, ge=100, le=10000)
+    gapmap_regions: int = Field(default=80, ge=2, le=200)
     gapmap_seed: int = 0
     max_upload_bytes: int = 5 * 1024 * 1024
     max_upload_files: int = 3

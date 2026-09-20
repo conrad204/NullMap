@@ -14,6 +14,7 @@ export const REGION_ORDER: RegionLabel[] = [
   "dark",
   "contested",
   "active",
+  "unread",
   "thin",
 ];
 
@@ -41,6 +42,12 @@ export const REGION_META: Record<RegionLabel, RegionMeta> = {
     description: "Mostly reported effects, with no concentration of nulls or missing reports.",
     text: "text-v-effect",
     tint: "bg-[color-mix(in_srgb,var(--v-effect)_12%,transparent)]",
+  },
+  unread: {
+    label: "No readable outcome",
+    description: "Registrations and reports the index could not read a result from. This says what the corpus is missing, not what the studies found.",
+    text: "text-ink-2",
+    tint: "bg-surface-2",
   },
   thin: {
     label: "Too thin to judge",

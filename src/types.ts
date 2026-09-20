@@ -192,7 +192,13 @@ export interface ContributionReceipt {
 }
 
 /** Gap map: regions of the embedded corpus, described by what happened in them. */
-export type RegionLabel = "active" | "contested" | "null_saturated" | "dark" | "thin";
+export type RegionLabel =
+  | "active"
+  | "contested"
+  | "null_saturated"
+  | "dark"
+  | "unread"
+  | "thin";
 export interface MapExemplar {
   id: string;
   title: string;

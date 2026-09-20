@@ -71,6 +71,13 @@ def test_label_region_rules(counts, attempts, expected):
     assert label_region(Counter(counts), attempts) == expected
 
 
+def test_a_region_with_no_readable_outcome_is_not_called_active():
+    """Registrations and unreadable reports describe the index, not the science."""
+    counts = Counter({"inconclusive": 60, "failed": 30, "unreported": 10})
+    assert label_region(counts, 100) == "unread"
+    assert label_region(counts + Counter({"effect": 15}), 115) == "active"
+
+
 def test_dark_outranks_null_saturation():
     """Unreported trials are absence of a report, so they name the region first."""
     counts = Counter({"unreported": 5, "reported_null": 5})

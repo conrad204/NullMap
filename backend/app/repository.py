@@ -711,6 +711,12 @@ class ElasticRepository:
                 "function_score": {
                     "query": query,
                     "random_score": {"seed": seed, "field": "_seq_no"},
+                    # A filter-only query scores every document 0, and the default
+                    # multiply boost would turn the random score into 0 as well,
+                    # making "the sample" the first `size` documents in index order
+                    # — measured against the live index, that returned 4000 registry
+                    # records and not one of the 567k papers.
+                    "boost_mode": "replace",
                 }
             },
             "source_includes": [
