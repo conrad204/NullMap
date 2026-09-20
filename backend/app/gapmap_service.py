@@ -38,6 +38,7 @@ from app.gapmap import (
     find_gaps,
     fit_projection,
     kmeans_steps,
+    neighbor_edges,
     normalize,
     place,
     project_with,
@@ -290,7 +291,8 @@ class GapMapService:
         gaps = await asyncio.to_thread(
             find_gaps, build.documents, regions, vectors=build.vectors
         )
-        points = self._points(build, regions, labels, basis, drawn)
+        points, kept = self._points(build, regions, labels, basis, drawn)
+        edges = await asyncio.to_thread(self._edges, build, kept)
         if basis is not None and regions:
             centre, plane = basis
             positions = project_with(
@@ -306,6 +308,7 @@ class GapMapService:
             "regions": regions,
             "gaps": gaps,
             "points": points,
+            "edges": edges,
             "basis": basis,
             "coverage": {
                 "clustered": len(build),
@@ -336,15 +339,18 @@ class GapMapService:
         target: int,
         iteration: int | None = None,
         labels: np.ndarray | None = None,
+        publish: Progress | None = None,
+        extra: dict | None = None,
     ) -> int:
         """Publish the map as it stands: new points, where the regions are now.
 
         Only the points the canvas has not seen are sent in full; the ones it
         already holds are recoloured through ``pointRegions``, because a region
         a point belongs to changes on every k-means iteration while its position
-        does not.
+        does not. Frames go to ``publish`` when given (one viewer's own build)
+        and to every subscriber otherwise (the shared corpus build).
         """
-        if not self._subscribers:
+        if publish is None and not self._subscribers:
             return emitted
         centre, plane = basis
         rows = np.array(drawn, dtype=np.int64)
@@ -354,10 +360,12 @@ class GapMapService:
             member = assign(build.vectors[rows], centroids)
         else:
             member = labels[rows]
-        fresh = []
+        fresh: list[dict] = []
+        edges: list[list[float]] = []
         if len(rows) > emitted:
             new_rows = rows[emitted:]
             coords = project_with(centre, plane, build.vectors[new_rows])
+            edges = await asyncio.to_thread(self._edges, build, rows.tolist(), emitted)
             for offset, row in enumerate(new_rows.tolist()):
                 document = build.documents[row]
                 title = str(document.get("title") or "")
@@ -374,8 +382,9 @@ class GapMapService:
                 )
         positions = project_with(centre, plane, centroids)
         counts = np.bincount(member, minlength=len(centroids))
-        await self._publish(
+        await (publish or self._publish)(
             {
+                **(extra or {}),
                 "event": "progress",
                 "stage": "clustering" if iteration else "scanning",
                 "iteration": iteration,
@@ -386,8 +395,10 @@ class GapMapService:
                     "drawn": len(rows),
                     "target": target,
                     "complete": False,
+                    **(extra or {}).get("coverage", {}),
                 },
                 "points": fresh,
+                "edges": edges,
                 "pointRegions": [int(value) for value in member.tolist()],
                 "regions": [
                     {
@@ -410,19 +421,22 @@ class GapMapService:
         labels: np.ndarray,
         basis: tuple[np.ndarray, np.ndarray] | None,
         drawn: list[int],
-    ) -> list[dict]:
-        """2-D positions for the drawn subset, each carrying its region."""
+    ) -> tuple[list[dict], list[int]]:
+        """2-D positions for the drawn subset, each carrying its region.
+
+        Also returns the rows drawn, in point order, so edges can be indexed
+        the same way the canvas indexes points.
+        """
         if basis is None or not regions or not drawn:
-            return []
+            return [], []
         centre, plane = basis
-        rows = np.array(drawn, dtype=np.int64)
-        coords = project_with(centre, plane, build.vectors[rows])
         known = {region["id"] for region in regions}
+        kept = [row for row in drawn if int(labels[row]) in known]
+        rows = np.array(kept, dtype=np.int64)
+        coords = project_with(centre, plane, build.vectors[rows])
         points = []
         for offset, row in enumerate(rows.tolist()):
             region = int(labels[row])
-            if region not in known:
-                continue
             document = build.documents[row]
             title = str(document.get("title") or "")
             points.append(
@@ -436,7 +450,23 @@ class GapMapService:
                     "year": document.get("year") if isinstance(document.get("year"), int) else None,
                 }
             )
-        return points
+        return points, kept
+
+    def _edges(self, build: MapBuild, drawn: list[int], start: int = 0) -> list[list[float]]:
+        """Similarity edges among drawn points, indexed by position in ``drawn``.
+
+        ``start`` is how many of them already have their edges, so a streamed
+        frame only pays for the rows it adds. Each edge is ``[i, j, cosine]``.
+        """
+        if len(drawn) < 2:
+            return []
+        found = neighbor_edges(
+            build.vectors[np.array(drawn, dtype=np.int64)],
+            start=start,
+            neighbors=self.config.gapmap_edge_neighbors,
+            floor=self.config.gapmap_edge_floor,
+        )
+        return [[i, j, round(cosine, 3)] for i, j, cosine in found]
 
     # ---------------------------------------------------------------- serving
 
@@ -544,6 +574,7 @@ class GapMapService:
             "regions": [_public(region) for region in built["regions"]],
             "gaps": built["gaps"],
             "points": built["points"],
+            "edges": built.get("edges", []),
             "placement": placement,
             "calibration": calibration,
             "warnings": warnings,

@@ -233,6 +233,44 @@ def project_with(mean: np.ndarray, basis: np.ndarray, vectors: np.ndarray) -> np
     return (np.atleast_2d(np.asarray(vectors, dtype=np.float32)) - mean) @ basis.T
 
 
+def neighbor_edges(
+    vectors: np.ndarray,
+    start: int = 0,
+    neighbors: int = 3,
+    floor: float = 0.0,
+    chunk: int = 1024,
+) -> list[tuple[int, int, float]]:
+    """Cosine-nearest-neighbor edges among unit ``vectors``.
+
+    Each row from ``start`` on is joined to its ``neighbors`` most similar rows
+    anywhere in the matrix, provided the cosine reaches ``floor``; rows before
+    ``start`` already had their turn on an earlier call, so a stream can call
+    this once per frame with only the new rows and never repeats an edge. Pairs
+    are returned once each as ``(i, j, cosine)`` with ``i < j``, indices being
+    positions in ``vectors``. The degree cap is what keeps a dense literature
+    from becoming one hub; the floor is what keeps an isolated paper isolated.
+    """
+    total = len(vectors)
+    if total < 2 or start >= total or neighbors < 1:
+        return []
+    matrix = np.asarray(vectors, dtype=np.float32)
+    edges: dict[tuple[int, int], float] = {}
+    for begin in range(start, total, chunk):
+        end = min(begin + chunk, total)
+        scores = matrix[begin:end] @ matrix.T
+        scores[np.arange(end - begin), np.arange(begin, end)] = -np.inf
+        top = min(neighbors, total - 1)
+        candidates = np.argpartition(-scores, top - 1, axis=1)[:, :top]
+        for offset, row in enumerate(range(begin, end)):
+            for column in candidates[offset].tolist():
+                cosine = float(scores[offset, column])
+                if cosine < floor:
+                    continue
+                key = (row, column) if row < column else (column, row)
+                edges[key] = cosine
+    return [(i, j, cosine) for (i, j), cosine in edges.items()]
+
+
 def project(vectors: np.ndarray) -> np.ndarray:
     """2-D coordinates for ``vectors`` under a basis fitted on themselves."""
     if not len(vectors):
