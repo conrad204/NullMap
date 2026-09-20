@@ -8,6 +8,7 @@ import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
 import ErrorNotice from "./components/ErrorNotice";
 import ContributePanel from "./components/ContributePanel";
+import MapPanel from "./components/MapPanel";
 import { SAMPLE_RESULT } from "./api/mock";
 
 type Status =
@@ -18,12 +19,17 @@ type Status =
 
 /**
  * Dev affordance while there is no backend: deep-link into a UI state.
- *   ?mode=contribute
+ *   ?mode=map | contribute
  *   ?state=results | loading | error
  */
+function modeFromUrl(): Mode {
+  const requested = new URLSearchParams(window.location.search).get("mode");
+  return requested === "contribute" || requested === "map" ? requested : "search";
+}
+
 function initialFromUrl(): { mode: Mode; status: Status } {
   const q = new URLSearchParams(window.location.search);
-  const mode: Mode = q.get("mode") === "contribute" ? "contribute" : "search";
+  const mode = modeFromUrl();
   if (!usingMockApi) return { mode, status: { kind: "idle" } };
   switch (q.get("state")) {
     case "results":
@@ -50,6 +56,20 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
   const lastRequest = useRef<SearchRequest | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Tabs are locations: a mode change is a history entry, so Back returns to the previous tab.
+  const changeMode = useCallback((next: Mode) => {
+    setMode(next);
+    const url = new URL(window.location.href);
+    if (next === "search") url.searchParams.delete("mode");
+    else url.searchParams.set("mode", next);
+    window.history.pushState(null, "", url);
+  }, []);
+  useEffect(() => {
+    const restore = () => setMode(modeFromUrl());
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
 
   const run = useCallback(async (req: SearchRequest) => {
     abortRef.current?.abort();
@@ -90,7 +110,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
-      <TopBar mode={mode} onModeChange={setMode} sampleData={usingMockApi} />
+      <TopBar mode={mode} onModeChange={changeMode} sampleData={usingMockApi} />
 
       <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         {usingMockApi && <p className="mb-6 rounded-control border border-line bg-surface-2 p-3 text-sm text-ink-2"><strong className="text-ink">Illustrative demo.</strong> Studies and findings are fictional. Searches and uploads do not contact a service or save data.</p>}
@@ -112,6 +132,8 @@ export default function App() {
               {status.kind === "done" && <ResultsView key={status.result.queryId} result={status.result} />}
             </section>
           </div>
+        ) : mode === "map" ? (
+          <MapPanel />
         ) : (
           <ContributePanel />
         )}

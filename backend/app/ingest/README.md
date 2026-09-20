@@ -150,8 +150,8 @@ Backfills keep separate provenance and do not claim completion of the main build
 ## Individual stages and model choices
 
 `python -m app.ingest --help` exposes snapshot scans, registry fetching,
-normalization, classification, embedding, indexing, reference IDs, labelling and
-classifier training. For example:
+normalization, classification, embedding, indexing, reference IDs, TEI full-text
+extraction, labelling and classifier training. For example:
 
 ```sh
 .venv/bin/python -m app.ingest snapshot --plan
@@ -159,12 +159,29 @@ classifier training. For example:
   --profile hypertension-kidney --output data/sample.jsonl --resume
 .venv/bin/python -m app.ingest fetch ctgov --query 'kidney' --filter '' \
   --all --output data/ctgov.jsonl --resume
+.venv/bin/python -m app.ingest tei --input /data/tei/ --output data/tei.jsonl
 ```
 
 Manifests use `{ "files": [{ "url": "…", "size_bytes": 123 }] }`; the public
 `meta.content_length` form is supported. Local fixtures are supported for tests.
 Remote paths accept only unsigned public OpenAlex works URLs. DuckDB installs
 its `httpfs` extension under the output directory on first use.
+
+The `tei` stage reads GROBID-style TEI XML full text (files or directories of
+`*.xml`) and extracts null-hypothesis evidence with the deterministic, auditable
+heuristic in [tei.py](tei.py): a dictionary of statistical terms (confidence
+interval, p-value, correlation, effect size, sample size) locates candidate
+sentences; the surrounding paragraph is scanned for null confirmations
+("no significant difference", non-significant p-values, and confidence intervals
+that straddle the null value of 0 for differences/correlations or 1 for
+ratios); and the associated numbers are parsed from the body text, tables and
+appendix. Each row carries the study fields consumed by `statistics.py` and
+`classifier.py` (`estimate`, `ci_low`/`ci_high`, `p_value`, `effect_type`, `n`,
+`result_label`, `null_score`, `evidence_span`) plus a `tei_findings` list and a
+`null_findings` subset, each keeping the exact source sentence. Scores are
+heuristic, never calibrated probabilities. OpenAlex itself ships bibliographic
+Parquet, not TEI; point this stage at a full-text TEI corpus keyed by the same
+work identifiers.
 
 The legacy standalone `link` command loads its input into memory and is suitable
 for small slices. Bootstrap uses the bounded index-backed path. For lexical-only
