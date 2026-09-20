@@ -55,7 +55,7 @@ const bucketDetail = (verdicts: Verdict[]) => (counts: Record<Verdict, number>) 
 export const BAR_GROUPS: BarGroup[] = [
   {
     key: "favours_intervention",
-    label: "Favoured the intervention",
+    label: "Favored the intervention",
     description: "The groups ended up different and the study's own report puts the intervention ahead. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers. The direction is only as good as the quoted sentence it was read from.",
     verdicts: ["effect"],
     direction: "favours_intervention",
@@ -66,7 +66,7 @@ export const BAR_GROUPS: BarGroup[] = [
   },
   {
     key: "favours_comparator",
-    label: "Favoured the comparator",
+    label: "Favored the comparator",
     description: "The groups ended up different and the study's own report puts the comparator ahead, so this is where harm from the intervention appears. The evidence rules are the same as for the opposite direction, and the direction is only as good as the quoted sentence it was read from.",
     verdicts: ["effect"],
     direction: "favours_comparator",
@@ -98,7 +98,7 @@ export const BAR_GROUPS: BarGroup[] = [
 ];
 
 /**
- * An effect whose report never said which arm it favoured. It is a difference, so it cannot be
+ * An effect whose report never said which arm it favored. It is a difference, so it cannot be
  * dropped, but it is not an answer to "benefit or harm": it is counted beside the bar under its own
  * label, the way inconclusive matches are.
  */
@@ -170,7 +170,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   effect: {
     label: "Made a difference",
     short: "a difference in one direction or the other",
-    description: "The groups ended up different. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers, in which case its size is unverified. A difference is not a benefit: which arm it favoured is counted separately, and the bar answers favouring the intervention and favouring the comparator are both made of this bucket.",
+    description: "The groups ended up different. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers, in which case its size is unverified. A difference is not a benefit: which arm it favored is counted separately, and the bar answers favoring the intervention and favoring the comparator are both made of this bucket.",
     bg: "bg-v-effect",
     text: "text-v-effect",
     tint: "bg-[color-mix(in_srgb,var(--v-effect)_12%,transparent)]",

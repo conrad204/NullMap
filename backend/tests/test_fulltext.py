@@ -1,4 +1,4 @@
-"""Europe PMC full text: PMCID handling, JATS flattening, and fetch behaviour without a network."""
+"""Europe PMC full text: PMCID handling, JATS flattening, and fetch behavior without a network."""
 
 import asyncio
 from pathlib import Path

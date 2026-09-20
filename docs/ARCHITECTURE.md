@@ -222,7 +222,7 @@ Demo queries: pick questions with well-known large nulls so judges can verify th
 - **Abstract spin** biases the classifier toward "positive". Mitigate by preferring registry primary-outcome numbers whenever a link exists, and report the disagreement rate.
 - **Effect scales differ** (SMD, odds ratio, hazard ratio, mean difference). Only pool within one type; convert log-OR to SMD if needed; otherwise present per-study rows without pooling.
 - **SESOI is a judgment call.** Make it a visible, editable input, not a hidden constant.
-- **Snapshot scan fails.** Retain checkpoints and a clearly labelled, verified partial demo corpus. Resume the full scan on the batch host; do not describe a partial run as complete.
+- **Snapshot scan fails.** Retain checkpoints and a clearly labeled, verified partial demo corpus. Resume the full scan on the batch host; do not describe a partial run as complete.
 - **Registry coverage** is US-centric and clinical. Say so. Outside medicine the tool still gives buckets 1 to 3 from papers, without 4 and 5.
 
 ## Sources

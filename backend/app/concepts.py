@@ -2,7 +2,7 @@
 
 The document-level analogue of ``king − man + woman``. Each concept is embedded
 once, the vectors are combined into one direction, and the index is searched by
-nearest neighbour to it. Every match carries its cosine to each supplied concept
+nearest neighbor to it. Every match carries its cosine to each supplied concept
 so the answer stays legible: what pulled a paper in, and what should have pushed
 it away. Nothing here scores novelty or likelihood — only cosines and counts.
 """

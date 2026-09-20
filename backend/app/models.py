@@ -123,7 +123,7 @@ Direction = Literal["favours_intervention", "favours_comparator", "unclear"]
 
 
 class DirectionEvidence(BaseModel):
-    """Which arm the reported primary result favours; significance is a separate fact."""
+    """Which arm the reported primary result favors; significance is a separate fact."""
 
     value: Direction
     quote: str
@@ -262,7 +262,7 @@ class MapRequest(BaseModel):
 
 
 class ConceptSearchRequest(BaseModel):
-    """Concepts to add and to subtract before the index is searched by nearest neighbour.
+    """Concepts to add and to subtract before the index is searched by nearest neighbor.
 
     The negatives are part of the query direction, not a post-filter: a paper is
     pushed away by a subtracted concept rather than removed for mentioning it.

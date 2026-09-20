@@ -145,7 +145,7 @@ def test_tei_to_study_matches_schema_and_flows_into_statistics(document):
     assert bucket["bucket"] in {"credible_null", "effect", "inconclusive", "failed"}
 
 
-def test_lexical_null_context_colours_a_bare_statistic():
+def test_lexical_null_context_colors_a_bare_statistic():
     xml = """<TEI xmlns="http://www.tei-c.org/ns/1.0"><text><body>
       <div><head>Results</head>
         <p>No significant between-group difference was observed. The mean change

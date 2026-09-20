@@ -257,7 +257,7 @@ estimate can go from heuristic → Bayesian → LLM-judge without touching retri
 
 Registration via entry points (`nullmap.sources`, `nullmap.extractors`, …) so a plugin can even live
 in a separate repo. Every plugin declares a capability manifest; the MCP server advertises the
-resulting capability set, which keeps agent-facing behaviour honest when a plugin is absent.
+resulting capability set, which keeps agent-facing behavior honest when a plugin is absent.
 
 ### 5.6 What is deliberately *not* pluggable
 Fusion, dedup, the cost accountant, the cache, and the wire types. One implementation each. Pluggable
@@ -339,7 +339,7 @@ each other.
 Without this we cannot tell whether hybrid retrieval actually beats `search=`, which is the entire
 technical claim.
 
-- **Gold set**: 25-40 biology idea-queries, each with 5-10 hand-labelled relevant works and, where
+- **Gold set**: 25-40 biology idea-queries, each with 5-10 hand-labeled relevant works and, where
   known, at least one credible null result that plain keyword search buries. Built by hand during
   M1; this is the highest-leverage two hours anyone on the team will spend.
 - **Retrieval metrics**: recall@50 and nDCG@25 for each branch alone vs. fused vs. `search=` baseline.
