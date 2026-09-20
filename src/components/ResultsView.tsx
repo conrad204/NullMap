@@ -7,6 +7,7 @@ import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
 import { SORT_OPTIONS, sortPapers, type SortKey } from "../lib/sort";
 import EvidenceDetails from "./EvidenceDetails";
+import MapPanel from "./MapPanel";
 
 type Filter = BarGroupKey | Verdict | "all";
 const isVerdict = (filter: Filter): filter is Verdict => (VERDICT_ORDER as string[]).includes(filter);
@@ -66,6 +67,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
       <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
+      <MapPanel idea={result.idea} />
       </div>
       <aside className="min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
         <PaperList papers={shown} allDisplayed={result.papers.length} displayedCounts={countByVerdict(result.papers)} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} />
