@@ -33,6 +33,10 @@ def client():
         {"idea": "A valid clinical question?", "alpha": 1},
         {"idea": "A valid clinical question?", "effectType": "nonsense"},
         {"idea": "A valid clinical question?", "unexpected": True},
+        {"idea": "A valid clinical question?", "filters": {"yearFrom": 2020, "yearTo": 2010}},
+        {"idea": "A valid clinical question?", "filters": {"minCitations": 5, "maxCitations": 1}},
+        {"idea": "A valid clinical question?", "filters": {"minCitations": -1}},
+        {"idea": "A valid clinical question?", "filters": {"citedBy": 5}},
     ],
 )
 def test_invalid_plan_rejected(client, body):

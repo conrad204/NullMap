@@ -10,6 +10,46 @@ Bucket = Literal[
 EffectType = Literal["SMD", "MD", "logOR", "logRR", "logHR"]
 
 
+class SearchFilters(BaseModel):
+    """Corpus restrictions applied before the search runs. Every bound is independently optional.
+
+    These narrow the full match set, not the ranking, so they also change bucket
+    counts, the year histogram, the spin rate and the file-drawer share. The
+    response therefore reports them back and the pipeline warns that the numbers
+    describe a subset of the index.
+    """
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    yearFrom: int | None = Field(default=None, ge=1500, le=2100)
+    yearTo: int | None = Field(default=None, ge=1500, le=2100)
+    minCitations: int | None = Field(default=None, ge=0, le=10000000)
+    maxCitations: int | None = Field(default=None, ge=0, le=10000000)
+
+    @model_validator(mode="after")
+    def _bounds_are_ordered(self):
+        if self.yearFrom is not None and self.yearTo is not None and self.yearFrom > self.yearTo:
+            raise ValueError("yearFrom must not be later than yearTo.")
+        if (
+            self.minCitations is not None
+            and self.maxCitations is not None
+            and self.minCitations > self.maxCitations
+        ):
+            raise ValueError("minCitations must not exceed maxCitations.")
+        return self
+
+    @property
+    def active(self) -> bool:
+        return any(value is not None for value in self.model_dump().values())
+
+    @property
+    def bounds_citations(self) -> bool:
+        return self.minCitations is not None or self.maxCitations is not None
+
+    @property
+    def bounds_dates(self) -> bool:
+        return self.yearFrom is not None or self.yearTo is not None
+
+
 class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
     idea: str = Field(min_length=8, max_length=12000)
@@ -23,6 +63,7 @@ class SearchRequest(BaseModel):
     studyCost: float = Field(default=30, ge=0, le=1e12)
     outcomeSd: float | None = Field(default=None, gt=0, le=1e6)
     baselineRisk: float | None = Field(default=None, gt=0, lt=1)
+    filters: SearchFilters | None = None
 
 
 class Pico(BaseModel):
