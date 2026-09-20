@@ -125,9 +125,13 @@ change changes changing increase increased increasing decrease decreased decreas
 reducing reduction improvement improved improving improve decline severity symptoms symptom
 outcome outcomes measure measures measured score scores level levels rate rates global function
 functional study studies trial trials controlled randomized randomised placebo control group groups
+expression expressed elevated elevation higher lower associated association status presence
 """.split()
 )
 _QUERY_STEMS = ("depress", "cognit", "arthroscop", "osteoarthrit", "hypertens")
+# Two or more letters then digits (kim1, il6, covid19). A single letter is left alone
+# so the vitamin d3/d2 handling keeps its own tokens.
+_JOINED_DESIGNATOR = re.compile(r"([a-z]{2,})(\d+)")
 
 
 def _search_normalize(value: str) -> str:
@@ -164,6 +168,21 @@ def _concept_query(terms: list[str], fields: list[str], *, require_all: bool) ->
                     "bool": {
                         "should": [
                             {"prefix": {field.split("^")[0]: {"value": term}}} for field in fields
+                        ],
+                        "minimum_should_match": 1,
+                    }
+                }
+            )
+        elif joined := _JOINED_DESIGNATOR.fullmatch(term):
+            # The standard analyzer indexes "KIM-1" as kim + 1, so a typed "kim1" would
+            # otherwise match only the few documents that spell it without the hyphen.
+            spaced = " ".join(joined.groups())
+            clauses.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"multi_match": {"query": term, "fields": fields}},
+                            {"multi_match": {"query": spaced, "fields": fields, "type": "phrase"}},
                         ],
                         "minimum_should_match": 1,
                     }
@@ -521,7 +540,12 @@ def authority_query(query: dict) -> dict:
     }
 
 
-def rrf_fuse(*rankings: list[dict], limit: int = 200) -> list[dict]:
+# How many ranked records one search carries forward. It has to cover the relevance screen
+# (pipeline.SCREEN_LIMIT): a shorter list would silently cap what can be screened.
+RETRIEVE_LIMIT = 500
+
+
+def rrf_fuse(*rankings: list[dict], limit: int = RETRIEVE_LIMIT) -> list[dict]:
     scores: dict[str, float] = {}
     docs = {}
     for ranking in rankings:
@@ -864,7 +888,7 @@ class ElasticRepository:
         return {"documents": self.hits(result), "corpus": total["count"]}
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
-        base = {"index": self.index, "size": 200, "source_excludes": ["embedding"]}
+        base = {"index": self.index, "size": RETRIEVE_LIMIT, "source_excludes": ["embedding"]}
         # Third ranking signal: citation authority over the same match set.
         authority = authority_query(query)
         if vector is None:
@@ -876,8 +900,8 @@ class ElasticRepository:
         knn = {
             "field": "embedding",
             "query_vector": vector,
-            "k": 200,
-            "num_candidates": 1000,
+            "k": RETRIEVE_LIMIT,
+            "num_candidates": 2 * RETRIEVE_LIMIT,
             "filter": query,
         }
         try:
@@ -885,7 +909,7 @@ class ElasticRepository:
                 **base,
                 retriever={
                     "rrf": {
-                        "rank_window_size": 200,
+                        "rank_window_size": RETRIEVE_LIMIT,
                         "rank_constant": 60,
                         "retrievers": [
                             {"standard": {"query": query}},

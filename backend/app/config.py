@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     classifier_model_path: str = ""
     small_model: str = "gpt-4.1-mini"
     narration_model: str = "gpt-4.1"
-    extraction_limit: int = Field(default=30, ge=0, le=40)
+    extraction_limit: int = Field(default=100, ge=0, le=200)
     llm_concurrency: int = Field(default=5, ge=1, le=20)
     # USD per million tokens: configurable assumptions, never claimed as a bill.
     small_input_price: float = 0.4

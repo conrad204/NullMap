@@ -989,6 +989,30 @@ def test_hypertension_population_matches_by_prefix_so_hypertensive_is_retrieved(
     )
 
 
+def test_measurement_wording_does_not_become_a_required_concept():
+    plain = {"population": "hypertension", "intervention": "KIM-1", "outcome": "KIM-1 level"}
+    worded = {
+        "population": "hypertension",
+        "intervention": "higher expression of KIM-1",
+        "outcome": "elevated KIM-1 expression status",
+    }
+    assert lexical_query(worded, "idea")["bool"]["should"] == (
+        lexical_query(plain, "idea")["bool"]["should"]
+    )
+
+
+def test_joined_designator_also_matches_its_hyphenated_spelling():
+    pico = {"population": "hypertension", "intervention": "kim1", "outcome": "blood pressure"}
+    candidate = lexical_query(pico, "idea")["bool"]["should"][0]
+    intervention = candidate["bool"]["must"][0]["bool"]["should"][0]["bool"]["should"]
+    joined, spaced = intervention[0]["bool"]["should"]
+    assert joined["multi_match"]["query"] == "kim1"
+    assert (spaced["multi_match"]["query"], spaced["multi_match"]["type"]) == ("kim 1", "phrase")
+    # One letter plus a digit keeps its own token: vitamin d3 has its own alias handling.
+    vitamin = lexical_query({**pico, "intervention": "vitamin d3"}, "idea")
+    assert "phrase" not in str(vitamin)
+
+
 def test_population_aliases_are_alternatives_to_the_condition_clause():
     pico = {
         "population": "Patients with hypertension",
