@@ -77,9 +77,9 @@ function GapCard({ gap, regions }: { gap: MapGap; regions: MapRegion[] }) {
         )}
       </div>
       <p className="mt-2 text-xs text-ink-2">
-        {gap.band === 0 ? "No papers" : `${formatCount(gap.band)} papers`} sit between these two
-        literatures, which hold {formatCount(gap.support)} each nearby. Closest existing work is{" "}
-        {gap.nearest.cosine.toFixed(2)} away.
+        {gap.band === 0 ? "No sampled papers" : `${formatCount(gap.band)} sampled papers`} sit
+        between these two literatures, which hold {formatCount(gap.support)} each nearby. Closest
+        sampled work is {gap.nearest.cosine.toFixed(2)} away.
       </p>
       <p className="mt-1.5 text-xs text-ink-3">
         {gap.discouraged
@@ -95,6 +95,7 @@ function GapCard({ gap, regions }: { gap: MapGap; regions: MapRegion[] }) {
 export default function MapPanel() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [idea, setIdea] = useState("");
+  const [invalid, setInvalid] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -121,7 +122,13 @@ export default function MapPanel() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void load(idea.trim().length >= 8 ? { idea: idea.trim() } : {});
+    const trimmed = idea.trim();
+    if (trimmed && trimmed.length < 8) {
+      setInvalid("Describe the idea in at least eight characters, or leave the box empty for the map alone.");
+      return;
+    }
+    setInvalid(null);
+    void load(trimmed ? { idea: trimmed } : {});
   }
 
   const map = state.kind === "ready" ? state.map : null;
@@ -152,12 +159,22 @@ export default function MapPanel() {
             rows={4}
             value={idea}
             maxLength={4000}
-            onChange={(event) => setIdea(event.target.value)}
+            onChange={(event) => {
+              setIdea(event.target.value);
+              setInvalid(null);
+            }}
+            aria-invalid={invalid ? true : undefined}
+            aria-describedby={invalid ? "map-idea-error" : undefined}
             placeholder="Does X change Y in population Z?"
             className="field resize-y font-normal"
           />
         </label>
-        <button type="submit" className="btn-primary self-start" disabled={state.kind === "loading"}>
+        {invalid && (
+          <p id="map-idea-error" role="alert" className="text-sm text-v-failed">
+            {invalid}
+          </p>
+        )}
+        <button type="submit" className="btn btn-primary self-start" disabled={state.kind === "loading"}>
           {state.kind === "loading" ? "Building the map…" : "Place it on the map"}
           <ArrowRight size={16} weight="bold" />
         </button>
@@ -188,7 +205,7 @@ export default function MapPanel() {
             </div>
             {placement?.nearest && placement.redundancy !== null && (
               <div className="rounded-control border border-line bg-surface p-5">
-                <p className="text-sm text-ink-2">Closest indexed paper</p>
+                <p className="text-sm text-ink-2">Closest paper in the sample</p>
                 <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">
                   {placement.redundancy.toFixed(2)} cosine
                 </p>
@@ -218,9 +235,10 @@ export default function MapPanel() {
 
             {map.gaps.length > 0 && (
               <div>
-                <h2 className="text-sm font-medium text-ink">Unoccupied bands between literatures</h2>
+                <h2 className="text-sm font-medium text-ink">Sparse bands between literatures</h2>
                 <p className="mt-1 text-xs text-ink-3">
-                  Pairs of related regions with almost nothing published between them, most open first.
+                  Pairs of related regions with almost nothing between them in the sample, most open
+                  first.
                 </p>
                 <ul className="mt-3 flex flex-col gap-3">
                   {map.gaps.map((gap) => (
