@@ -45,8 +45,9 @@ Ingestion and bootstrap (`cd backend`):
 .venv/bin/python -m app.bootstrap --plan         # default; reads only the public S3 manifest
 .venv/bin/python -m app.bootstrap --run --max-files 1 --max-records 100 --registry-limit 20 --data-dir data/s3-smoke
 # --largest-first orders parts by size so a partial --max-files run covers more bytes; still a subset of update partitions, not a random sample
-.venv/bin/python -m app.ingest --help            # snapshot | fetch ctgov | normalize | classify | embed | link | index | reference-ids | label | train-classifier
+.venv/bin/python -m app.ingest --help            # snapshot | fetch ctgov | normalize | classify | embed | link | index | reference-ids | tei | label | train-classifier
 .venv/bin/python -m app.benchmark search --idea '...' --output data/search-benchmark.json
+.venv/bin/python -m app.novelty '<hypothesis>' --scan 120 --read 5   # novelty-gap CLI, same engine as POST /novelty
 ```
 
 Local Elasticsearch: `docker compose up -d elasticsearch` (9.1.4, security disabled, bound to localhost). `docker compose up --build -d` also runs the API image with `./dist` mounted at `/web`.
@@ -87,7 +88,7 @@ Registry primary-outcome numbers are authoritative and never overwritten by pape
 
 ### API surface (`backend/app/main.py`)
 
-Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`, `/novelty`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
 
 ### Statistics and bucket rules (`backend/app/statistics.py`)
 
