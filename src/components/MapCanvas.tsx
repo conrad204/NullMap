@@ -21,6 +21,8 @@ const LABEL_VAR: Record<RegionLabel, string> = {
 };
 
 const HOVER_RADIUS = 6;
+/** Half the tooltip's w-52 (208px) so a clamped tooltip stays inside the frame. */
+const TOOLTIP_HALF = 104;
 
 /** The fitted map-to-canvas transform, kept for hover hit-testing. */
 interface View {
@@ -166,8 +168,11 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
     observer.observe(wrap);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", draw);
+    const theme = new MutationObserver(draw);
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
       observer.disconnect();
+      theme.disconnect();
       media.removeEventListener("change", draw);
     };
   }, [points, regions, gaps, placementPoint]);
@@ -197,7 +202,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
     const x = view.toX(best.x);
     const y = view.toY(best.y);
     setHover({
-      left: Math.min(Math.max(x, 96), rect.width - 96),
+      left: Math.min(Math.max(x, TOOLTIP_HALF), rect.width - TOOLTIP_HALF),
       top: y,
       below: y < 70,
       point: best,

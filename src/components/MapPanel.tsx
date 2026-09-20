@@ -79,7 +79,7 @@ function GapCard({ gap, regions }: { gap: MapGap; regions: MapRegion[] }) {
       </div>
       <p className="mt-2 text-xs text-ink-2">
         {gap.band === 0 ? "No sampled papers" : `${formatCount(gap.band)} sampled papers`} sit
-        between these two literatures, which hold {formatCount(gap.support)} each nearby. Closest
+        between these two literatures, which each hold at least {formatCount(gap.support)} nearby. Closest
         sampled work is {gap.nearest.cosine.toFixed(2)} away.
       </p>
       <p className="mt-1.5 text-xs text-ink-3">
