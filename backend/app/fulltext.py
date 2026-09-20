@@ -168,9 +168,12 @@ class FullTextClient:
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("Full-text lookup failed for %s: %s", paper_id, type(exc).__name__)
             return fallback
-        fallback.title = str(record.get("title") or "")
+        # Europe PMC titles keep inline markup such as <sub> from the publisher record.
+        fallback.title = _clean(re.sub(r"<[^>]+>", "", str(record.get("title") or "")))
         fallback.year = int(year) if (year := str(record.get("pubYear") or "")).isdigit() else None
-        fallback.venue = str(record.get("journalTitle") or "")
+        journal = record.get("journalInfo")
+        title = journal.get("journal", {}).get("title") if isinstance(journal, dict) else ""
+        fallback.venue = str(title or record.get("journalTitle") or "")
         pmcid = record.get("pmcid")
         if not pmcid or record.get("isOpenAccess") != "Y":
             return fallback
