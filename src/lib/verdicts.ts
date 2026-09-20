@@ -87,7 +87,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   effect: {
     label: "Made a difference",
     short: "In either direction, including harm",
-    description: "The groups ended up different: an interval excluding zero and an effect reaching the selected meaningful-effect threshold. Either direction counts, so this includes harm.",
+    description: "The groups ended up different. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers, in which case its size is unverified. Either direction counts, so this includes harm.",
     bg: "bg-v-effect",
     text: "text-v-effect",
     tint: "bg-[color-mix(in_srgb,var(--v-effect)_12%,transparent)]",
@@ -95,7 +95,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   credible_null: {
     label: "Made no difference (confirmed)",
     short: "confirmed by an interval",
-    description: "The confidence interval sits entirely within the selected equivalence bounds, so any effect is too small to matter.",
+    description: "The whole 95% interval sits inside your meaningful-effect threshold, so any effect is too small to matter. This can include a statistically significant effect that is smaller than the threshold.",
     bg: "bg-v-null",
     text: "text-v-null",
     tint: "bg-[color-mix(in_srgb,var(--v-null)_12%,transparent)]",
@@ -103,7 +103,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   reported_null: {
     label: "Made no difference (claimed)",
     short: "claimed, not confirmed",
-    description: "The abstract reports no significant difference, but no interval shows the effect is too small to matter. Not evidence of equivalence.",
+    description: "A controlled study says it found no significant difference, in a quoted statement or in the wording of its abstract, but no comparable interval shows the effect is too small to matter. Not evidence of equivalence.",
     bg: "bg-v-reported-null",
     text: "text-v-reported-null",
     tint: "bg-[color-mix(in_srgb,var(--v-reported-null)_12%,transparent)]",
@@ -111,7 +111,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   inconclusive: {
     label: "Inconclusive",
     short: "inconclusive",
-    description: "Neither an effect nor a null could be established, because the result was too imprecise or could not be read.",
+    description: "Not a finding. The interval was too wide to tell no effect from a meaningful one, the primary results conflicted, the result was on a different scale from your threshold, or no comparative result could be read.",
     bg: "bg-v-inconclusive",
     text: "text-v-inconclusive",
     tint: "bg-[color-mix(in_srgb,var(--v-inconclusive)_14%,transparent)]",
@@ -119,7 +119,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   failed: {
     label: "Stopped or flawed",
     short: "stopped or flawed",
-    description: "A stopped trial, retraction, inadequate enrollment, or identified design failure.",
+    description: "A retracted publication, a trial the registry lists as terminated, withdrawn or suspended, enrollment under half of what was planned, or a study with no control arm. These override any result the study reported.",
     bg: "bg-v-stopped",
     text: "text-v-stopped",
     tint: "bg-[color-mix(in_srgb,var(--v-stopped)_12%,transparent)]",
@@ -127,7 +127,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   unreported: {
     label: "Never reported",
     short: "never reported",
-    description: "Completed over 12 months ago, with no posted results or linked result publication. Outcomes remain unknown.",
+    description: "A registered trial whose primary completion was over 12 months ago, with no results posted on the registry and no linked publication. The outcome is unknown, not null.",
     bg: "bg-v-unreported",
     text: "text-v-unreported",
     tint: "bg-[color-mix(in_srgb,var(--v-unreported)_14%,transparent)]",
