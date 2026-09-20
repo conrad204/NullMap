@@ -11,10 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.concepts import ConceptError, ConceptVectorService
 from app.config import settings
 from app.gapmap_service import GapMapService
 from app.llm import LLMService
-from app.models import MapRequest, NoveltyRequest, SearchRequest
+from app.models import ConceptSearchRequest, MapRequest, NoveltyRequest, SearchRequest
 from app.novelty import NoveltyEngine
 from app.pipeline import SearchPipeline
 from app.repository import ElasticRepository
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     app.state.pipeline = SearchPipeline(repo, llm)
     app.state.novelty = NoveltyEngine(llm, repo=repo)
     app.state.gapmap = GapMapService(repo)
+    app.state.concepts = ConceptVectorService(repo)
     yield
     await app.state.novelty.fulltext.close()
     await llm.close()
@@ -167,6 +169,21 @@ async def gap_map(body: MapRequest, request: Request):
         raise HTTPException(
             status_code=503,
             detail="The evidence map could not be built. Please retry or inspect the backend logs.",
+        ) from None
+
+
+@app.post("/concepts/search")
+@app.post("/api/concepts/search", include_in_schema=False)
+async def concept_search(body: ConceptSearchRequest, request: Request):
+    try:
+        return await request.app.state.concepts.search(body)
+    except ConceptError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+    except Exception as exc:
+        logger.error("Concept search failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="Elasticsearch could not complete the concept search. Check the backend connection and index setup.",
         ) from None
 
 

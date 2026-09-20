@@ -875,15 +875,56 @@ class ElasticRepository:
                 "source",
             ],
         }
-        if self._vector_source_filter:
-            try:
-                result = await self.client.search(**body, source_exclude_vectors=False)
-            except (BadRequestError, TypeError):
-                self._vector_source_filter = False
-                result = await self.client.search(**body)
-        else:
-            result = await self.client.search(**body)
+        result = await self._search_with_vectors(body)
         return {"documents": self.hits(result), "corpus": total["count"]}
+
+    async def _search_with_vectors(self, body: dict) -> Any:
+        """Search keeping the stored vectors in `_source`, on 9.1 and on 9.2+."""
+        if not self._vector_source_filter:
+            return await self.client.search(**body)
+        try:
+            return await self.client.search(**body, source_exclude_vectors=False)
+        except (BadRequestError, TypeError):
+            self._vector_source_filter = False
+            return await self.client.search(**body)
+
+    async def knn_studies(
+        self, vector: list[float], limit: int, filters: dict | None = None
+    ) -> list[dict]:
+        """Nearest studies to an arbitrary vector, each with its own embedding.
+
+        The vectors travel back because the caller reports a cosine per concept,
+        which cannot be recomputed without them. Elasticsearch scores a `cosine`
+        dense vector as `(1 + cos) / 2`, so the score is converted back to the
+        cosine rather than reported as an opaque relevance number.
+        """
+        await self.ensure_index()
+        body = {
+            "index": self.index,
+            "size": limit,
+            "knn": {
+                "field": "embedding",
+                "query_vector": vector,
+                "k": limit,
+                "num_candidates": min(10 * limit, 1000),
+                "filter": [{"term": {"record_kind": "study"}}, *filter_clauses(filters)],
+            },
+            "source_includes": [
+                "embedding",
+                "title",
+                "year",
+                "url",
+                "source",
+                "bucket",
+                "query_bucket",
+                "cited_by_count",
+            ],
+        }
+        result = await self._search_with_vectors(body)
+        return [
+            dict(hit["_source"], id=hit["_id"], cosine=2 * float(hit["_score"]) - 1)
+            for hit in result["hits"]["hits"]
+        ]
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
         base = {"index": self.index, "size": RETRIEVE_LIMIT, "source_excludes": ["embedding"]}

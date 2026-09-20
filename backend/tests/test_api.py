@@ -130,3 +130,67 @@ def test_map_failures_do_not_expose_provider_details(client):
 
 def test_map_rejects_unknown_fields(client):
     assert client.post("/map", json={"idea": "a measurable idea", "scan": 3}).status_code == 422
+
+
+def test_concept_search_route_returns_the_service_payload(client):
+    from app.concepts import ConceptVectorService
+    from app.config import Settings
+
+    class Repo:
+        async def knn_studies(self, vector, limit, filters=None):
+            return [
+                {
+                    "id": "W1",
+                    "title": "Kidney cohort",
+                    "year": 2019,
+                    "cosine": 0.6,
+                    "embedding": [1.0, 0.0, 0.0],
+                }
+            ]
+
+    built = ConceptVectorService(Repo(), config=Settings(_env_file=None))
+    built.embed = _resolved_embedding
+    app.state.concepts = built
+    body = client.post("/concepts/search", json={"positive": ["chronic kidney disease"]}).json()
+    assert body["version"] == "concepts-v1"
+    assert body["concepts"] == [{"text": "chronic kidney disease", "sign": "positive"}]
+    assert body["matches"][0]["id"] == "W1" and body["matches"][0]["cosine"] == 0.6
+    assert body["matches"][0]["concepts"] == [
+        {"text": "chronic kidney disease", "sign": "positive", "cosine": 1.0}
+    ]
+    assert body["warnings"] == []
+
+
+def test_concept_search_maps_domain_failures_to_their_own_status(client):
+    from app.concepts import ConceptsCancelOut, EmbeddingsUnavailable
+
+    async def cancel(body):
+        raise ConceptsCancelOut("The concepts cancel each other out.")
+
+    async def unavailable(body):
+        raise EmbeddingsUnavailable("Embeddings are disabled.")
+
+    app.state.concepts = SimpleNamespace(search=cancel)
+    assert client.post("/concepts/search", json={"positive": ["ckd"]}).status_code == 422
+    app.state.concepts = SimpleNamespace(search=unavailable)
+    assert client.post("/concepts/search", json={"positive": ["ckd"]}).status_code == 503
+
+
+def test_concept_search_failures_do_not_expose_provider_details(client):
+    async def fail(body):
+        raise RuntimeError("ELASTIC_API_KEY=secret")
+
+    app.state.concepts = SimpleNamespace(search=fail)
+    response = client.post("/concepts/search", json={"positive": ["ckd"]})
+    assert response.status_code == 503 and "secret" not in response.text
+
+
+def test_concept_search_rejects_unknown_fields(client):
+    assert client.post("/concepts/search", json={"positive": []}).status_code == 422
+    assert client.post("/concepts/search", json={"positive": ["ckd"], "k": 3}).status_code == 422
+
+
+def _resolved_embedding(text):
+    future: asyncio.Future = asyncio.Future()
+    future.set_result([1.0, 0.0, 0.0])
+    return future
