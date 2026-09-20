@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectTrend, InconclusiveReason, Paper, PursuitEstimate, SearchResult, Source, Statistics, Verdict } from "../types";
-import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, RECOMMENDATION_META, VERDICT_META, countByVerdict } from "../lib/verdicts";
+import type { EffectTrend, InconclusiveReason, Paper, SearchResult, Source, Verdict } from "../types";
+import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict } from "../lib/verdicts";
 import { headline } from "../lib/headline";
-import { cx, formatAuthors, formatCount, percent, signed } from "../lib/format";
+import { cx, formatAuthors, formatCount } from "../lib/format";
 import EvidenceDetails from "./EvidenceDetails";
 
 type Filter = Verdict | "all";
@@ -62,10 +62,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       </section>}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_minmax(245px,290px)]">
-        <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
-        <EstimatePanel estimate={result.estimate} statistics={result.statistics} />
-      </div>
+      <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
       <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
     </div>
@@ -151,25 +148,6 @@ function InconclusiveNote({ count, reasons, active, onToggle }: { count: number;
       <dd className="mt-1 text-xs leading-relaxed text-ink-3">{detail}</dd>
     </div>)}</dl>
   </div>;
-}
-function EstimatePanel({ estimate, statistics }: { estimate: PursuitEstimate; statistics?: Statistics }) {
-  const assurance = statistics ? statistics.assurance : estimate.pSuccess;
-  const ev = statistics ? statistics.expectedValue : estimate.expectedValue;
-  const rec = RECOMMENDATION_META[estimate.recommendation];
-  return <aside className="rounded-panel border border-line bg-surface p-5 shadow-panel">
-    <h2 className="text-sm font-medium text-ink-2">Your planned study</h2>
-    <div className="mt-4 flex flex-wrap items-baseline gap-x-2"><span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{assurance === null ? "—" : percent(assurance)}</span><span className="text-sm text-ink-2">assurance</span></div>
-    <p className="mt-2 text-xs leading-relaxed text-ink-3">Bayesian expected power to detect an effect under the model. This does not measure the chance of a meaningful benefit.</p>
-    <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
-      <div><dt className="text-ink-3">Expected value</dt><dd className="mt-0.5 font-mono tabular-nums text-ink">{ev === null ? "Unavailable" : signed(ev)}</dd></div>
-      <div><dt className="text-ink-3">Evidence confidence</dt><dd className="mt-0.5 capitalize text-ink">{estimate.confidence}</dd></div>
-      <div><dt className="text-ink-3">N for 80% assurance</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.requiredN != null ? formatCount(statistics.requiredN) : "Unavailable"}</dd></div>
-      <div><dt className="text-ink-3">Planned MDE</dt><dd className="mt-0.5 font-mono text-ink">{statistics?.plannedMde != null ? statistics.plannedMde.toFixed(3) : "Unavailable"}</dd></div>
-    </dl>
-    <p className="mt-2 text-xs text-ink-3">EV uses your value and cost units. MDE is a standardized difference (SMD).</p>
-    <p className={cx("mt-5 inline-flex items-center rounded-control px-2.5 py-1 text-sm font-medium", rec.text, rec.tint)}>{assurance === null ? "More evidence needed" : rec.label}</p>
-    <ul className="mt-4 list-disc space-y-2 pl-4 text-sm leading-relaxed text-ink-2 marker:text-ink-3">{estimate.drivers.map((driver) => <li key={driver}>{driver}</li>)}</ul>
-  </aside>;
 }
 function PaperList({ papers, allDisplayed, filter, onClear }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void }) {
   return <section>

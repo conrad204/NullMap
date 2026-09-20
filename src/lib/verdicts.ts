@@ -1,4 +1,4 @@
-import type { InconclusiveReason, Recommendation, Verdict } from "../types";
+import type { InconclusiveReason, Verdict } from "../types";
 
 export const VERDICT_ORDER: Verdict[] = [
   "effect",
@@ -110,27 +110,6 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
     bg: "bg-v-unreported",
     text: "text-v-unreported",
     tint: "bg-[color-mix(in_srgb,var(--v-unreported)_14%,transparent)]",
-  },
-};
-
-export const RECOMMENDATION_META: Record<
-  Recommendation,
-  { label: string; text: string; tint: string }
-> = {
-  pursue: {
-    label: "Worth pursuing",
-    text: "text-v-effect",
-    tint: "bg-[color-mix(in_srgb,var(--v-effect)_12%,transparent)]",
-  },
-  pursue_with_changes: {
-    label: "Pursue with changes",
-    text: "text-v-unreported",
-    tint: "bg-[color-mix(in_srgb,var(--v-unreported)_14%,transparent)]",
-  },
-  deprioritize: {
-    label: "Deprioritize",
-    text: "text-v-failed",
-    tint: "bg-[color-mix(in_srgb,var(--v-failed)_12%,transparent)]",
   },
 };
 
