@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.gapmap_service import GapMapService
+from app.gapmap_service import GapMapService, MapUnavailableError
 from app.llm import LLMService
 from app.models import MapRequest, NoveltyRequest, SearchRequest
 from app.novelty import NoveltyEngine
@@ -152,6 +152,15 @@ async def novelty(body: NoveltyRequest, request: Request):
         ) from None
 
 
+def map_error(exc: Exception) -> str:
+    if isinstance(exc, (ApiError, ElasticConnectionError)):
+        return (
+            "Elasticsearch could not be reached to build the evidence map. "
+            "Check ELASTIC_URL and credentials, or start the local container, then retry."
+        )
+    return "The evidence map could not be built. Please retry or inspect the backend logs."
+
+
 @app.post("/map")
 @app.post("/api/map", include_in_schema=False)
 async def gap_map(body: MapRequest, request: Request):
@@ -162,12 +171,13 @@ async def gap_map(body: MapRequest, request: Request):
             cutoff_year=body.cutoffYear,
             refresh=body.refresh,
         )
+    except MapUnavailableError as exc:
+        # The message is ours and states the reason; a bare 503 would hide it.
+        logger.error("Gap map unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from None
     except Exception as exc:
         logger.error("Gap map failed: %s", type(exc).__name__)
-        raise HTTPException(
-            status_code=503,
-            detail="The evidence map could not be built. Please retry or inspect the backend logs.",
-        ) from None
+        raise HTTPException(status_code=503, detail=map_error(exc)) from None
 
 
 @app.get("/studies/{study_id:path}")

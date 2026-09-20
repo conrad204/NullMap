@@ -4,9 +4,13 @@ import math
 import pytest
 
 from app.config import Settings
-from app.gapmap_service import GapMapService
+from app.gapmap_service import GapMapService, MapUnavailableError
 from app.models import MapArithmetic
 from tests.test_gapmap import cluster, unit
+
+
+async def _broken_embed(text):
+    raise RuntimeError("Install the ingest extra to enable local embeddings")
 
 
 class FakeRepository:
@@ -127,6 +131,58 @@ def test_placement_is_impossible_without_embeddings():
     result = asyncio.run(built.assess(idea="a new trial of the same thing"))
     assert result["placement"] is None
     assert result["warnings"] == ["Embeddings are disabled, so the idea could not be placed."]
+
+
+def test_an_expression_is_impossible_without_embeddings():
+    built = service(corpus(), embeddings_enabled=False)
+    expression = MapArithmetic(start="vitamin D for depression", remove=["depression"], add=["CKD"])
+    result = asyncio.run(built.assess(arithmetic=expression))
+    assert result["placement"] is None
+    assert result["warnings"] == [
+        "Embeddings are disabled, so the expression could not be placed."
+    ]
+
+
+def test_a_broken_embedder_fails_placement_with_a_warning_not_the_map():
+    """Missing torch/sentence-transformers must not 503 the whole map route."""
+    built = service(corpus())
+    built.embed = _broken_embed
+    result = asyncio.run(built.assess(idea="a new trial of the same thing"))
+    assert result["placement"] is None
+    assert len(result["regions"]) == 2
+    assert result["warnings"] == [
+        "The local embedding model is unavailable on this server, so the idea could not "
+        "be placed; the map itself is unaffected. Install torch and sentence-transformers "
+        "next to the API (uv pip install torch sentence-transformers) and restart it."
+    ]
+
+
+def test_a_broken_embedder_fails_the_expression_with_a_warning():
+    built = service(corpus())
+    built.embed = _broken_embed
+    expression = MapArithmetic(start="vitamin D for depression", remove=["depression"], add=["CKD"])
+    result = asyncio.run(built.assess(arithmetic=expression))
+    assert result["placement"] is None
+    assert len(result["warnings"]) == 1
+    assert "could not be placed; the map itself is unaffected" in result["warnings"][0]
+
+
+def test_a_mismatched_embedding_model_is_named_not_crashed():
+    """A query vector of the wrong width means EMBEDDING_MODEL differs from the index."""
+    built = service(corpus())
+    built.embed = lambda text: _resolved([1.0, 0.0])
+    result = asyncio.run(built.assess(idea="a new trial of the same thing"))
+    assert result["placement"] is None
+    assert result["warnings"] == [
+        "The query embedding has 2 dimensions but the indexed vectors have 3, so the idea "
+        "could not be placed. EMBEDDING_MODEL must match the model the corpus was indexed with."
+    ]
+
+
+def test_an_empty_index_is_a_named_unavailability():
+    """No embedded studies is a real 'cannot be built', and the message says why."""
+    with pytest.raises(MapUnavailableError, match="no embedded studies"):
+        asyncio.run(service([]).assess())
 
 
 def test_calibration_is_returned_only_when_a_cutoff_is_given():

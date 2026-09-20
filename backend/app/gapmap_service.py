@@ -10,6 +10,7 @@ of papers rather than the ten a chat model can read.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import numpy as np
 
@@ -27,6 +28,16 @@ from app.gapmap import (
     project_with,
 )
 from app.models import MapArithmetic
+
+logger = logging.getLogger(__name__)
+
+
+class MapUnavailableError(RuntimeError):
+    """The map genuinely cannot be built; the message says why and what to do.
+
+    Raised instead of returning an empty map so the API can answer 503 with the
+    actual reason rather than a bare failure or a map that quietly shows nothing.
+    """
 
 
 def _public(region: dict) -> dict:
@@ -98,6 +109,13 @@ class GapMapService:
                 self.config.gapmap_regions,
                 self.config.gapmap_seed,
             )
+            if not built["regions"]:
+                raise MapUnavailableError(
+                    "The index holds no embedded studies, so the evidence map cannot be "
+                    "built. Run ingestion with embeddings enabled (see "
+                    "backend/app/ingest/README.md), or point ELASTIC_URL and ELASTIC_INDEX "
+                    "at the index that holds the embedded corpus."
+                )
             gaps = await asyncio.to_thread(find_gaps, documents, built["regions"])
             layout = await asyncio.to_thread(_layout, documents, built["regions"])
             self._built = {
@@ -114,6 +132,48 @@ class GapMapService:
                 "version": built["version"],
             }
             return self._built
+
+    async def _placement_vector(
+        self, text: str, warnings: list[str], subject: str
+    ) -> list[float] | None:
+        """Embed one phrase for placement, degrading to a warning like search does.
+
+        The map itself needs no query-time embedding, so a missing or broken local
+        model must not take the whole route down — it only makes placement
+        impossible, and the warning says so and names the remedy.
+        """
+        if not self.config.embeddings_enabled:
+            warnings.append(f"Embeddings are disabled, so the {subject} could not be placed.")
+            return None
+        try:
+            return await self.embed(text)
+        except Exception as exc:
+            logger.warning("Map placement embedding failed: %s", type(exc).__name__)
+            warnings.append(
+                f"The local embedding model is unavailable on this server, so the {subject} "
+                "could not be placed; the map itself is unaffected. Install torch and "
+                "sentence-transformers next to the API (uv pip install torch "
+                "sentence-transformers) and restart it."
+            )
+            return None
+
+    async def _locate(
+        self, vector: np.ndarray | list[float], built: dict, warnings: list[str], subject: str
+    ) -> dict | None:
+        """Place an embedded point, refusing a vector the map's space cannot hold."""
+        if built["basis"] is not None:
+            dimensions = int(built["basis"][1].shape[1])
+            if len(vector) != dimensions:
+                warnings.append(
+                    f"The query embedding has {len(vector)} dimensions but the indexed "
+                    f"vectors have {dimensions}, so the {subject} could not be placed. "
+                    "EMBEDDING_MODEL must match the model the corpus was indexed with."
+                )
+                return None
+        placement = await asyncio.to_thread(
+            place, vector, built["documents"], built["regions"], built["gaps"]
+        )
+        return self._decorate(placement, vector, built)
 
     def _decorate(
         self, placement: dict, vector: np.ndarray | list[float], built: dict
@@ -138,9 +198,19 @@ class GapMapService:
         does not depend on how cleanly the analogy worked.
         """
         terms = [expression.start, *expression.remove, *expression.add]
-        vectors = await asyncio.gather(*(self.embed(term) for term in terms))
-        if any(vector is None for vector in vectors):
+        if not self.config.embeddings_enabled:
             warnings.append("Embeddings are disabled, so the expression could not be placed.")
+            return None
+        try:
+            vectors = await asyncio.gather(*(self.embed(term) for term in terms))
+        except Exception as exc:
+            logger.warning("Map placement embedding failed: %s", type(exc).__name__)
+            warnings.append(
+                "The local embedding model is unavailable on this server, so the expression "
+                "could not be placed; the map itself is unaffected. Install torch and "
+                "sentence-transformers next to the API (uv pip install torch "
+                "sentence-transformers) and restart it."
+            )
             return None
         n_remove = len(expression.remove)
         combined = combine(
@@ -151,15 +221,15 @@ class GapMapService:
                 "The expression cancels itself out; the combined vector has no direction."
             )
             return None
-        placement = await asyncio.to_thread(
-            place, combined, built["documents"], built["regions"], built["gaps"]
-        )
+        placement = await self._locate(combined, built, warnings, "expression")
+        if placement is None:
+            return None
         placement["expression"] = {
             "start": expression.start,
             "remove": expression.remove,
             "add": expression.add,
         }
-        return self._decorate(placement, combined, built)
+        return placement
 
     async def assess(
         self,
@@ -180,14 +250,9 @@ class GapMapService:
         if arithmetic is not None:
             placement = await self._place_expression(arithmetic, built, warnings)
         elif idea:
-            vector = await self.embed(idea)
-            if vector is None:
-                warnings.append("Embeddings are disabled, so the idea could not be placed.")
-            else:
-                placement = await asyncio.to_thread(
-                    place, vector, built["documents"], built["regions"], built["gaps"]
-                )
-                placement = self._decorate(placement, vector, built)
+            vector = await self._placement_vector(idea, warnings, "idea")
+            if vector is not None:
+                placement = await self._locate(vector, built, warnings, "idea")
         calibration = None
         if cutoff_year is not None:
             calibration = await asyncio.to_thread(

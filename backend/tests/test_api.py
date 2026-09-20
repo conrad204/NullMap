@@ -128,5 +128,32 @@ def test_map_failures_do_not_expose_provider_details(client):
     assert response.status_code == 503 and "secret" not in response.text
 
 
+def test_map_without_embedded_studies_says_why(client):
+    from app.config import Settings
+    from app.gapmap_service import GapMapService
+
+    class EmptyRepo:
+        async def sample_embedded(self, limit=4000, seed=0):
+            return {"documents": [], "corpus": 0}
+
+    app.state.gapmap = GapMapService(EmptyRepo(), config=Settings(_env_file=None))
+    response = client.post("/map", json={})
+    assert response.status_code == 503
+    assert "no embedded studies" in response.json()["detail"]
+
+
+def test_map_names_elasticsearch_when_it_is_unreachable(client):
+    from elastic_transport import ConnectionError as ElasticConnectionError
+
+    async def fail(**kwargs):
+        raise ElasticConnectionError("connection refused")
+
+    app.state.gapmap = SimpleNamespace(assess=fail)
+    response = client.post("/map", json={})
+    assert response.status_code == 503
+    assert "Elasticsearch" in response.json()["detail"]
+    assert "connection refused" not in response.text
+
+
 def test_map_rejects_unknown_fields(client):
     assert client.post("/map", json={"idea": "a measurable idea", "scan": 3}).status_code == 422
