@@ -292,8 +292,13 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
     observer.observe(wrap);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", draw);
+    // The top-bar toggle sets data-theme rather than changing the OS setting,
+    // and the canvas holds pixels, not styles, so it has to be told to repaint.
+    const theme = new MutationObserver(draw);
+    theme.observe(document.documentElement, { attributeFilter: ["data-theme"] });
     return () => {
       observer.disconnect();
+      theme.disconnect();
       media.removeEventListener("change", draw);
     };
   }, [points, regions, gaps, placementPoint, provisionalRegions, transform, building]);
