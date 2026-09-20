@@ -1,7 +1,4 @@
-import type {
-  ConceptSearchRequest, ConceptSearchResult, GapMap, MapRequest,
-  SearchProgress, SearchRequest, SearchResult,
-} from "../types";
+import type { GapMap, MapRequest, SearchProgress, SearchRequest, SearchResult } from "../types";
 import { readEventStream } from "./stream";
 
 const BASE = ((import.meta.env.VITE_API_URL as string | undefined) || "/api").replace(/\/$/, "");
@@ -56,28 +53,6 @@ export async function searchIdea(
   }, signal);
   if (!result) throw new Error("Search ended before results arrived. Please retry.");
   return result;
-}
-
-export async function searchConcepts(
-  req: ConceptSearchRequest,
-  signal?: AbortSignal,
-): Promise<ConceptSearchResult> {
-  if (usingMockApi) return (await import("./conceptsMock")).mockConceptSearch(req, signal);
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/concepts/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-      signal,
-    });
-  } catch (error) {
-    signal?.throwIfAborted();
-    if (error instanceof TypeError) throw new Error("Cannot reach the search service. Start the API or check your connection, then retry.");
-    throw error;
-  }
-  if (!res.ok) throw await responseError(res, "Concept search");
-  return await res.json() as ConceptSearchResult;
 }
 
 export async function fetchMap(req: MapRequest, signal?: AbortSignal): Promise<GapMap> {
