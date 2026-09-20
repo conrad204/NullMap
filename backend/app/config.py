@@ -70,13 +70,15 @@ class Settings(BaseSettings):
     gapmap_points: int = Field(default=6000, ge=100, le=50000)
     # Rows the 2-D projection is fitted on. The basis is a drawing choice, and a
     # full-corpus SVD would stall the build for minutes to move points by pixels.
-    gapmap_projection_sample: int = Field(default=50000, ge=1000, le=500000)
+    # Nothing can be drawn before it exists, so it is fitted on the first pages
+    # rather than after a long silent read.
+    gapmap_projection_sample: int = Field(default=4000, ge=1000, le=500000)
     # Bound on the full-corpus k-means. Measured at 200k documents and 80
     # regions: 10 iterations ~3.2 s, 40 ~7.7 s; the assignment usually settles
     # first and the loop stops when it does.
     gapmap_iterations: int = Field(default=25, ge=1, le=200)
     # Minimum seconds between two streamed frames while the corpus is scanning.
-    gapmap_tick_seconds: float = Field(default=0.4, ge=0.0, le=10.0)
+    gapmap_tick_seconds: float = Field(default=0.15, ge=0.0, le=10.0)
     max_concurrent_searches: int = 4
     frontend_dist: str = str(Path(__file__).resolve().parents[2] / "dist")
     cors_origins: list[str] = ["http://localhost:5173"]
