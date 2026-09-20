@@ -8,6 +8,7 @@ import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
 import ErrorNotice from "./components/ErrorNotice";
 import ContributePanel from "./components/ContributePanel";
+import MapPanel from "./components/MapPanel";
 import { SAMPLE_RESULT } from "./api/mock";
 
 type Status =
@@ -18,12 +19,13 @@ type Status =
 
 /**
  * Dev affordance while there is no backend: deep-link into a UI state.
- *   ?mode=contribute
+ *   ?mode=map | contribute
  *   ?state=results | loading | error
  */
 function initialFromUrl(): { mode: Mode; status: Status } {
   const q = new URLSearchParams(window.location.search);
-  const mode: Mode = q.get("mode") === "contribute" ? "contribute" : "search";
+  const requested = q.get("mode");
+  const mode: Mode = requested === "contribute" || requested === "map" ? requested : "search";
   if (!usingMockApi) return { mode, status: { kind: "idle" } };
   switch (q.get("state")) {
     case "results":
@@ -112,6 +114,8 @@ export default function App() {
               {status.kind === "done" && <ResultsView key={status.result.queryId} result={status.result} />}
             </section>
           </div>
+        ) : mode === "map" ? (
+          <MapPanel />
         ) : (
           <ContributePanel />
         )}

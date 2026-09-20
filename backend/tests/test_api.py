@@ -144,3 +144,38 @@ def test_extraction_cache_serializes_concurrent_requests():
         assert llm.calls == 1 and usage.extraction_cache_hits == 1
 
     asyncio.run(run())
+
+
+def test_map_route_returns_the_service_payload(client):
+    from app.gapmap_service import GapMapService
+
+    class Repo:
+        async def sample_embedded(self, limit=4000, seed=0):
+            from tests.test_gapmap import cluster
+
+            documents = cluster("null", 0.0, "reported_null", 8) + cluster(
+                "effect", 0.8, "effect", 8
+            )
+            return {"documents": documents, "corpus": len(documents)}
+
+    from app.config import Settings
+
+    app.state.gapmap = GapMapService(
+        Repo(), config=Settings(_env_file=None, gapmap_regions=2, gapmap_seed=2)
+    )
+    body = client.post("/map", json={}).json()
+    assert body["coverage"]["sampled"] == 16
+    assert sorted(region["label"] for region in body["regions"]) == ["active", "null_saturated"]
+
+
+def test_map_failures_do_not_expose_provider_details(client):
+    async def fail(**kwargs):
+        raise RuntimeError("ELASTIC_API_KEY=secret")
+
+    app.state.gapmap = SimpleNamespace(assess=fail)
+    response = client.post("/map", json={})
+    assert response.status_code == 503 and "secret" not in response.text
+
+
+def test_map_rejects_unknown_fields(client):
+    assert client.post("/map", json={"idea": "a measurable idea", "scan": 3}).status_code == 422

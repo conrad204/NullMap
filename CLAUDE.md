@@ -88,7 +88,11 @@ Registry primary-outcome numbers are authoritative and never overwritten by pape
 
 ### API surface (`backend/app/main.py`)
 
-Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`, `/novelty`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+Routes are `/health`, `/ready`, `/search`, `/search/stream`, `/studies/{id}`, `/contributions`, `/novelty`, `/map`. Every route is registered twice: bare (`/search`) and prefixed (`/api/search`, hidden from schema). Vite strips `/api` in dev; the built `dist/` is served by FastAPI at `/` when present (`FRONTEND_DIST`). `/search/stream` is SSE over POST with `progress`, `result`, `error` events and `: keepalive` comments; the frontend falls back to plain `/search` on 404/405. Contributions are stored drafts in ES (`record_kind: contribution`), not publications.
+
+### Gap map (`backend/app/gapmap.py`, `gapmap_service.py`)
+
+`POST /map` describes the corpus rather than a query: `repository.sample_embedded` takes a deterministic `random_score` sample of embedded studies, `build_regions` clusters them with a dependency-free spherical k-means, and each region is labelled by *why* nothing new is there — `null_saturated`, `dark`, `contested`, `active`, `thin` (`label_region`, reviews excluded from attempts). `find_gaps` interpolates: the midpoint between two neighbouring centroids is a gap when its angular ball holds almost nothing while both parent cores are populated; adjacency is the top decile of pairwise centroid cosine (`neighbour_threshold`), not a constant, because "close" depends on the embedding model and corpus breadth. `place` returns the cosine to the nearest indexed paper as `redundancy` — a redundancy statistic, never a probability of novelty. `calibrate` rebuilds the map before a cutoff year and reports what later papers did per historical label; it is calibration, not prediction. The service caches one map, strips centroids from the payload, and warns whenever the sample is smaller than the embedded corpus.
 
 ### Statistics and bucket rules (`backend/app/statistics.py`)
 

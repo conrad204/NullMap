@@ -135,6 +135,13 @@ class NoveltyRequest(BaseModel):
     read: int = Field(default=5, ge=1, le=12)
 
 
+class MapRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    idea: str | None = Field(default=None, min_length=8, max_length=4000)
+    cutoffYear: int | None = Field(default=None, ge=1900, le=2100)
+    refresh: bool = False
+
+
 class Claim(BaseModel):
     """The testable content of a hypothesis, as retrieval terms and comparable facets."""
 
