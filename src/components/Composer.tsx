@@ -17,11 +17,10 @@ interface Props {
 }
 
 const QUESTIONS = [
-  "Does azilsartan lower systolic blood pressure more than placebo in adults with essential hypertension?",
-  "Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis?",
-  "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease?",
+  "Does azilsartan lower systolic blood pressure more than placebo in adults with essential hypertension? +ambulatory blood pressure −animal model",
+  "Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis? +kidney outcomes −type 2 diabetes",
+  "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease? +quality of life −mortality",
 ];
-const TAG_EXAMPLES = ["+kidney outcomes −type 2 diabetes", "+quality of life −mortality", "−animal model"];
 const DEFAULTS = { plannedN: 200, alpha: 0.05, valueSuccess: 100, valueNull: 20, studyCost: 30 };
 
 // Where the first typed character sits on screen, so the question header can start its glide there.
@@ -169,19 +168,10 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
         {!text.trim() && (
           <div className="flex flex-col gap-4">
             <div>
-              <p className="mb-2 text-sm text-ink-3">Or start from a clinical question</p>
+              <p className="mb-2 text-sm text-ink-3">Or start from a clinical question, tags and all</p>
               <ul className="flex flex-col gap-1.5">{QUESTIONS.map((example) => <li key={example}>
                 <button type="button" onClick={() => append(example)}
                   className="text-left text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">{example}</button>
-              </li>)}</ul>
-            </div>
-            <div>
-              <p className="mb-2 text-sm text-ink-3">Then end the line with tags to steer it</p>
-              <ul className="flex flex-col gap-1.5">{TAG_EXAMPLES.map((example) => <li key={example}>
-                <button type="button" onClick={() => append(example)}
-                  className="text-left font-mono text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">
-                  {example}
-                </button>
               </li>)}</ul>
             </div>
           </div>
