@@ -142,23 +142,25 @@ export default function MapPanel({ idea }: { idea: string }) {
       <button type="button" onClick={() => void load()} className="text-sm text-accent underline-offset-4 hover:underline">Retry</button>
     </div>}
 
-    <div aria-live="polite">
+    <div aria-live="polite" className="flex flex-col gap-6">
       {state.kind === "error" && <p role="alert" className="rounded-control border border-line bg-surface-2 p-4 text-sm text-v-failed">{state.message}</p>}
-      {state.kind === "loading" && <div className="flex flex-col gap-6">
-        <MapCanvas
-          points={frame.points}
-          regions={[]}
-          gaps={[]}
-          placementPoint={partial?.placement ?? null}
-          provisionalRegions={frame.centroids}
-          building
-        />
-        <div className="text-xs text-ink-3">
-          <p>{partial ? coverageLine(partial.coverage, partial.stage) : "Clustering the embedded index…"}</p>
-        </div>
+      {/*
+        One canvas for both states. Finishing the build replaces what it draws,
+        not the canvas itself: a second element here would be a fresh component,
+        and the reader's pan and zoom would die with the old one.
+      */}
+      {(state.kind === "loading" || map) && <MapCanvas
+        points={map ? map.points : frame.points}
+        regions={map ? map.regions : []}
+        gaps={map ? map.gaps : []}
+        placementPoint={map ? placement?.point ?? null : partial?.placement ?? null}
+        provisionalRegions={map ? [] : frame.centroids}
+        building={!map}
+      />}
+      {state.kind === "loading" && <div className="text-xs text-ink-3">
+        <p>{partial ? coverageLine(partial.coverage, partial.stage) : "Clustering the embedded index…"}</p>
       </div>}
       {map && <div className="flex flex-col gap-6">
-        {map.points.length > 0 && <MapCanvas points={map.points} regions={map.regions} gaps={map.gaps} placementPoint={placement?.point ?? null} />}
         <div className="text-xs text-ink-3">
           <p>{coverageLine(map.coverage)} · {map.version}</p>
           {mapWarnings(map.warnings, map.coverage).map((warning) => <p key={warning} className="mt-1">{warning}</p>)}
