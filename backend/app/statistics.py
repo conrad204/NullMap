@@ -179,12 +179,31 @@ def _count(value: Any) -> int | None:
     return int(number) if number is not None and number >= 0 and number.is_integer() else None
 
 
+def _events_from_percent(study: dict, n: int, arm: str = "intervention") -> int | None:
+    """Event count implied by a reported percentage of an arm of known size.
+
+    Rounding to the nearest participant is exact whenever the percentage was printed
+    with enough decimals to identify it; a percentage that no whole count reproduces
+    to within its printed precision is left alone.
+    """
+    percent = _number(study.get(f"percent_{arm}"))
+    if percent is None or not 0 <= percent <= 100:
+        return None
+    events = round(percent / 100 * n)
+    decimals = len(str(percent).split(".")[1]) if "." in str(percent) else 0
+    tolerance = 0.5 * 10**-decimals + 1e-9
+    if abs(events / n * 100 - percent) > tolerance:
+        return None
+    return events
+
+
 def derive_effects(study: dict) -> dict[str, dict]:
     """Effect sizes computed from arm-level summaries, as intervention minus comparator.
 
-    Nothing is imputed: a continuous effect needs both means, both SDs and both arm
-    sizes; a binary effect needs both event counts and both arm sizes. Hazard ratios
-    cannot be recovered from summaries and are never derived.
+    Nothing is imputed: a continuous effect needs both means, both SDs (or both SEs,
+    which are SDs scaled by the arm size) and both arm sizes; a binary effect needs
+    both event counts, or both event percentages rounded back to counts, and both arm
+    sizes. Hazard ratios cannot be recovered from summaries and are never derived.
     """
     effects: dict[str, dict] = {}
     n1, n2 = _count(study.get("n_intervention")), _count(study.get("n_comparator"))
@@ -192,6 +211,12 @@ def derive_effects(study: dict) -> dict[str, dict]:
         return effects
     m1, m2 = _number(study.get("mean_intervention")), _number(study.get("mean_comparator"))
     sd1, sd2 = _number(study.get("sd_intervention")), _number(study.get("sd_comparator"))
+    spread, tier = "SDs", "derived"
+    if sd1 is None and sd2 is None:
+        se1, se2 = _number(study.get("se_intervention")), _number(study.get("se_comparator"))
+        if None not in (se1, se2) and se1 > 0 and se2 > 0:
+            sd1, sd2 = se1 * math.sqrt(n1), se2 * math.sqrt(n2)
+            spread = "SEs (converted to SDs with each arm's size)"
     if None not in (m1, m2, sd1, sd2) and sd1 > 0 and sd2 > 0:
         difference = m1 - m2
         pooled_sd = math.sqrt(((n1 - 1) * sd1 * sd1 + (n2 - 1) * sd2 * sd2) / (n1 + n2 - 2))
@@ -203,20 +228,27 @@ def derive_effects(study: dict) -> dict[str, dict]:
             effects["MD"] = {
                 "estimate": difference,
                 "se": math.sqrt(sd1 * sd1 / n1 + sd2 * sd2 / n2),
-                "note": "Mean difference and SE computed from reported arm means, SDs and sizes.",
+                "tier": tier,
+                "note": f"Mean difference and SE computed from reported arm means, {spread} "
+                "and sizes.",
             }
             effects["SMD"] = {
                 "estimate": correction * d,
                 "se": correction * math.sqrt((n1 + n2) / (n1 * n2) + d * d / (2 * (n1 + n2))),
-                "note": "Hedges' g computed from reported arm means, SDs and sizes (pooled SD, "
-                "small-sample correction).",
+                "tier": tier,
+                "note": f"Hedges' g computed from reported arm means, {spread} and sizes "
+                "(pooled SD, small-sample correction).",
             }
     e1, e2 = _count(study.get("events_intervention")), _count(study.get("events_comparator"))
+    counts, tier = "event counts", "derived"
+    if e1 is None and e2 is None:
+        e1, e2 = _events_from_percent(study, n1), _events_from_percent(study, n2, "comparator")
+        counts, tier = "event percentages (rounded to counts)", "reconstructed"
     if e1 is not None and e2 is not None and e1 <= n1 and e2 <= n2:
         cells = [float(e1), float(n1 - e1), float(e2), float(n2 - e2)]
         # With no events, or only events, in both arms the ratio carries no information.
         if not (e1 == e2 == 0 or (e1 == n1 and e2 == n2)):
-            note = "computed from reported arm event counts and sizes"
+            note = f"computed from reported arm {counts} and sizes"
             if 0 in cells:
                 cells = [cell + 0.5 for cell in cells]
                 note += " with a 0.5 continuity correction for an empty cell"
@@ -224,6 +256,7 @@ def derive_effects(study: dict) -> dict[str, dict]:
             effects["logOR"] = {
                 "estimate": math.log(a * d_ / (b * c)),
                 "se": math.sqrt(1 / a + 1 / b + 1 / c + 1 / d_),
+                "tier": tier,
                 "note": f"Log odds ratio {note}.",
             }
             variance = 1 / a - 1 / (a + b) + 1 / c - 1 / (c + d_)
@@ -231,6 +264,7 @@ def derive_effects(study: dict) -> dict[str, dict]:
                 effects["logRR"] = {
                     "estimate": math.log((a / (a + b)) / (c / (c + d_))),
                     "se": math.sqrt(variance),
+                    "tier": tier,
                     "note": f"Log risk ratio {note}.",
                 }
     return {
@@ -274,7 +308,7 @@ def _numeric_evidence(study: dict, requested: str | None = None) -> dict:
         analysis_ci=[low, high],
         analysis_ci_low=low,
         analysis_ci_high=high,
-        evidence_tier="derived",
+        evidence_tier=effect["tier"],
         mde=_MDE_FACTOR * effect["se"],
         numeric_notes=[*result["numeric_notes"], effect["note"]],
     )

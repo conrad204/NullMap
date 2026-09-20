@@ -31,7 +31,8 @@ _CACHE_FIELDS = set(
         "extraction_source fulltext_status "
         "population intervention comparator outcome outcome_unit n n_intervention n_comparator "
         "mean_intervention mean_comparator sd_intervention sd_comparator "
-        "events_intervention events_comparator "
+        "se_intervention se_comparator events_intervention events_comparator "
+        "percent_intervention percent_comparator "
         "estimate ci_low ci_high p_value effect_type ci_level ci_sides p_value_operator has_control "
         "design primary_outcome_met reported_result result_direction effect_direction "
         "outcome_direction"
@@ -71,7 +72,8 @@ def index_mapping(dimensions: int = 384) -> dict:
         "estimate ci_low ci_high p_value null_score ci_level n enrollment_actual enrollment_planned "
         "analysis_estimate analysis_se analysis_ci_low analysis_ci_high mde "
         "n_intervention n_comparator mean_intervention mean_comparator "
-        "sd_intervention sd_comparator events_intervention events_comparator"
+        "sd_intervention sd_comparator se_intervention se_comparator "
+        "events_intervention events_comparator percent_intervention percent_comparator"
     ).split():
         properties[name] = {"type": "double"}
     # Arm-level effects on every derivable scale, so a query on any scale can be

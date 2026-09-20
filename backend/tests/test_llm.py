@@ -54,6 +54,43 @@ def test_fabricated_total_sample_size_is_never_stored():
     assert result["n"] is None and "n" not in result["extraction_evidence"]
 
 
+@pytest.mark.parametrize(
+    ("text", "level"),
+    [
+        ("The difference was 0.02 (95% CI -0.10 to 0.14).", 0.95),
+        ("The difference was 0.02 (90% confidence interval, -0.10 to 0.14).", 0.90),
+        ("The difference was 0.02 (CI 95%: -0.10 to 0.14).", 0.95),
+        ("The difference was 0.02 (-0.10 to 0.14).", None),
+        ("A 1.95% CI difference of 0.02 (-0.10 to 0.14).", None),
+    ],
+)
+def test_omitted_ci_level_is_read_from_the_interval_sentence_when_it_states_one(text, level):
+    result = validate_extraction(
+        extraction(
+            estimate={"value": 0.02, "quote": text},
+            ci_low={"value": -0.1, "quote": text},
+            ci_high={"value": 0.14, "quote": text},
+        ),
+        text,
+    )
+    if level is None:
+        assert result["ci_low"] is None and result["ci_high"] is None
+        assert result["ci_level"] is None
+    else:
+        assert (result["ci_low"], result["ci_high"], result["ci_level"]) == (-0.1, 0.14, level)
+        assert result["extraction_evidence"]["ci_level"] == text
+
+
+def test_conflicting_levels_across_bound_sentences_drop_the_interval():
+    low = "The lower 95% CI bound was -0.10."
+    high = "The upper 90% CI bound was 0.14."
+    result = validate_extraction(
+        extraction(ci_low={"value": -0.1, "quote": low}, ci_high={"value": 0.14, "quote": high}),
+        low + " " + high,
+    )
+    assert result["ci_low"] is None and result["ci_level"] is None
+
+
 def test_inequality_preserved():
     text = "The primary outcome was significant (p < 0.05)."
     result = validate_extraction(extraction(p_value={"value": 0.05, "quote": text}), text)
@@ -276,6 +313,30 @@ def test_arm_level_summaries_need_verbatim_numbers_and_both_arms():
     # Arm sizes missing: nothing arm-level is usable.
     facts, text = _arm_facts(n_comparator=None)
     assert validate_extraction(facts, text)["events_intervention"] is None
+
+
+def test_arm_level_standard_errors_and_percentages_are_kept_as_pairs():
+    text = ("Mean pain was 4.1 (SE 0.3) with drug (n=60) and 4.3 (SE 0.4) with placebo (n=62). "
+            "Stroke occurred in 12.5% and 16.1% of participants.")
+    fact = lambda value: {"value": value, "quote": text}  # noqa: E731
+    facts = dict(n_intervention=fact(60), n_comparator=fact(62), mean_intervention=fact(4.1),
+                 mean_comparator=fact(4.3), se_intervention=fact(0.3), se_comparator=fact(0.4),
+                 percent_intervention=fact(12.5), percent_comparator=fact(16.1))
+    result = validate_extraction(extraction(**facts), text)
+    assert (result["se_intervention"], result["se_comparator"]) == (0.3, 0.4)
+    assert (result["percent_intervention"], result["percent_comparator"]) == (12.5, 16.1)
+    assert result["mean_intervention"] == 4.1 and result["sd_intervention"] is None
+    # One SE missing drops the means too; a missing percentage drops the other one.
+    partial = validate_extraction(extraction(**{**facts, "se_comparator": None}), text)
+    assert partial["mean_intervention"] is None and partial["se_intervention"] is None
+    assert partial["percent_intervention"] == 12.5
+    partial = validate_extraction(extraction(**{**facts, "percent_comparator": None}), text)
+    assert partial["percent_intervention"] is None and partial["se_comparator"] == 0.4
+    padded = text + " 0 101"
+    for name, value in (("se_comparator", 0), ("percent_comparator", 101)):
+        with pytest.raises(ValueError):
+            validate_extraction(
+                extraction(**{**facts, name: {"value": value, "quote": padded}}), padded)
 
 
 @pytest.mark.parametrize(

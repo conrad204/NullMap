@@ -380,6 +380,27 @@ def test_registry_arm_orientation_uses_arm_types_and_is_never_guessed():
     assert "events_intervention" not in unknown
 
 
+@pytest.mark.parametrize("dispersion", ["CONFIDENCE_95", "95% Confidence Interval"])
+def test_registry_arm_means_posted_with_confidence_intervals_yield_sds(dispersion):
+    measurements = [{"groupId": "OG000", "value": "-12.0", "lowerLimit": "-14.0",
+                     "upperLimit": "-10.0"},
+                    {"groupId": "OG001", "value": "-10.0", "lowerLimit": "-12.4",
+                     "upperLimit": "-7.6"}]
+    study = flatten_trial(_posted("MEAN", dispersion, measurements))
+    assert (study["mean_intervention"], study["mean_comparator"]) == (-12.0, -10.0)
+    # Half-width / t(0.975, 99 df) is the SE; the SD uses that arm's own size (100).
+    t_quantile = 1.9842
+    assert study["sd_intervention"] == pytest.approx(2.0 / t_quantile * 10, rel=1e-3)
+    assert study["sd_comparator"] == pytest.approx(2.4 / t_quantile * 10, rel=1e-3)
+    # A missing bound, or a mean outside its own interval, derives nothing.
+    for broken in ([{"groupId": "OG000", "value": "-12.0", "lowerLimit": "-14.0"},
+                    measurements[1]],
+                   [{"groupId": "OG000", "value": "-20.0", "lowerLimit": "-14.0",
+                     "upperLimit": "-10.0"}, measurements[1]]):
+        assert "sd_intervention" not in flatten_trial(_posted("MEAN", dispersion, broken))
+    assert "sd_intervention" not in flatten_trial(_posted("MEAN", "CONFIDENCE_OTHER", measurements))
+
+
 @pytest.mark.parametrize(
     ("param", "dispersion"),
     [("MEDIAN", "Inter-Quartile Range"), ("LEAST_SQUARES_MEAN", "Standard Error"),

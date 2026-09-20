@@ -7,6 +7,8 @@ retained so that endpoint selection and factorial comparisons are auditable.
 
 import re
 
+from scipy.stats import t as _student_t
+
 from app.ingest.common import empty_study, integer, normalize_date, number, pmid
 
 
@@ -45,6 +47,25 @@ _CONTROL_TITLE = re.compile(
 _PARTICIPANT_UNITS = {"participants", "subjects", "patients"}
 _CONTROL_ARM_TYPES = {"PLACEBO_COMPARATOR", "ACTIVE_COMPARATOR", "SHAM_COMPARATOR",
                       "NO_INTERVENTION"}
+# API v2 enum (CONFIDENCE_95, CONFIDENCE_975) or the legacy label (95% Confidence Interval).
+_CI_DISPERSION = re.compile(r"^(?:CONFIDENCE_(\d+)|(\d+(?:\.\d+)?)%_CONFIDENCE_INTERVAL)$")
+
+
+def _ci_dispersion_level(dispersion: str) -> float | None:
+    match = _CI_DISPERSION.match(dispersion)
+    if not match:
+        return None
+    raw = match.group(1) or match.group(2)
+    percent = float(raw) / 10 if match.group(1) and len(raw) == 3 else float(raw)
+    return percent / 100 if 0 < percent < 100 else None
+
+
+def _sd_from_arm_ci(lower: float, upper: float, mean: float, level: float, n: int) -> float | None:
+    """Arm SD from a posted per-arm confidence interval of the mean (Student t, n - 1 df)."""
+    if not lower <= mean <= upper or lower >= upper:
+        return None
+    quantile = float(_student_t.ppf((1 + level) / 2, n - 1))
+    return (upper - lower) / (2 * quantile) * n**0.5
 
 
 def _arm_pair(outcome: dict, selected: list[str],
@@ -75,9 +96,10 @@ def arm_summary(outcome: dict, selected: list[str],
                 arm_types: dict[str, str] | None = None) -> dict:
     """Posted per-arm results for one outcome: means with SDs, or participant counts.
 
-    Only a single class and category is read, so repeated timepoints or multi-level
-    categories are never collapsed into one comparison. Medians, geometric and
-    model-adjusted means are left alone.
+    A mean posted with a standard error or a confidence interval is converted to an
+    SD with that arm's own size. Only a single class and category is read, so repeated
+    timepoints or multi-level categories are never collapsed into one comparison.
+    Medians, geometric and model-adjusted means are left alone.
     """
     pair = _arm_pair(outcome, selected, arm_types)
     classes = outcome.get("classes") or []
@@ -102,13 +124,26 @@ def arm_summary(outcome: dict, selected: list[str],
         if None in events or any(event > sizes[group] for event, group in zip(events, pair)):
             return {}
         return {**summary, "events_intervention": events[0], "events_comparator": events[1]}
-    if param != "MEAN" or dispersion not in {"STANDARD_DEVIATION", "STANDARD_ERROR"}:
+    if param != "MEAN" or None in values:
         return {}
-    spreads = [number(measured[group].get("spread")) for group in pair]
-    if None in values or None in spreads or any(spread <= 0 for spread in spreads):
+    level = _ci_dispersion_level(dispersion)
+    if level is not None:
+        if any(sizes[group] < 2 for group in pair):
+            return {}
+        bounds = [(number(measured[group].get("lowerLimit")),
+                   number(measured[group].get("upperLimit"))) for group in pair]
+        if any(None in bound for bound in bounds):
+            return {}
+        spreads = [_sd_from_arm_ci(low, high, value, level, sizes[group])
+                   for (low, high), value, group in zip(bounds, values, pair)]
+    elif dispersion in {"STANDARD_DEVIATION", "STANDARD_ERROR"}:
+        spreads = [number(measured[group].get("spread")) for group in pair]
+        if dispersion == "STANDARD_ERROR" and None not in spreads:
+            spreads = [spread * sizes[group] ** 0.5 for spread, group in zip(spreads, pair)]
+    else:
         return {}
-    if dispersion == "STANDARD_ERROR":
-        spreads = [spread * sizes[group] ** 0.5 for spread, group in zip(spreads, pair)]
+    if None in spreads or any(spread <= 0 for spread in spreads):
+        return {}
     return {**summary, "mean_intervention": values[0], "mean_comparator": values[1],
             "sd_intervention": spreads[0], "sd_comparator": spreads[1]}
 

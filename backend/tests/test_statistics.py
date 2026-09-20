@@ -521,10 +521,45 @@ def test_arm_level_events_give_log_ratios_with_continuity_correction_only_when_n
     assert "continuity" in empty_cell["logOR"]["note"]
 
 
+def test_arm_level_standard_errors_are_scaled_to_sds_by_each_arm_size():
+    with_se = {k: v for k, v in ARMS.items() if not k.startswith("sd_")}
+    # SD 4 over n = 50 is an SE of 4 / sqrt(50); the derived effects match the SD form.
+    with_se.update(se_intervention=4 / sqrt(50), se_comparator=4 / sqrt(50))
+    effects = derive_effects(with_se)
+    assert effects["SMD"]["estimate"] == pytest.approx(derive_effects(ARMS)["SMD"]["estimate"])
+    assert effects["MD"]["se"] == pytest.approx(derive_effects(ARMS)["MD"]["se"])
+    assert "SEs" in effects["MD"]["note"] and effects["MD"]["tier"] == "derived"
+    # A reported SD wins over an SE, and one arm's SE alone derives nothing.
+    assert derive_effects({**ARMS, "se_intervention": 99.0}) == derive_effects(ARMS)
+    assert derive_effects({**with_se, "se_comparator": None}) == {}
+
+
+def test_arm_level_percentages_round_back_to_counts_as_reconstructed_evidence():
+    arms = {"percent_intervention": 20.0, "percent_comparator": 40.0,
+            "n_intervention": 100, "n_comparator": 100}
+    effects = derive_effects(arms)
+    counted = derive_effects({"events_intervention": 20, "events_comparator": 40,
+                              "n_intervention": 100, "n_comparator": 100})
+    assert effects["logOR"]["estimate"] == pytest.approx(counted["logOR"]["estimate"])
+    assert effects["logRR"]["se"] == pytest.approx(counted["logRR"]["se"])
+    assert effects["logOR"]["tier"] == "reconstructed" and "percentages" in effects["logOR"]["note"]
+    result = assign_bucket({**arms, "outcome": "Stroke"}, 1.25, "OR")
+    assert result["evidence_tier"] == "reconstructed" and result["bucket"] == "effect"
+    # 12.3% of 57 is 7.01 participants: kept. 15% of 57 is 8.55, not within 0.5% of 8 or 9.
+    assert derive_effects({**arms, "percent_intervention": 12.3, "n_intervention": 57}) != {}
+    assert derive_effects({**arms, "percent_intervention": 15, "n_intervention": 57}) == {}
+    # Counts, when both are present, are used in preference to percentages.
+    mixed = derive_effects({**arms, "events_intervention": 25, "events_comparator": 40})
+    assert mixed["logOR"]["tier"] == "derived"
+
+
 @pytest.mark.parametrize(
     "arms",
     [
         {**ARMS, "sd_comparator": None},
+        {"percent_intervention": 120, "percent_comparator": 40,
+         "n_intervention": 100, "n_comparator": 100},
+        {"percent_intervention": 20, "n_intervention": 100, "n_comparator": 100},
         {**ARMS, "sd_intervention": 0},
         {**ARMS, "n_comparator": 1},
         {**ARMS, "n_intervention": 50.5},

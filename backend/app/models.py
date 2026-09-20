@@ -129,8 +129,12 @@ class Extraction(BaseModel):
     mean_comparator: NumberEvidence | None
     sd_intervention: NumberEvidence | None
     sd_comparator: NumberEvidence | None
+    se_intervention: NumberEvidence | None
+    se_comparator: NumberEvidence | None
     events_intervention: NumberEvidence | None
     events_comparator: NumberEvidence | None
+    percent_intervention: NumberEvidence | None
+    percent_comparator: NumberEvidence | None
     estimate: NumberEvidence | None
     ci_low: NumberEvidence | None
     ci_high: NumberEvidence | None
@@ -299,8 +303,12 @@ class IndexedExtraction(BaseModel):
     mean_comparator: IndexedNumberEvidence | None
     sd_intervention: IndexedNumberEvidence | None
     sd_comparator: IndexedNumberEvidence | None
+    se_intervention: IndexedNumberEvidence | None
+    se_comparator: IndexedNumberEvidence | None
     events_intervention: IndexedNumberEvidence | None
     events_comparator: IndexedNumberEvidence | None
+    percent_intervention: IndexedNumberEvidence | None
+    percent_comparator: IndexedNumberEvidence | None
     estimate: IndexedNumberEvidence | None
     ci_low: IndexedNumberEvidence | None
     ci_high: IndexedNumberEvidence | None
