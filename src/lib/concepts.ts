@@ -60,6 +60,29 @@ export function parseConceptInput(raw: string): string[] {
     .filter(Boolean);
 }
 
+const SIGN_PREFIX = /^([+\-−–])\s*/;
+
+/**
+ * A typed term carries its own sign when it starts with + or −, so one field can
+ * hold both sides of the arithmetic: "SGLT2, −diabetes".
+ */
+export function parseSignedInput(raw: string, fallback: ConceptSign): { text: string; sign: ConceptSign }[] {
+  const signed: { text: string; sign: ConceptSign }[] = [];
+  for (const term of parseConceptInput(raw)) {
+    const prefix = SIGN_PREFIX.exec(term);
+    const text = prefix ? term.slice(prefix[0].length).trim() : term;
+    if (!text) continue;
+    signed.push({ text, sign: prefix && prefix[1] !== "+" ? "negative" : prefix ? "positive" : fallback });
+  }
+  return signed;
+}
+
+export function addSignedConcepts(concepts: Concept[], raw: string, fallback: ConceptSign): Concept[] {
+  let next = concepts;
+  for (const { text, sign } of parseSignedInput(raw, fallback)) next = addConcepts(next, text, sign);
+  return next;
+}
+
 export function bySign(concepts: Concept[], sign: ConceptSign): Concept[] {
   return concepts.filter((concept) => concept.sign === sign);
 }

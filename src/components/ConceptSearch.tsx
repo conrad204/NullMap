@@ -3,16 +3,16 @@ import { ArrowRight, Minus, Plus, X } from "@phosphor-icons/react";
 import type { Concept, ConceptMatch, ConceptSearchResult, ConceptSign } from "../types";
 import { searchConcepts } from "../api/client";
 import {
-  SIGNS, SIGN_META, addConcepts, bySign, conceptError, cosineWidth, expression,
+  SIGN_META, addSignedConcepts, conceptError, cosineWidth, expression,
   flipConcept, matchSignals, removeConcept, toRequest,
 } from "../lib/concepts";
 import { VERDICT_META } from "../lib/verdicts";
 import { cx } from "../lib/format";
 
-const EXAMPLES: { label: string; positive: string[]; negative: string[] }[] = [
-  { label: "SGLT2 inhibitor + kidney outcomes, without diabetes", positive: ["SGLT2 inhibitor", "kidney outcomes"], negative: ["type 2 diabetes"] },
-  { label: "Blood pressure lowering, without drug therapy", positive: ["blood pressure lowering"], negative: ["antihypertensive drug"] },
-  { label: "Dialysis + quality of life", positive: ["dialysis", "quality of life"], negative: [] },
+const EXAMPLES: { label: string; terms: string[] }[] = [
+  { label: "SGLT2 inhibitor + kidney outcomes − type 2 diabetes", terms: ["SGLT2 inhibitor", "kidney outcomes", "−type 2 diabetes"] },
+  { label: "blood pressure lowering − antihypertensive drug", terms: ["blood pressure lowering", "−antihypertensive drug"] },
+  { label: "dialysis + quality of life", terms: ["dialysis", "quality of life"] },
 ];
 
 type State =
@@ -23,17 +23,26 @@ type State =
 
 /**
  * Concept arithmetic over the indexed corpus: the document-level form of
- * "king − man + woman". Each concept is embedded, the positives are added, the
- * negatives subtracted, and the corpus decides what actually sits there.
+ * "king − man + woman". Concepts are typed into one field, each kept or pushed
+ * away, and the corpus decides what actually sits in that direction.
  */
-export default function ConceptSearch() {
+export default function ConceptSearch({ hidden }: { hidden: boolean }) {
   const [concepts, setConcepts] = useState<Concept[]>([]);
-  const [drafts, setDrafts] = useState<Record<ConceptSign, string>>({ positive: "", negative: "" });
+  const [draft, setDraft] = useState("");
+  const [nextSign, setNextSign] = useState<ConceptSign>("positive");
   const [state, setState] = useState<State>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState("");
+  const fieldRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // The form stays mounted while the other mode is shown; focus it again on return.
+  const wasHidden = useRef(hidden);
+  useEffect(() => {
+    if (wasHidden.current && !hidden) fieldRef.current?.focus();
+    wasHidden.current = hidden;
+  }, [hidden]);
 
   const run = useCallback(async (query: Concept[]) => {
     const problem = conceptError(query);
@@ -53,61 +62,93 @@ export default function ConceptSearch() {
     }
   }, []);
 
+  const commit = (raw: string) => {
+    if (!raw.trim()) return concepts;
+    const next = addSignedConcepts(concepts, raw, nextSign);
+    setConcepts(next);
+    setDraft("");
+    setNextSign("positive");
+    setError(null);
+    return next;
+  };
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // A term still being typed is part of the query the user sees, so submit it too.
-    let query = concepts;
-    for (const sign of SIGNS) query = addConcepts(query, drafts[sign], sign);
-    setConcepts(query);
-    setDrafts({ positive: "", negative: "" });
-    void run(query);
+    if (hidden) return;
+    // A term still being typed is part of the expression the user sees, so it is searched too.
+    void run(commit(draft));
   }
 
-  const positive = bySign(concepts, "positive");
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" || event.key === ",") {
+      if (!draft.trim()) return;
+      event.preventDefault();
+      commit(draft);
+    } else if (event.key === "Backspace" && !draft && concepts.length) {
+      setConcepts(concepts.slice(0, -1));
+    } else if ((event.key === "-" || event.key === "−") && !draft) {
+      event.preventDefault();
+      setNextSign("negative");
+    }
+  }
+
   const line = expression(concepts);
   const stale = state.kind === "done" && searched !== line;
+  const meta = SIGN_META[nextSign];
 
   return (
-    <section aria-labelledby="concepts-heading" className="flex flex-col gap-6">
-      <div>
-        <h2 id="concepts-heading" className="text-sm font-medium text-ink-2">Search by concept</h2>
-        <p className="mt-2 max-w-[58ch] leading-relaxed text-ink-2">
-          Combine concepts instead of writing a question. Each one is embedded and the corpus is
-          searched near their sum, the way <span className="font-mono text-[0.9em] text-ink">king − man + woman</span> lands
-          near <span className="font-mono text-[0.9em] text-ink">queen</span>. Nothing is matched literally, and
-          the corpus decides whether anything sits there.
-        </p>
-      </div>
-
-      <form onSubmit={submit} className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {SIGNS.map((sign) => (
-            <ConceptField
-              key={sign}
-              sign={sign}
-              concepts={bySign(concepts, sign)}
-              draft={drafts[sign]}
-              onDraft={(value) => setDrafts((current) => ({ ...current, [sign]: value }))}
-              onAdd={(raw) => { setConcepts((current) => addConcepts(current, raw, sign)); setError(null); }}
-              onRemove={(id) => setConcepts((current) => removeConcept(current, id))}
-              onFlip={(id) => setConcepts((current) => flipConcept(current, id))}
-            />
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="min-w-0 text-sm text-ink-2">
-            {positive.length ? (
-              <>Searching near <span className="font-mono text-[0.9em] break-all text-ink">{line}</span></>
-            ) : (
-              "Add a positive concept to search; negative concepts are optional."
-            )}
-          </p>
-          {/* Committing the draft on blur would move the button out from under a click already on its way. */}
-          <button type="submit" disabled={state.kind === "searching"} onMouseDown={(event) => event.preventDefault()} className="btn btn-primary shrink-0">
-            {state.kind === "searching" ? "Searching…" : "Search concepts"}
-            <ArrowRight size={16} weight="bold" aria-hidden />
-          </button>
+    <div hidden={hidden} className="fade-up mx-auto flex w-full max-w-[720px] flex-col gap-6">
+      <form onSubmit={submit} className="flex flex-col gap-2">
+        <div className={"prompt-box" + (error ? " prompt-box-invalid" : "")}>
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3">
+            {concepts.map((concept) => {
+              const chip = SIGN_META[concept.sign];
+              return (
+                <span key={concept.id} className={cx("flex max-w-full items-center gap-1 rounded-control py-1 pl-2 pr-1 text-sm text-ink", chip.tint)}>
+                  <span aria-hidden className={cx("font-mono text-xs", chip.text)}>{chip.symbol}</span>
+                  <span className="max-w-[24ch] truncate">{concept.text}</span>
+                  <button type="button" onClick={() => setConcepts((current) => flipConcept(current, concept.id))}
+                    title={concept.sign === "positive" ? "Push this concept away instead" : "Search towards this concept instead"}
+                    aria-label={`Move "${concept.text}" to ${concept.sign === "positive" ? "negative" : "positive"} concepts`}
+                    className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-accent">
+                    {concept.sign === "positive" ? <Minus size={13} weight="bold" aria-hidden /> : <Plus size={13} weight="bold" aria-hidden />}
+                  </button>
+                  <button type="button" onClick={() => setConcepts((current) => removeConcept(current, concept.id))} aria-label={`Remove "${concept.text}"`}
+                    className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-v-failed">
+                    <X size={13} weight="bold" aria-hidden />
+                  </button>
+                </span>
+              );
+            })}
+            <span className="flex min-w-[14rem] flex-1 items-center gap-2">
+              <button type="button" onClick={() => { setNextSign(nextSign === "positive" ? "negative" : "positive"); fieldRef.current?.focus(); }}
+                title={nextSign === "positive" ? "Next concept is searched towards. Click to push away instead." : "Next concept is pushed away. Click to search towards it instead."}
+                aria-label={`Next concept: ${meta.label}`}
+                className={cx("flex h-5 w-5 shrink-0 items-center justify-center rounded-mark text-xs font-semibold text-[var(--on-accent)]", meta.bg)}>
+                {meta.symbol}
+              </button>
+              <label htmlFor="concept-input" className="sr-only">Add a concept</label>
+              <input ref={fieldRef} id="concept-input" value={draft} maxLength={200} autoComplete="off"
+                placeholder={concepts.length ? "another concept…" : "chronic kidney disease"}
+                aria-invalid={error ? "true" : undefined} aria-describedby="concept-help"
+                onChange={(event) => setDraft(event.target.value)} onKeyDown={onKeyDown} onBlur={() => commit(draft)}
+                className="w-full min-w-0 bg-transparent py-1 text-base leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none" />
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 px-3 pb-3 pt-2">
+            <p id="concept-help" className="min-w-0 pl-1 text-xs text-ink-3">
+              {line ? (
+                <>Searching near <span className="font-mono break-all text-ink-2">{line}</span></>
+              ) : (
+                <>Enter adds a concept; start it with <span className="font-mono">−</span> to push it away.</>
+              )}
+            </p>
+            {/* Committing the draft on blur would move the button out from under a click already on its way. */}
+            <button type="submit" disabled={state.kind === "searching"} onMouseDown={(event) => event.preventDefault()} className="btn btn-primary shrink-0">
+              {state.kind === "searching" ? "Searching…" : "Search concepts"}
+              <ArrowRight size={16} weight="bold" aria-hidden />
+            </button>
+          </div>
         </div>
         {error && <p role="alert" className="text-sm text-v-failed">{error}</p>}
       </form>
@@ -118,13 +159,11 @@ export default function ConceptSearch() {
           <ul className="flex flex-col gap-1.5">
             {EXAMPLES.map((example) => (
               <li key={example.label}>
-                <button type="button" className="text-left text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline"
+                <button type="button" className="text-left font-mono text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline"
                   onClick={() => {
-                    let next: Concept[] = [];
-                    for (const text of example.positive) next = addConcepts(next, text, "positive");
-                    for (const text of example.negative) next = addConcepts(next, text, "negative");
-                    setConcepts(next);
+                    setConcepts(addSignedConcepts([], example.terms.join(","), "positive"));
                     setError(null);
+                    fieldRef.current?.focus();
                   }}>
                   {example.label}
                 </button>
@@ -139,61 +178,6 @@ export default function ConceptSearch() {
         {stale && <p className="mb-2 text-sm text-ink-3">Showing results for <span className="font-mono text-[0.9em] break-all">{searched}</span>. Search again for the combination above.</p>}
         {state.kind === "done" && <ConceptResults result={state.result} />}
       </div>
-    </section>
-  );
-}
-
-function ConceptField({ sign, concepts, draft, onDraft, onAdd, onRemove, onFlip }: {
-  sign: ConceptSign;
-  concepts: Concept[];
-  draft: string;
-  onDraft: (value: string) => void;
-  onAdd: (raw: string) => void;
-  onRemove: (id: string) => void;
-  onFlip: (id: string) => void;
-}) {
-  const meta = SIGN_META[sign];
-  const commit = () => { if (draft.trim()) { onAdd(draft); onDraft(""); } };
-  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter" || event.key === ",") {
-      event.preventDefault();
-      commit();
-    } else if (event.key === "Backspace" && !draft && concepts.length) {
-      onRemove(concepts[concepts.length - 1].id);
-    }
-  }
-  const inputId = `concepts-${sign}`;
-  return (
-    <div className={cx("flex flex-col gap-2 rounded-panel border bg-surface p-3", meta.border)}>
-      <label htmlFor={inputId} className="flex items-center gap-2 text-sm font-medium text-ink">
-        <span aria-hidden className={cx("flex h-5 w-5 items-center justify-center rounded-mark text-xs font-semibold text-[var(--on-accent)]", meta.bg)}>
-          {meta.symbol}
-        </span>
-        {meta.label}
-      </label>
-      <p className="text-xs text-ink-3">{meta.hint}</p>
-      {concepts.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5">
-          {concepts.map((concept) => (
-            <li key={concept.id} className={cx("flex items-center gap-1 rounded-control py-1 pl-2 pr-1 text-sm text-ink", meta.tint)}>
-              <span aria-hidden className={cx("font-mono text-xs", meta.text)}>{meta.symbol}</span>
-              <span className="max-w-[24ch] truncate">{concept.text}</span>
-              <button type="button" onClick={() => onFlip(concept.id)}
-                title={sign === "positive" ? "Move to negative concepts" : "Move to positive concepts"}
-                aria-label={`Move "${concept.text}" to ${sign === "positive" ? "negative" : "positive"} concepts`}
-                className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-accent">
-                {sign === "positive" ? <Minus size={13} weight="bold" aria-hidden /> : <Plus size={13} weight="bold" aria-hidden />}
-              </button>
-              <button type="button" onClick={() => onRemove(concept.id)} aria-label={`Remove "${concept.text}"`}
-                className="rounded-mark p-0.5 text-ink-3 transition-colors hover:text-v-failed">
-                <X size={13} weight="bold" aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <input id={inputId} value={draft} className="field" placeholder={meta.placeholder} maxLength={200}
-        onChange={(event) => onDraft(event.target.value)} onKeyDown={onKeyDown} onBlur={commit} />
     </div>
   );
 }
