@@ -77,6 +77,19 @@ export function parseSignedInput(raw: string, fallback: ConceptSign): { text: st
   return signed;
 }
 
+/**
+ * Whether what is being typed is concept arithmetic rather than a question.
+ * Signing a term is the only way into the arithmetic, so one box can hold both.
+ */
+export function isSignedTerm(raw: string): boolean {
+  return raw.split(/[,\n]/).some((term) => {
+    const trimmed = term.trim();
+    const prefix = SIGN_PREFIX.exec(trimmed);
+    if (!prefix) return false;
+    return trimmed.slice(prefix[0].length).trim().length >= MIN_CONCEPT_LENGTH;
+  });
+}
+
 export function addSignedConcepts(concepts: Concept[], raw: string, fallback: ConceptSign): Concept[] {
   let next = concepts;
   for (const { text, sign } of parseSignedInput(raw, fallback)) next = addConcepts(next, text, sign);
