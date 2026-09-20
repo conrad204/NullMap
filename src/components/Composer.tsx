@@ -18,14 +18,15 @@ interface Props {
 }
 
 const QUESTIONS = [
-  "Does azilsartan lower systolic blood pressure more than placebo in adults with essential hypertension? +ambulatory blood pressure −animal model",
+  "Does azilsartan lower systolic blood pressure more than placebo in adults with essential hypertension?",
   "Does renal artery stenting improve blood pressure or kidney function in adults with atherosclerotic renal artery stenosis? +kidney outcomes −type 2 diabetes",
-  "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease? +quality of life −mortality",
+  "Does bardoxolone methyl improve kidney function in adults with chronic kidney disease?",
+  "Does spironolactone reduce proteinuria in adults with resistant hypertension? +quality of life −animal model",
 ];
 const DEFAULTS = { plannedN: 200, alpha: 0.05, valueSuccess: 100, valueNull: 20, studyCost: 30 };
 
 /**
- * The textarea and the coloured copy behind it must lay text out identically,
+ * The textarea and the colored copy behind it must lay text out identically,
  * so every metric that affects wrapping lives in one string used by both.
  */
 const FIELD = "block w-full resize-none border-0 px-4 pt-3.5 text-base leading-relaxed";
@@ -45,7 +46,7 @@ function textOrigin(field: HTMLTextAreaElement): GlideOrigin {
  * One search, one box. The line is the research question, as it always was,
  * and any signed terms trailing it — "…in adults? +blood pressure −stroke" —
  * are optional tags that ride on the same request and only steer the ranking
- * of that question's matches. The tags are coloured where they were typed: a
+ * of that question's matches. The tags are colored where they were typed: a
  * textarea cannot paint part of its own value, so a mirror of the line sits
  * behind a transparent-text textarea that remains the real input.
  */
@@ -63,7 +64,7 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
    * Typing can scroll the field without a scroll event, so follow it after every
    * render. The mirror is also held to the field's `clientWidth`, which drops by
    * the width of a scrollbar the moment one appears: any other width would wrap
-   * the coloured copy a word away from where the caret actually is.
+   * the colored copy a word away from where the caret actually is.
    */
   useLayoutEffect(() => {
     const field = fieldRef.current;
@@ -149,7 +150,7 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
           <div className={"prompt-box" + (error ? " prompt-box-invalid" : "")}>
             <label htmlFor="idea" className="sr-only">Your research question</label>
             <div className="relative">
-              {/* The line as it reads: the same string, with the tags in their sign's colour. */}
+              {/* The line as it reads: the same string, with the tags in their sign's color. */}
               <div ref={mirrorRef} aria-hidden
                 className={cx(FIELD, "pointer-events-none absolute inset-0 select-none overflow-hidden whitespace-pre-wrap break-words text-ink")}>
                 {segments.map((segment, index) => segment.sign
@@ -180,7 +181,7 @@ export default function Composer({ hidden, onSubmit, filters, onFiltersChange }:
         {!text.trim() && (
           <div className="flex flex-col gap-4">
             <div>
-              <p className="mb-2 text-sm text-ink-3">Or start from a clinical question, tags and all</p>
+              <p className="mb-2 text-sm text-ink-3">Or start from a clinical question</p>
               <ul className="flex flex-col gap-1.5">{QUESTIONS.map((example) => <li key={example}>
                 <button type="button" onClick={() => append(example)}
                   className="text-left text-sm leading-snug text-ink-2 underline-offset-4 transition-colors hover:text-accent hover:underline">{example}</button>

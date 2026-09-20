@@ -42,10 +42,10 @@ test('matches without any controlled comparison are not called a prior attempt',
   assert.equal(headline(counts({ effect: 1 }), false, 0).title, 'This has been tested before');
 });
 
-test('effects favouring the comparator are named, not folded into "an effect"', () => {
+test('effects favoring the comparator are named, not folded into "an effect"', () => {
   const directions = { favoursIntervention: 2, favoursComparator: 1, unclear: 0 };
   const result = headline(counts({ effect: 3 }), false, undefined, directions);
-  assert.match(result.detail, /Not all in the same direction: 2 favoured the intervention, 1 favoured the comparator\./);
+  assert.match(result.detail, /Not all in the same direction: 2 favored the intervention, 1 favored the comparator\./);
   // One direction is not a split, and an older payload carries no directions at all.
   assert.doesNotMatch(headline(counts({ effect: 3 }), false, undefined, { favoursIntervention: 2, favoursComparator: 0, unclear: 1 }).detail, /same direction/);
   assert.doesNotMatch(headline(counts({ effect: 3 }), false).detail, /same direction/);

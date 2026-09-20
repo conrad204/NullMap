@@ -113,7 +113,7 @@ const CLOSING = new Set([")", "]", '"', "'", "\u201d", "\u2019", ".", ",", ";", 
 
 /**
  * The same reading as `parseLine`, as character ranges, so anything drawing the
- * line can colour exactly the text that will be sent as a tag.
+ * line can color exactly the text that will be sent as a tag.
  */
 export function tagRanges(raw: string): TagRange[] {
   const starts = [...raw.matchAll(TAG_START)];

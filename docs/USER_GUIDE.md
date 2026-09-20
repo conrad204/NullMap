@@ -26,7 +26,7 @@ The parser also proposes a **meaningful-effect threshold** (SESOI — the smalle
 
 ### Narrowing the corpus first
 
-**Filters** (below the question box) restrict the corpus *before* anything runs: publication year range and citation bounds. Two behaviours to know:
+**Filters** (below the question box) restrict the corpus *before* anything runs: publication year range and citation bounds. Two behaviors to know:
 
 - Registry records (ClinicalTrials.gov rows) carry no citation counts, so **citation bounds never remove them** — a citation floor would delete exactly the terminated and never-reported trials the tool exists to surface. When this exemption keeps registry rows in a filtered result, the report says so and counts them.
 - "Keep these filters for my next search" makes the bounds sticky across questions. The question header always shows the bounds a search ran under, plus a marker when sticky filters will carry to the next one — check it if results look thinner than expected.
@@ -45,14 +45,14 @@ From top to bottom:
 
 | Answer | Buckets inside it | What it means |
 | --- | --- | --- |
-| Favoured the intervention | effect, direction `favours_intervention` | The groups ended up different and the study's own report puts the intervention ahead. The direction is only as good as the sentence it was quoted from. |
-| Favoured the comparator | effect, direction `favours_comparator` | The same evidence rules, the other way round: this is where harm from the intervention appears. |
+| Favored the intervention | effect, direction `favours_intervention` | The groups ended up different and the study's own report puts the intervention ahead. The direction is only as good as the sentence it was quoted from. |
+| Favored the comparator | effect, direction `favours_comparator` | The same evidence rules, the other way round: this is where harm from the intervention appears. |
 | Made no difference | confirmed + claimed | **Confirmed** means a confidence interval sits entirely inside the equivalence bounds: any effect is too small to matter. **Claimed** means the abstract says "no significant difference" without an interval to back it — that is a claim, not evidence of equivalence, and often just an underpowered study. |
 | No answer | stopped/flawed + never reported | Trials stopped early, retracted, or completed more than a year ago with no posted results and no linked publication. **Outcomes here are unknown, not negative.** |
 
-An effect whose report never said which arm it favoured is counted beside the bar under its own label rather than folded into benefit or harm. A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found. Click any bucket to filter the study list below.
+An effect whose report never said which arm it favored is counted beside the bar under its own label rather than folded into benefit or harm. A further **inconclusive** count sits beside the bar rather than in it, because inconclusive is not a finding: each such match carries a reason (too imprecise to call, conflicting results, reported on an incompatible scale, no readable result, no valid threshold), and most reasons describe what could be *read* from the record, not what the study found. Click any bucket to filter the study list below.
 
-**What the reported effects have in common** (or, when too few studies reported an effect, an overview of what the matches are and why none settles the question). Direction counts — how many effects favour the intervention versus the comparator — are computed in code; the accompanying prose is generated from extracted facts and quotes and is rejected if it introduces numbers not in its table.
+**What the reported effects have in common** (or, when too few studies reported an effect, an overview of what the matches are and why none settles the question). Direction counts — how many effects favor the intervention versus the comparator — are computed in code; the accompanying prose is generated from extracted facts and quotes and is rejected if it introduces numbers not in its table.
 
 **Your planned study.** The power panel:
 
@@ -106,7 +106,7 @@ Labels describe **your index's sample**, and the coverage line says what fractio
 
 ### Sparse bands (gaps)
 
-The map also lists pairs of *related* regions with almost nothing between them: combinations the neighbouring literatures imply but nobody has run. Each band shows how many sampled papers sit in it, how much work sits on either side, and — importantly — the parent labels. A band with `discouraged: true` is open *because the surrounding work reported nulls or never reported*: read those refutations before treating the gap as an opportunity.
+The map also lists pairs of *related* regions with almost nothing between them: combinations the neighboring literatures imply but nobody has run. Each band shows how many sampled papers sit in it, how much work sits on either side, and — importantly — the parent labels. A band with `discouraged: true` is open *because the surrounding work reported nulls or never reported*: read those refutations before treating the gap as an opportunity.
 
 ### Placing an idea
 
@@ -116,7 +116,7 @@ Send an `idea` in the request body. You get back:
 - The **region** your idea lands in, with its label and outcome mix.
 - The **nearest open band**, if one is close.
 
-Read the number for what it is. The redundancy score is the cosine between your idea's embedding and the single closest indexed paper — **a redundancy statistic, never a probability of novelty**. A high score means very similar work already exists in your index; verify by reading the listed neighbours, which is what they are shown for. A low score means only that *this sample of this index* holds nothing close — it cannot tell you the idea is good, novel, or unstudied elsewhere. The cosine is a heuristic landmark for the embedding model, not a calibrated score.
+Read the number for what it is. The redundancy score is the cosine between your idea's embedding and the single closest indexed paper — **a redundancy statistic, never a probability of novelty**. A high score means very similar work already exists in your index; verify by reading the listed neighbors, which is what they are shown for. A low score means only that *this sample of this index* holds nothing close — it cannot tell you the idea is good, novel, or unstudied elsewhere. The cosine is a heuristic landmark for the embedding model, not a calibrated score.
 
 ### Steering with arithmetic
 
@@ -161,5 +161,5 @@ A recap of the interpretations that matter most, because misreading them defeats
 - **"No significant difference" in an abstract is a claim.** Only an interval inside the equivalence bounds confirms a null. The report keeps "confirmed" and "claimed" apart; so should you.
 - **"Made a difference" includes harm.** Check each study's stated direction.
 - **Assurance is expected statistical power, not the probability of a meaningful benefit.**
-- **Map redundancy is overlap with existing indexed papers, not a novelty probability.** Verify high scores by reading the neighbours; treat low scores as "nothing close in this sample".
+- **Map redundancy is overlap with existing indexed papers, not a novelty probability.** Verify high scores by reading the neighbors; treat low scores as "nothing close in this sample".
 - **Every count is bounded by your corpus.** A partial import is a partial map, and the reports say so — keep that caveat when acting on them.

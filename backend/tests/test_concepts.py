@@ -49,7 +49,7 @@ def request(positive, negative=(), **fields) -> ConceptSearchRequest:
     return ConceptSearchRequest(positive=list(positive), negative=list(negative), **fields)
 
 
-def test_positive_concepts_rank_their_own_neighbourhood_first():
+def test_positive_concepts_rank_their_own_neighborhood_first():
     result = asyncio.run(service().search(request(["kidney disease"])))
     assert result["version"] == "concepts-v1"
     assert result["concepts"] == [{"text": "kidney disease", "sign": "positive"}]
