@@ -201,9 +201,11 @@ class NoveltyEngine:
             row.update(title=text.title, indexTitle=candidate.title, metadataConflict=True)
             if text.year and text.year != candidate.year:
                 row.update(year=text.year, indexYear=candidate.year)
+            if text.venue and text.venue != candidate.venue:
+                row.update(venue=text.venue, indexVenue=candidate.venue)
             warnings.append(
                 f"Index metadata disagreed with the publisher record for '{text.title[:60]}'; "
-                "the resolved title and year are shown."
+                "the resolved title, year and venue are shown."
             )
         if text.availability == "unavailable" or not self.config.openai_api_key:
             return row

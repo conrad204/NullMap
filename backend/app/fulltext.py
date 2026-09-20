@@ -43,6 +43,7 @@ class FullText:
     # As the publisher record states them, which the index can contradict.
     title: str = ""
     year: int | None = None
+    venue: str = ""
 
     @property
     def chars(self) -> int:
@@ -169,6 +170,7 @@ class FullTextClient:
             return fallback
         fallback.title = str(record.get("title") or "")
         fallback.year = int(year) if (year := str(record.get("pubYear") or "")).isdigit() else None
+        fallback.venue = str(record.get("journalTitle") or "")
         pmcid = record.get("pmcid")
         if not pmcid or record.get("isOpenAccess") != "Y":
             return fallback
@@ -191,4 +193,5 @@ class FullTextClient:
             sections=sections,
             title=fallback.title,
             year=fallback.year,
+            venue=fallback.venue,
         )
