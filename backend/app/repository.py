@@ -2,9 +2,11 @@
 
 import asyncio
 import calendar
+import contextlib
 import math
 import re
 import unicodedata
+from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -55,6 +57,34 @@ _PAPER_FIELDS = set(
         "classification_method abstract_available work_type snapshot_provenance pmcid"
     ).split()
 )
+
+
+# Embedded studies, the corpus the gap map is drawn from. Reviews stay in: they
+# occupy the space too, and `gapmap` excludes them from a region's attempts.
+_EMBEDDED_QUERY = {
+    "bool": {"filter": [{"term": {"record_kind": "study"}}, {"exists": {"field": "embedding"}}]}
+}
+# Everything the map needs per document and nothing else: abstracts would
+# multiply the bytes on the wire without changing a single position.
+_MAP_FIELDS = [
+    "embedding",
+    "title",
+    "year",
+    "bucket",
+    "record_kind",
+    "is_review",
+    "cited_by_count",
+    "source",
+]
+_PIT_KEEP_ALIVE = "10m"
+
+
+def _split_budget(limit: int, slices: int) -> list[int | None]:
+    """Share a document budget between concurrent slices; no limit means no cap."""
+    if limit <= 0:
+        return [None] * slices
+    base, extra = divmod(limit, slices)
+    return [base + (1 if index < extra else 0) for index in range(slices)]
 
 
 def index_mapping(dimensions: int = 384) -> dict:
@@ -849,11 +879,7 @@ class ElasticRepository:
         sample so a caller can say which fraction of the corpus it describes.
         """
         await self.ensure_index()
-        query = {
-            "bool": {
-                "filter": [{"term": {"record_kind": "study"}}, {"exists": {"field": "embedding"}}],
-            }
-        }
+        query = _EMBEDDED_QUERY
         total = await self.client.count(index=self.index, query=query)
         body = {
             "index": self.index,
@@ -870,19 +896,88 @@ class ElasticRepository:
                     "boost_mode": "replace",
                 }
             },
-            "source_includes": [
-                "embedding",
-                "title",
-                "year",
-                "bucket",
-                "record_kind",
-                "is_review",
-                "cited_by_count",
-                "source",
-            ],
+            "source_includes": _MAP_FIELDS,
         }
         result = await self._search_with_vectors(body)
         return {"documents": self.hits(result), "corpus": total["count"]}
+
+    async def count_embedded(self) -> int:
+        """How many embedded studies exist, so coverage can be stated as a fraction."""
+        await self.ensure_index()
+        result = await self.client.count(index=self.index, query=_EMBEDDED_QUERY)
+        return int(result["count"])
+
+    async def scan_embedded(
+        self,
+        batch_size: int = 2000,
+        slices: int = 8,
+        limit: int = 0,
+    ) -> AsyncIterator[list[dict]]:
+        """Every embedded study, in batches, over one point in time.
+
+        Paginated rather than fetched at once: the embedded corpus is millions of
+        384-float vectors, so a single oversized search would neither fit in one
+        response nor let a caller show anything before the last document arrived.
+        Slices run concurrently because a single `search_after` walk is limited by
+        round-trip latency, not by Elasticsearch — measured against the live index,
+        one walk moved ~3.2k documents/s and sixteen slices ~11k/s.
+
+        A point in time keeps the walk consistent, so the same document is never
+        yielded twice and none is missed while the index is written to.
+        """
+        await self.ensure_index()
+        slices = max(1, slices)
+        pit = (await self.client.open_point_in_time(index=self.index, keep_alive=_PIT_KEEP_ALIVE))
+        pit_id = pit["id"]
+        queue: asyncio.Queue = asyncio.Queue(maxsize=slices * 2)
+        budgets = _split_budget(limit, slices)
+
+        async def walk(slice_id: int, budget: int | None) -> None:
+            after: list | None = None
+            taken = 0
+            while budget is None or taken < budget:
+                size = batch_size if budget is None else min(batch_size, budget - taken)
+                # No index: a point in time already names one, and Elasticsearch
+                # rejects a search that specifies both.
+                body: dict[str, Any] = {
+                    "size": size,
+                    "query": _EMBEDDED_QUERY,
+                    "pit": {"id": pit_id, "keep_alive": _PIT_KEEP_ALIVE},
+                    "sort": [{"_shard_doc": "asc"}],
+                    "source_includes": _MAP_FIELDS,
+                }
+                if slices > 1:
+                    body["slice"] = {"id": slice_id, "max": slices}
+                if after is not None:
+                    body["search_after"] = after
+                response = await self._search_with_vectors(body)
+                hits = response["hits"]["hits"]
+                if not hits:
+                    return
+                after = hits[-1]["sort"]
+                taken += len(hits)
+                await queue.put(self.hits(response))
+
+        async def produce() -> None:
+            try:
+                await asyncio.gather(*(walk(index, budgets[index]) for index in range(slices)))
+            finally:
+                await queue.put(None)
+
+        producer = asyncio.create_task(produce())
+        try:
+            while True:
+                batch = await queue.get()
+                if batch is None:
+                    break
+                yield batch
+            await producer
+        finally:
+            producer.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await producer
+            with contextlib.suppress(Exception):  # the walk is over either way
+                await self.client.close_point_in_time(id=pit_id)
 
     async def _search_with_vectors(self, body: dict) -> Any:
         """Search keeping the stored vectors in `_source`, on 9.1 and on 9.2+."""

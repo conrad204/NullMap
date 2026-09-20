@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node src/api/stream.test.mjs && node src/lib/effects.test.mjs && node src/lib/headline.test.mjs && node src/lib/verdicts.test.mjs && node src/lib/filters.test.mjs && node src/lib/sort.test.mjs && node src/lib/concepts.test.mjs"
+    "test": "node src/api/stream.test.mjs && node src/lib/effects.test.mjs && node src/lib/headline.test.mjs && node src/lib/verdicts.test.mjs && node src/lib/filters.test.mjs && node src/lib/sort.test.mjs && node src/lib/concepts.test.mjs && node src/lib/mapStream.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
