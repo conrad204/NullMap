@@ -122,7 +122,8 @@ def test_sparse_and_json_openalex_inverted_indexes():
 
 def test_normalize_openalex_and_preserve_missing_abstract_metadata():
     work = {"id": "https://openalex.org/W123", "title": "A systematic review", "publication_year": 2024,
-            "ids": {"pmid": "https://pubmed.ncbi.nlm.nih.gov/12345/"},
+            "ids": {"pmid": "https://pubmed.ncbi.nlm.nih.gov/12345/",
+                    "pmcid": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7654321"},
             "abstract_inverted_index": {"Trial": [0], "nct01169259": [1]},
             "referenced_works": ["https://openalex.org/W456"]}
     normalized = normalize_work(work)
@@ -130,9 +131,11 @@ def test_normalize_openalex_and_preserve_missing_abstract_metadata():
     assert normalized["is_review"] is True
     assert normalized["nct_ids"] == ["NCT01169259"]
     assert normalized["pmids"] == ["12345"]
+    assert normalized["pmcid"] == "PMC7654321"
     assert normalized["referenced_works"] == ["W456"]
     missing = normalize_work({"id": "W123"})
     assert missing["abstract_available"] is False and missing["abstract"] == ""
+    assert missing["pmcid"] is None
     assert normalize_work({"id": "W123"}, require_abstract=True) is None
 
 

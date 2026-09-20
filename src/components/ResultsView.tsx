@@ -8,6 +8,7 @@ import EvidenceDetails from "./EvidenceDetails";
 type Filter = Verdict | "all";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", user: "Contribution", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
+const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
   catch { return undefined; }
@@ -94,7 +95,8 @@ function PaperRow({ paper }: { paper: Paper }) {
     <div className="min-w-0">
       {url ? <a href={url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-1.5 font-medium leading-snug text-ink transition-colors hover:text-accent"><span>{paper.title}</span><ArrowUpRight size={14} className="mt-1 shrink-0 text-ink-3 group-hover:text-accent" aria-hidden /></a> : <p className="font-medium leading-snug text-ink">{paper.title}</p>}
       <p className="mt-1 text-sm text-ink-2">{formatAuthors(paper.authors)}{paper.year ? `, ${paper.year}` : ""}{paper.venue ? `, ${paper.venue}` : ""}</p>
-      <p className="mt-1 text-xs text-ink-3">{SOURCES[paper.source] ?? paper.source} · {TIERS[paper.evidenceTier ?? "text_only"]}</p>
+      <p className="mt-1 text-xs text-ink-3">{SOURCES[paper.source] ?? paper.source} · {TIERS[paper.evidenceTier ?? "text_only"]}{paper.extractionSource ? ` · ${EXTRACTION_SOURCES[paper.extractionSource]}` : ""}</p>
+      {paper.pmcid && <a href={`https://europepmc.org/article/PMC/${encodeURIComponent(paper.pmcid)}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-accent underline underline-offset-2">Open-access full text ({paper.pmcid})</a>}
       {paper.abstractAvailable === false && <p className="mt-1 text-xs text-ink-3">Bibliographic record · abstract unavailable</p>}
       {paper.snapshotDate && <p className="mt-1 text-xs text-ink-3">Literature snapshot: {paper.snapshotDate}</p>}
       {paper.primaryOutcome && <p className="mt-2 text-xs leading-relaxed text-ink-2"><span className="font-medium text-ink">Primary outcome:</span> {paper.primaryOutcome}{paper.outcomeUnit ? ` · ${paper.outcomeUnit}` : ""}</p>}

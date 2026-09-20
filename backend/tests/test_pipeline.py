@@ -141,6 +141,23 @@ class MemoryRepository:
         }
 
 
+class FakeFullText:
+    """Stand-in for app.fulltext.FullTextClient: no network, records every fetch."""
+
+    def __init__(self, lines=None, status=None):
+        self.fixed_lines, self.fixed_status = lines, status
+        self.calls = []
+
+    def pmcid(self, study):
+        return study.get("pmcid")
+
+    async def lines(self, study):
+        self.calls.append(study["id"])
+        if not study.get("pmcid"):
+            return None, None
+        return (deepcopy(self.fixed_lines), self.fixed_status)
+
+
 class FakeLLM:
     def __init__(self, parsed=None, extraction=None, extraction_error=None, parse_error=None):
         self.parsed = parsed or pico()
@@ -148,6 +165,7 @@ class FakeLLM:
         self.extraction_error = extraction_error
         self.parse_error = parse_error
         self.extract_calls = 0
+        self.extract_kwargs = {}
         self.narrations = []
 
     async def parse(self, request, usage):
@@ -155,8 +173,9 @@ class FakeLLM:
             raise self.parse_error
         return self.parsed
 
-    async def extract(self, study, usage):
+    async def extract(self, study, usage, **kwargs):
         self.extract_calls += 1
+        self.extract_kwargs = kwargs
         if self.extraction_error:
             raise self.extraction_error
         return deepcopy(self.extraction)
@@ -582,3 +601,175 @@ def test_indexed_evidence_still_rejects_fabricated_value_in_real_sentence():
     )
     with pytest.raises(ValueError, match="Number absent"):
         validate_extraction(converted, "There were 200 participants.")
+
+
+def full_text_extraction():
+    return {
+        "extracted_at": "2026-09-19T00:00:00Z",
+        "extraction_version": "v2-sentence-evidence",
+        "extraction_status": "verified",
+        "extraction_source": "full_text",
+        "effect_type": "SMD",
+        "estimate": 0.02,
+        "ci_low": -0.1,
+        "ci_high": 0.14,
+        "ci_level": 0.95,
+        "extraction_evidence": {"estimate": "[Table 2] Depression score | 0.02 (-0.10 to 0.14)"},
+    }
+
+
+def test_full_text_lines_are_passed_to_extraction_and_source_is_recorded():
+    async def exercise():
+        row = paper(pmcid="PMC123")
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction=full_text_extraction())
+        fulltext = FakeFullText(lines=["A sentence.", "[Table 2] Depression score | 0.02"], status="used")
+        settings = config()
+        settings.openai_api_key = "test"
+        pipeline = SearchPipeline(repo, llm, settings, fulltext=fulltext)
+        usage, warnings = Usage(), []
+        result = await pipeline.extract_one(row, usage, warnings)
+        assert llm.extract_kwargs["lines"] == fulltext.fixed_lines
+        assert result["extraction_source"] == "full_text"
+        assert result["fulltext_status"] == "used"
+        assert result["bucket"] == "credible_null" and result["evidence_tier"] == "numeric"
+        # Second query: cached, no refetch, no repayment.
+        again = await pipeline.extract_one(row, usage, warnings)
+        assert again["estimate"] == 0.02
+        assert llm.extract_calls == 1 and fulltext.calls == ["paper"]
+        assert usage.extraction_cache_hits == 1
+
+    asyncio.run(exercise())
+
+
+def test_abstract_only_cache_is_upgraded_once_when_full_text_exists():
+    async def exercise():
+        row = paper(
+            pmcid="PMC123",
+            extracted_at="2026-09-01T00:00:00Z",
+            extraction_version="v2-sentence-evidence",
+            extraction_status="verified",
+            extraction_source="abstract",
+        )
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction=full_text_extraction())
+        fulltext = FakeFullText(lines=["[Table 2] Depression score | 0.02"], status="used")
+        settings = config(extraction_cache_version="v2-sentence-evidence")
+        settings.openai_api_key = "test"
+        pipeline = SearchPipeline(repo, llm, settings, fulltext=fulltext)
+        usage = Usage()
+        first = await pipeline.extract_one(row, usage, [])
+        assert first["extraction_source"] == "full_text" and llm.extract_calls == 1
+        second = await pipeline.extract_one(row, usage, [])
+        assert second["extraction_source"] == "full_text"
+        assert llm.extract_calls == 1 and len(fulltext.calls) == 1
+
+    asyncio.run(exercise())
+
+
+def test_paper_without_pmcid_never_triggers_a_full_text_fetch():
+    async def exercise():
+        row = paper()
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction={**full_text_extraction(), "extraction_source": "abstract"})
+        fulltext = FakeFullText(lines=["never"], status="used")
+        settings = config()
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(repo, llm, settings, fulltext=fulltext).extract_one(
+            row, Usage(), []
+        )
+        assert llm.extract_kwargs.get("lines") is None
+        assert result["extraction_source"] == "abstract"
+        assert "fulltext_status" not in result
+
+    asyncio.run(exercise())
+
+
+def test_unavailable_full_text_is_recorded_without_repeating_the_fetch_or_payment():
+    async def exercise():
+        row = paper(
+            pmcid="PMC123",
+            extracted_at="2026-09-01T00:00:00Z",
+            extraction_version="v2-sentence-evidence",
+            extraction_status="verified",
+            extraction_source="abstract",
+            estimate=0.3,
+            effect_type="SMD",
+        )
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction=full_text_extraction())
+        fulltext = FakeFullText(lines=None, status="unavailable")
+        settings = config(extraction_cache_version="v2-sentence-evidence")
+        settings.openai_api_key = "test"
+        pipeline = SearchPipeline(repo, llm, settings, fulltext=fulltext)
+        usage = Usage()
+        first = await pipeline.extract_one(row, usage, [])
+        assert first["estimate"] == 0.3 and first["fulltext_status"] == "unavailable"
+        assert llm.extract_calls == 0 and usage.extraction_cache_hits == 1
+        second = await pipeline.extract_one(row, usage, [])
+        assert second["fulltext_status"] == "unavailable"
+        assert len(fulltext.calls) == 1 and llm.extract_calls == 0
+
+    asyncio.run(exercise())
+
+
+def test_full_text_fetch_error_keeps_the_cached_abstract_facts_and_warns():
+    async def exercise():
+        row = paper(
+            pmcid="PMC123",
+            extracted_at="2026-09-01T00:00:00Z",
+            extraction_version="v2-sentence-evidence",
+            extraction_status="verified",
+            extraction_source="abstract",
+            estimate=0.3,
+            effect_type="SMD",
+        )
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction=full_text_extraction())
+        fulltext = FakeFullText(lines=None, status="error")
+        settings = config(extraction_cache_version="v2-sentence-evidence")
+        settings.openai_api_key = "test"
+        warnings = []
+        result = await SearchPipeline(repo, llm, settings, fulltext=fulltext).extract_one(
+            row, Usage(), warnings
+        )
+        assert result["estimate"] == 0.3 and result.get("fulltext_status") is None
+        assert llm.extract_calls == 0 and not repo.cache_writes
+        assert any("Full text could not be fetched" in warning for warning in warnings)
+
+    asyncio.run(exercise())
+
+
+def test_rejected_full_text_extraction_is_not_refetched_every_query():
+    async def exercise():
+        row = paper(pmcid="PMC123")
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction_error=ValueError("bad quote"))
+        fulltext = FakeFullText(lines=["[Table 1] x | 1"], status="used")
+        settings = config()
+        settings.openai_api_key = "test"
+        pipeline = SearchPipeline(repo, llm, settings, fulltext=fulltext)
+        first = await pipeline.extract_one(row, Usage(), [])
+        second = await pipeline.extract_one(row, Usage(), [])
+        assert first["extraction_status"] == second["extraction_status"] == "rejected"
+        assert first["extraction_source"] == "full_text" and first["fulltext_status"] == "used"
+        assert llm.extract_calls == 1 and len(fulltext.calls) == 1
+
+    asyncio.run(exercise())
+
+
+def test_full_text_disabled_never_fetches_and_uses_the_abstract():
+    async def exercise():
+        row = paper(pmcid="PMC123")
+        repo = MemoryRepository([row])
+        llm = FakeLLM(extraction={**full_text_extraction(), "extraction_source": "abstract"})
+        fulltext = FakeFullText(lines=["x"], status="used")
+        settings = config(fulltext_enabled=False)
+        settings.openai_api_key = "test"
+        result = await SearchPipeline(repo, llm, settings, fulltext=fulltext).extract_one(
+            row, Usage(), []
+        )
+        assert fulltext.calls == [] and llm.extract_kwargs.get("lines") is None
+        assert result["extraction_source"] == "abstract"
+
+    asyncio.run(exercise())

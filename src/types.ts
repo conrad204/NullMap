@@ -41,6 +41,10 @@ export interface Paper {
   primaryOutcome?: string | null;
   outcomeUnit?: string | null;
   extractionEvidence?: Record<string, string>;
+  /** Where the LLM-extracted numbers were read from; registry rows have neither. */
+  extractionSource?: "abstract" | "full_text" | null;
+  /** PubMed Central ID when the paper is open access there. */
+  pmcid?: string | null;
 }
 export type Recommendation = "pursue" | "pursue_with_changes" | "deprioritize";
 export interface PursuitEstimate {

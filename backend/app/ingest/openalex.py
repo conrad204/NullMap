@@ -2,9 +2,10 @@ import json
 import re
 from typing import Any
 
+from app.fulltext import normalize_pmcid
 from app.ingest.common import NCT_PATTERN, empty_study, integer, pmid
 
-NORMALIZER_VERSION = "openalex-v3-snapshot-metadata"
+NORMALIZER_VERSION = "openalex-v4-pmcid"
 REVIEW_TITLE_RE = re.compile(
     r"\b(?:(?:systematic|scoping|narrative|umbrella|literature|integrative|rapid)\s+reviews?"
     r"|meta[-\s]?analys(?:is|es)"
@@ -96,6 +97,8 @@ def normalize_work(work: dict, *, require_abstract: bool = False) -> dict | None
         "url": ids.get("doi") or work.get("doi") or f"https://openalex.org/{identifier}",
         "year": year, "publication_date": f"{year:04d}-01-01" if year else None,
         "pmids": [paper_pmid] if paper_pmid else [],
+        # PubMed Central ID enables query-time full text; absent for most works.
+        "pmcid": normalize_pmcid(ids.get("pmcid") or work.get("pmcid")),
         "nct_ids": sorted({x.upper() for x in NCT_PATTERN.findall(abstract)}),
         "referenced_works": [str(x).rstrip("/").rsplit("/", 1)[-1]
                              for x in _array(work.get("referenced_works"))],

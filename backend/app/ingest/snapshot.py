@@ -82,7 +82,17 @@ async def load_manifest(location: str, *, client: httpx.AsyncClient | None = Non
     return data
 
 
-def plan_manifest(manifest: dict, *, max_files: int | None = None) -> dict:
+def plan_manifest(
+    manifest: dict, *, max_files: int | None = None, largest_first: bool = False
+) -> dict:
+    """Select manifest parts to scan.
+
+    Parts are listed in update-date order and vary in size by four orders of
+    magnitude, while per-part scan time is dominated by fixed overhead. For an
+    explicitly partial run, ``largest_first`` therefore covers far more of the
+    corpus per unit of time. It never changes which parts exist, only their
+    order, so a full run is unaffected.
+    """
     if max_files is not None and max_files <= 0:
         raise ValueError("max-files must be positive")
     parts = []
@@ -100,16 +110,21 @@ def plan_manifest(manifest: dict, *, max_files: int | None = None) -> dict:
         parts.append({"url": location, "size_bytes": size})
     if not parts:
         raise ValueError("Manifest has no Parquet files")
-    selected = parts[:max_files] if max_files is not None else parts
+    ordered = sorted(parts, key=lambda part: -part["size_bytes"]) if largest_first else parts
+    selected = ordered[:max_files] if max_files is not None else ordered
+    total_bytes = sum(part["size_bytes"] for part in parts)
+    budgeted = sum(part["size_bytes"] for part in selected)
     return {
         "manifest_sha256": fingerprint(manifest),
         "snapshot_date": manifest.get("date"),
         "total_parts": len(parts),
         "selected_parts": len(selected),
-        "physical_bytes_budgeted": sum(p["size_bytes"] for p in selected),
+        "selection_order": "largest_first" if largest_first else "manifest",
+        "physical_bytes_budgeted": budgeted,
+        "selected_bytes_fraction": round(budgeted / total_bytes, 6) if total_bytes else 0.0,
         "all_parts_selected": len(parts) == len(selected),
         "files": selected,
-        "note": "Physical file sizes are a conservative scan budget, not bytes actually transferred. Partitions are update dates, not topics.",
+        "note": "Physical file sizes are a conservative scan budget, not bytes actually transferred. Partitions are update dates, not topics. A partial selection is a subset of update partitions, not a random sample of the corpus.",
     }
 
 
