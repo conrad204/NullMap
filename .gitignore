@@ -22,3 +22,6 @@ artifacts/
 *.pem
 *.key
 .playwright/
+
+# repo guidance kept locally
+CLAUDE.md
