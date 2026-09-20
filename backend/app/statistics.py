@@ -641,10 +641,14 @@ def _pursuit(
         state = "open"
     else:
         state = "favours_effect" if low > 0.5 else "favours_null"
+    # Chance the record's current lean is wrong: twice the smaller tail around even odds.
+    # 1 with no evidence or a perfect split, near 0 once one side dominates.
+    below = float(beta_dist.cdf(0.5, alpha, beta))
     result = {
         "prior": [1.0, 1.0],
         "posterior": [alpha, beta],
         "pEffect": alpha / (alpha + beta),
+        "pOpen": 2 * min(below, 1 - below),
         "ci": [low, high],
         "successes": successes,
         "failures": failures,
@@ -672,6 +676,79 @@ def _pursuit(
                 poolStudyIds=pool["studyIds"],
             )
     return result
+
+
+# Below this chance a new study of the same design is not recommended.
+PURSUE_DEPRIORITIZE = 0.25
+# From here the record is open enough to repeat the design as asked.
+PURSUE_AS_PLANNED = 0.5
+
+
+def _decide(
+    pursuit: dict, planned_se: float | None, margin: float | None, alpha: float | None, drawer: dict
+) -> None:
+    """Turn the posterior into the chance a new study should be run, and a recommendation.
+
+    ``pPursue = pOpen x power``: the chance the record's lean is wrong times the chance the
+    planned design would detect the SESOI if it is real (two-sided test at ``alpha`` with
+    the planned SE). Without a computable design the power factor is left out and said
+    so. A contested record can score high, but the recommendation is then to change the
+    design, since repeating it adds to the disagreement rather than resolving it.
+    """
+    power = None
+    if planned_se is not None and margin is not None and alpha is not None and planned_se > 0:
+        z = -_NORMAL.inv_cdf(alpha / 2)
+        power = (1 - _NORMAL.cdf(z - margin / planned_se)) + _NORMAL.cdf(-z - margin / planned_se)
+    p_pursue = pursuit["pOpen"] * (power if power is not None else 1.0)
+    state = pursuit["state"]
+    if state == "contested":
+        recommendation = "pursue_with_changes"
+    elif p_pursue >= PURSUE_AS_PLANNED:
+        recommendation = "pursue"
+    elif p_pursue >= PURSUE_DEPRIORITIZE:
+        recommendation = "pursue_with_changes"
+    else:
+        recommendation = "deprioritize"
+    reasons = []
+    if state == "unknown":
+        reasons.append(
+            "No read study answered the question either way; a new study would be the first answer."
+        )
+    elif state == "contested":
+        reasons.append(
+            f"Studies disagree ({pursuit['conflict']:.0%} of the evidence weight on the minority "
+            "side); a study that separates the conditions under which the effect appears is worth "
+            "more than another undifferentiated trial."
+        )
+    elif state == "open":
+        reasons.append(
+            f"The record leans one way ({pursuit['pEffect']:.0%} chance of a real effect) but the "
+            "credible interval still spans even odds."
+        )
+    else:
+        side = "a real effect" if state == "favours_effect" else "no effect"
+        reasons.append(
+            f"The record already favours {side}: only a {pursuit['pOpen']:.0%} chance that lean "
+            "is wrong."
+        )
+    if power is not None:
+        reasons.append(
+            f"The planned design has {power:.0%} power to detect the SESOI, so it would answer the "
+            "question if run."
+            if power >= 0.8
+            else f"The planned design has only {power:.0%} power to detect the SESOI; it would likely "
+            "end inconclusive, which lowers the chance it is worth running as planned."
+        )
+    else:
+        reasons.append(
+            "No planned sample size or SESOI margin was usable, so power is not factored in."
+        )
+    if drawer.get("share") and drawer["share"] >= 0.3:
+        reasons.append(
+            f"{drawer['share']:.0%} of eligible completed trials never reported; the record may "
+            "understate null results, so the lean above may be too optimistic."
+        )
+    pursuit.update(power=power, pPursue=p_pursue, recommendation=recommendation, reasons=reasons)
 
 
 def _pool(group: list[tuple[dict, dict, str]], key: tuple) -> dict:
@@ -1022,6 +1099,7 @@ def analyze_studies(
     if factor is not None and (not math.isfinite(factor) or factor <= 0):
         warnings.append("Design variance is outside usable numerical precision.")
         factor = None
+    planned_se = None
     if factor is not None:
         if kind == "SMD":
             assumptions.append(
@@ -1091,6 +1169,19 @@ def analyze_studies(
             )
         elif pools:
             warnings.append("No pooled outcome and effect scale match the planned study.")
+    _decide(
+        pursuit,
+        planned_se,
+        _margin(plan.get("sesoi", 0.2), plan.get("effectType", "SMD")),
+        alpha if factor is not None else None,
+        drawer,
+    )
+    assumptions.append(
+        "The chance you should pursue the study is the chance the record's lean is wrong "
+        "(twice the smaller posterior tail around even odds) times the planned design's power "
+        "to detect the SESOI. It weighs whether a new study would change the answer, not the "
+        "value of the answer; the expected value below carries the supplied values."
+    )
     result["assumptions"] = list(dict.fromkeys(assumptions))
     result["warnings"] = list(dict.fromkeys(warnings))
     return result

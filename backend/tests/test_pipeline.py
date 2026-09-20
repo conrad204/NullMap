@@ -223,6 +223,18 @@ class FakeLLM:
         self.grouping_rows = deepcopy(rows)
         return dict(getattr(self, "groups", {}))
 
+    async def recommend_pico(self, table, usage):
+        self.pico_table = deepcopy(table)
+        if getattr(self, "pico_error", None):
+            raise self.pico_error
+        return SimpleNamespace(
+            changes=[SimpleNamespace(
+                field="population", to="Older adults",
+                model_dump=lambda: {"field": "population", "to": "Older adults", "reason": "Untested"},
+            )],
+            rationale="Adults lean null; older adults were not tested.",
+        )
+
     async def trend(self, table, usage):
         self.trend_table = deepcopy(table)
         if getattr(self, "trend_error", None):
@@ -619,6 +631,53 @@ def test_narration_receives_computed_structured_table_without_abstracts():
     assert table["counts"] == result["bucketCounts"]
     assert table["assurance"] is not None
     assert result["estimate"]["pSuccess"] is not None
+
+
+def test_recommendation_and_pico_follow_the_pursuit_decision_with_rules_fallback():
+    rows = [
+        paper(f"p{i}", effect_type="SMD", estimate=0.02, ci_low=-0.1, ci_high=0.14,
+              outcome_unit="SD", n=200)
+        for i in range(8)
+    ]
+    settings = config(extraction_limit=0)
+    settings.openai_api_key = "test"
+    llm = FakeLLM()
+    result = asyncio.run(
+        SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    pursuit = result["statistics"]["pursuit"]
+    assert pursuit["state"] == "favours_null"
+    assert result["estimate"]["recommendation"] == pursuit["recommendation"] == "deprioritize"
+    assert result["estimate"]["pPursue"] == pursuit["pPursue"]
+    assert "UNTRUSTED_ABSTRACT_CONTENT" not in str(llm.pico_table)
+    assert llm.pico_table["pico"]["population"] == "Adults"
+    recommended = result["recommendedPico"]
+    assert recommended["source"] == "model"
+    assert recommended["pico"]["population"] == "Older adults"
+    assert recommended["pico"]["intervention"] == "Vitamin D"
+    assert recommended["changes"][0]["field"] == "population"
+
+    llm.pico_error = RuntimeError("boom")
+    result = asyncio.run(
+        SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    recommended = result["recommendedPico"]
+    assert recommended["source"] == "rules"
+    assert recommended["pico"]["population"] == "Adults"
+    assert "no effect" in recommended["rationale"]
+    assert any("PICO recommendation" in w for w in result["warnings"])
+
+    no_key = asyncio.run(
+        SearchPipeline(MemoryRepository(), FakeLLM(), config()).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    assert no_key["recommendedPico"]["changes"] == []
+    assert no_key["estimate"]["recommendation"] == "pursue_with_changes"
 
 
 def test_insufficient_numeric_evidence_uses_computed_summary_not_model_interpretation():

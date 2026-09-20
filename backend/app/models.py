@@ -173,6 +173,19 @@ class Overview(BaseModel):
     notes: list[StudyNote]
 
 
+class PicoChange(BaseModel):
+    field: Literal["population", "intervention", "comparator", "outcome"]
+    to: str
+    reason: str
+
+
+class PicoRecommendation(BaseModel):
+    """How the asked PICO should change, given what the record shows; empty when it should not."""
+
+    changes: list[PicoChange]
+    rationale: str
+
+
 class EffectTrend(BaseModel):
     summary: str
     patterns: list[str]

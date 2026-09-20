@@ -727,3 +727,28 @@ def test_pursuit_pool_probabilities_follow_the_predictive_distribution():
     # Two pools on the requested scale would make the choice ambiguous, so neither is used.
     mixed = studies + [study(f"o{i}", outcome="Anxiety", estimate=0.5, low=0.3, high=0.7) for i in range(3)]
     assert analyze_studies(mixed, plan())["pursuit"]["pMeaningful"] is None
+
+
+def test_pursue_chance_is_openness_times_planned_power():
+    empty = analyze_studies([], plan(plannedN=800))["pursuit"]
+    assert empty["pOpen"] == pytest.approx(1.0)
+    assert empty["power"] == pytest.approx(0.8, abs=0.02)
+    assert empty["pPursue"] == pytest.approx(empty["power"])
+    assert empty["recommendation"] == "pursue"
+    underpowered = analyze_studies([], plan(plannedN=200))["pursuit"]
+    assert underpowered["power"] < 0.3
+    assert underpowered["recommendation"] == "pursue_with_changes"
+    assert any("power" in reason for reason in underpowered["reasons"])
+    no_plan = analyze_studies([], plan(plannedN="many"))["pursuit"]
+    assert no_plan["power"] is None and no_plan["pPursue"] == pytest.approx(1.0)
+
+
+def test_pursue_deprioritizes_a_settled_record_and_redirects_a_contested_one():
+    settled = analyze_studies([study(str(i)) for i in range(8)], plan(plannedN=800))["pursuit"]
+    assert settled["pOpen"] < 0.01
+    assert settled["recommendation"] == "deprioritize"
+    studies = [study(f"e{i}", estimate=0.5, low=0.3, high=0.7) for i in range(4)]
+    studies += [study(f"n{i}") for i in range(4)]
+    contested = analyze_studies(studies, plan(plannedN=800))["pursuit"]
+    assert contested["pPursue"] > 0.75
+    assert contested["recommendation"] == "pursue_with_changes"
