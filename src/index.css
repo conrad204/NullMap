@@ -137,6 +137,15 @@
     background: var(--surface-2);
   }
 
+  /** Heading of a top-level results section, read against the rule that separates them. */
+  .section-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
   .field {
     width: 100%;
     border-radius: var(--radius-control);

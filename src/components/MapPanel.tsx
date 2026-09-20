@@ -1,3 +1,4 @@
+import { MapTrifold } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GapMap, MapGap, MapRegion, Verdict } from "../types";
 import { fetchMap } from "../api/client";
@@ -89,10 +90,15 @@ export default function MapPanel({ idea }: { idea: string }) {
 
   return <section>
     <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <h2 className="text-sm font-medium text-ink-2">Where this question sits in the corpus</h2>
-      {state.kind !== "loading" && <button type="button" onClick={() => void load()} className="text-sm text-accent underline-offset-4 hover:underline">{state.kind === "idle" ? "Build the map" : "Rebuild"}</button>}
+      <h2 className="section-label">Where this question sits in the corpus</h2>
+      {state.kind === "ready" && <button type="button" onClick={() => void load()} className="text-sm text-accent underline-offset-4 hover:underline">Rebuild</button>}
     </div>
     <p className="mt-1 max-w-[70ch] text-xs leading-relaxed text-ink-3">A sample of the index is clustered into regions labelled by what happened in them — effects, reported nulls, studies never reported, records nothing could be read from — and this question is placed against them. It describes the index, not the matches above, so it is built only when you ask for it.</p>
+    {(state.kind === "idle" || state.kind === "error") && <button type="button" onClick={() => void load()} className="btn btn-primary mt-4">
+      <MapTrifold size={16} weight="bold" aria-hidden />
+      {state.kind === "idle" ? "Build the map" : "Try again"}
+    </button>}
+    {state.kind === "idle" && <span className="ml-3 text-xs text-ink-3">takes a few seconds</span>}
 
     <div aria-live="polite" className="mt-4">
       {state.kind === "loading" && <p className="text-sm text-ink-2">Clustering the indexed corpus…</p>}

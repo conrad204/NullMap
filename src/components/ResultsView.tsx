@@ -45,7 +45,9 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   const shown = sortPapers(filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict)), sort);
   return (
     <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
-      <div className="flex min-w-0 flex-col gap-10">
+      {/* One rule between every top-level block, including the sections EvidenceDetails returns
+          as a fragment, so the report reads as separate sections rather than one column of text. */}
+      <div className="flex min-w-0 flex-col [&>*+*]:mt-8 [&>*+*]:border-t [&>*+*]:border-line [&>*+*]:pt-8">
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
@@ -65,7 +67,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       {result.recommendedPico && <RecommendedPicoPanel recommended={result.recommendedPico} />}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
       <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
-      <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
+      <section><h2 className="section-label">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
       <MapPanel idea={result.idea} />
       {!!result.yearCounts?.length && <YearBreakdown counts={result.yearCounts} />}
@@ -143,7 +145,7 @@ function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
   const groups = BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) }));
   return <section>
-    <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
+    <h2 className="section-label">What prior work found <span className="font-normal">· {formatCount(classified)} classified matches</span></h2>
     <div role="img" aria-label={groups.map(({ group, total }) => `${total} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
       {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
       {groups.filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className={cx(group.bg, "min-w-1 basis-0 rounded-mark transition-opacity duration-300", filter !== "all" && filter !== group.key && "opacity-25")} />)}
