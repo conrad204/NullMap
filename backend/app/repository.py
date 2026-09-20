@@ -25,6 +25,12 @@ from app.statistics import (
 )
 
 BUCKETS = ("effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported")
+# Direction is a property of an effect, not a bucket: these partition the effect bucket.
+EFFECT_DIRECTIONS = {
+    "favours_intervention": "favoursIntervention",
+    "favours_comparator": "favoursComparator",
+    "unclear": "unclear",
+}
 _CACHE_FIELDS = set(
     (
         "extracted_at extraction_version extraction_status extraction_evidence evidence_span "
@@ -1136,6 +1142,18 @@ class ElasticRepository:
                         },
                     },
                 },
+                "effect_directions": {
+                    "filter": {"term": {"query_bucket": "effect"}},
+                    "aggs": {
+                        "directions": {
+                            "terms": {
+                                "field": "result_direction",
+                                "missing": "unclear",
+                                "size": len(EFFECT_DIRECTIONS),
+                            }
+                        }
+                    },
+                },
                 "spin_candidates": {
                     "filter": {
                         "bool": {
@@ -1157,12 +1175,17 @@ class ElasticRepository:
             counts[bucket] += row["doc_count"]
             if reason:
                 reasons[reason] += row["doc_count"]
+        directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
+        for row in aggs["effect_directions"]["directions"]["buckets"]:
+            # An unrecognized direction is not a fourth answer; it is one nobody stated.
+            directions[EFFECT_DIRECTIONS.get(row["key"], "unclear")] += row["doc_count"]
         registered = aggs["completed"]["doc_count"]
         unreported = aggs["completed"]["missing"]["doc_count"]
         return {
             "total": result["hits"]["total"]["value"],
             "bucketCounts": counts,
             "inconclusiveReasons": reasons,
+            "effectDirections": directions,
             "yearCounts": [
                 {"year": int(b["key_as_string"][:4]), "count": b["doc_count"]}
                 for b in aggs["years"]["buckets"]
