@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  addConcepts, bySign, conceptError, cosineWidth, expression, flipConcept,
-  matchSignals, parseConceptInput, removeConcept, toRequest,
+  addConcepts, addSignedConcepts, bySign, conceptError, cosineWidth, expression, flipConcept,
+  matchSignals, parseConceptInput, parseSignedInput, removeConcept, toRequest,
 } from './concepts.ts';
 
 const build = (positive = [], negative = []) => {
@@ -83,6 +83,23 @@ test('with no negative concepts nothing is contested', () => {
   const signals = matchSignals(match([{ text: 'kidney', sign: 'positive', cosine: 0.1 }]));
   assert.equal(signals.nearestNegative, null);
   assert.equal(signals.contested, false);
+});
+
+test('a typed term carries its own sign, and keeps the fallback without one', () => {
+  assert.deepEqual(parseSignedInput('SGLT2, -diabetes, − obesity, +kidney', 'positive'), [
+    { text: 'SGLT2', sign: 'positive' },
+    { text: 'diabetes', sign: 'negative' },
+    { text: 'obesity', sign: 'negative' },
+    { text: 'kidney', sign: 'positive' },
+  ]);
+  assert.deepEqual(parseSignedInput('dialysis', 'negative'), [{ text: 'dialysis', sign: 'negative' }]);
+  assert.deepEqual(parseSignedInput('-', 'positive'), []);
+});
+
+test('one field fills both sides of the arithmetic', () => {
+  const concepts = addSignedConcepts([], 'kidney disease, −diabetes', 'positive');
+  assert.equal(expression(concepts), 'kidney disease − diabetes');
+  assert.deepEqual(toRequest(concepts).negative, ['diabetes']);
 });
 
 test('bar widths stay inside the track whatever the cosine', () => {
