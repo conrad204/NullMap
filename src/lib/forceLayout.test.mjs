@@ -140,6 +140,21 @@ test('a pinned node stays under the pointer and is let go on release', () => {
   );
 });
 
+test('grabbing a paper wakes the graph, dragging it only keeps it awake', () => {
+  const layout = new ForceLayout();
+  layout.update([point('a', 0, 0), point('b', 1, 0)]);
+  const a = layout.indexOf('a');
+  layout.settle(10, 10_000);
+  layout.pin(a, 3, 3);
+  assert.equal(layout.alpha, layout.options.reheat, 'the grab wakes it fully');
+  layout.settle(10, 10_000);
+  layout.pin(a, 3.2, 3.1);
+  assert.ok(
+    layout.alpha <= layout.options.nudge + 1e-9,
+    `a move within a drag nudges rather than reheats, was ${layout.alpha}`,
+  );
+});
+
 test('nearest finds the node under a point and nothing outside the radius', () => {
   const layout = new ForceLayout();
   layout.update([point('a', 0, 0), point('b', 10, 10)]);
