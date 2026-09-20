@@ -7,8 +7,9 @@ export default function EmptyState() {
       <div>
         <h2 className="text-sm font-medium text-ink-2">What comes back</h2>
         <p className="mt-2 max-w-[58ch] leading-relaxed text-ink-2">
-          Matching studies are sorted into three answers. Counts cover the indexed match set;
-          source evidence and study-planning estimates appear below them.
+          Matching studies are sorted into four answers, with benefit and harm kept apart.
+          Counts cover the indexed match set; source evidence and study-planning estimates
+          appear below them.
         </p>
       </div>
 
@@ -29,7 +30,9 @@ export default function EmptyState() {
 
       <p className="max-w-[58ch] text-sm leading-relaxed text-ink-2">
         Matches that were too imprecise to call, or that could not be read, are counted beside
-        the answers as inconclusive, each with its reason. That is not a finding.
+        the answers as inconclusive, each with its reason. That is not a finding. A study that
+        found a difference without saying which arm it favoured is counted there too, rather
+        than under benefit or harm.
       </p>
 
       <p className="max-w-[58ch] text-sm leading-relaxed text-ink-3">

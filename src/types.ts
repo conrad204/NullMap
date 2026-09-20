@@ -177,6 +177,12 @@ export interface EffectTrend {
   patterns: string[];
   scope: string;
 }
+/** Which arm the effects favour, over the full match set, unlike EffectTrend's read studies. */
+export interface EffectDirections {
+  favoursIntervention: number;
+  favoursComparator: number;
+  unclear: number;
+}
 export type PursuitState = "unknown" | "open" | "contested" | "favours_effect" | "favours_null";
 /** Beta(1, 1) prior updated by tier-weighted verdicts: the chance a real effect exists, as the record stands. */
 export interface Pursuit {
@@ -243,6 +249,8 @@ export interface SearchResult {
   bucketCounts?: Record<Verdict, number>;
   /** Why the inconclusive matches are inconclusive, over the same full match set. */
   inconclusiveReasons?: Partial<Record<InconclusiveReason, number>> | null;
+  /** Splits bucketCounts.effect by direction over the same match set; the three sum to it. */
+  effectDirections?: EffectDirections | null;
   countScope?: string;
   /** Null unless a bound was set: a result must never look filtered when it is not. */
   filters?: AppliedFilters | null;
