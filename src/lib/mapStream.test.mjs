@@ -88,3 +88,42 @@ test("the question's place is kept across states that do not resend it", () => {
   assert.deepEqual(advanceMap(placed, progress({})).placement, { x: 0.4, y: -0.2 });
   assert.equal(advanceMap(null, progress({})).placement, null);
 });
+
+test('edges accumulate like points and index the cumulative list', () => {
+  const first = advanceMap(null, progress({ points: [point('a', 0), point('b', 0)], pointRegions: [0, 0], edges: [[0, 1, 0.91]] }));
+  const second = advanceMap(first, progress({ points: [point('c', 0)], pointRegions: [0, 0, 0], edges: [[1, 2, 0.85]] }));
+  assert.deepEqual(second.edges, [[0, 1, 0.91], [1, 2, 0.85]]);
+  const third = advanceMap(second, progress({ pointRegions: [0, 0, 0] }));
+  assert.deepEqual(third.edges, second.edges, 'a state without edges keeps the ones already sent');
+});
+
+test('a neighborhood map says whose neighborhood it is, never that it is the index or a sample', () => {
+  const coverage = {
+    clustered: 800, corpus: 2128219, regions: 20, drawn: 800, complete: true,
+    scope: 'neighborhood', neighborhood: 800,
+  };
+  const done = coverageLine(coverage);
+  assert.equal(
+    done,
+    'The 800 studies nearest your question of 2,128,219 in the index, in 20 regions. This is the neighborhood of the question, not the whole index.',
+  );
+  assert.doesNotMatch(done, /NaN|sample|%/);
+  assert.equal(normalizeCoverage(coverage).complete, true, 'a neighborhood is complete without covering the corpus');
+
+  const building = coverageLine({ ...coverage, complete: false, regions: 12 }, 'clustering');
+  assert.match(building, /The 800 studies nearest your question/);
+  assert.match(building, /12 regions settling/);
+  assert.match(building, /not the whole index/);
+
+  const short = coverageLine({ ...coverage, clustered: 640, drawn: 640 });
+  assert.match(short, /The 640 studies nearest your question \(asked for 800\)/);
+});
+
+test("a neighborhood's own not-the-index warning is not repeated under its coverage line", () => {
+  const coverage = { clustered: 800, corpus: 2128219, regions: 20, drawn: 800, complete: true, scope: 'neighborhood' };
+  const warnings = [
+    'This map is the 800 embedded studies nearest your question, of 2128219 in the index; it is not the whole index.',
+    'Embeddings are disabled, so the idea could not be placed.',
+  ];
+  assert.deepEqual(mapWarnings(warnings, coverage), [warnings[1]]);
+});

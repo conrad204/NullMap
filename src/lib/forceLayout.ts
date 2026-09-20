@@ -1,14 +1,15 @@
 /**
  * A force-directed layout for the corpus map, in the manner of Obsidian's graph view.
  *
- * Every drawn study and every region center is a node. Nodes repel one another
- * (a Barnes-Hut approximation, so a map of thousands of points costs n log n per
- * tick rather than n²), a collision force keeps any two from overlapping at the
- * base zoom regardless of how densely the corpus packs a corner of the plane, a
- * weak spring ties each study to the region it currently belongs to, and a spring
- * to each node's own projected coordinates keeps the picture semantically the
- * picture the projection found. The projection seeds the layout; the forces
- * only relax the crowding, never rearrange the meaning.
+ * Every drawn study is a node and nothing else is. Nodes all repel one another
+ * alike (a Barnes-Hut approximation, so a map of thousands of points costs
+ * n log n per tick rather than n²), a collision force keeps any two from
+ * overlapping at the base zoom regardless of how densely the corpus packs a
+ * corner of the plane, and a spring joins each pair of studies whose embeddings
+ * agree closely, pulling harder the closer they agree. Clusters are whatever
+ * those springs and the repulsion settle into; none is drawn in advance. A weak
+ * spring to each node's own projected coordinates keeps the picture roughly
+ * where the projection put it, so the layout starts meaningful and stays so.
  *
  * Positions live in the plane's own units. Sizes that mean something on screen
  * (a mark's radius, the reach of the repulsion) are given in pixels and converted
@@ -17,47 +18,58 @@
  * Dependency-free on purpose: the module is imported by a node:test file.
  */
 
-export type NodeKind = "point" | "region";
-
 export interface LayoutInput {
   id: string;
   /** Projected coordinates: the position this node is anchored to. */
   x: number;
   y: number;
-  /** For a study, the id of the region it belongs to; for a region, its own id. */
-  region: number;
-  kind: NodeKind;
 }
+
+/** A spring between two nodes, by id, with the cosine similarity that justifies it. */
+export type LayoutLink = readonly [source: string, target: string, cosine: number];
 
 export interface LayoutOptions {
   /** Alpha is raised at least this far when nodes arrive, so the graph visibly settles them in. */
   reheat: number;
-  /** Alpha is raised at least this far when only anchors moved, as they do on every clustering pass. */
+  /** Alpha is raised at least this far when only anchors or links changed. */
   nudge: number;
   alphaDecay: number;
   alphaMin: number;
   velocityDecay: number;
-  /** Repulsion between two studies, in px²; regions repel `regionWeight` times as hard. */
+  /** Repulsion between two studies, in px²; the same for every node. */
   repulsion: number;
-  regionWeight: number;
   /** Repulsion is not felt beyond this many pixels; keeps the field local, like Obsidian's. */
   repulsionReach: number;
-  /** Drawn radius of a study and of a region mark at the base zoom, in pixels. */
+  /** Drawn radius at the base zoom, in pixels, of a study with no links and of the best-connected one. */
   pointRadius: number;
-  regionRadius: number;
+  maxRadius: number;
+  /** Links at and beyond which a node is drawn at `maxRadius`. */
+  fullDegree: number;
   /** Extra clearance kept between marks, in pixels. */
   collisionPadding: number;
   collisionStrength: number;
   /** Pull toward the node's own projected coordinates. */
   anchor: number;
-  /** Fraction of the way a region node moves toward its reported center each tick; the clustering moves it. */
-  regionAnchor: number;
-  /** Pull of a study toward its region's node. */
+  /** Spring strength of a link whose cosine is 1; weaker links scale down from it. */
   link: number;
+  /** Cosine at which a link's pull reaches zero: the edge floor the server draws at. */
+  linkFloor: number;
+  /** Rest length of a link, in pixels, for a cosine at the floor; tighter as the cosine climbs. */
+  linkDistance: number;
   /** Pull of the whole graph's centroid toward the centroid of the projection. */
   center: number;
   /** Barnes-Hut accuracy: a cell is treated as one body when width / distance < theta. */
   theta: number;
+}
+
+/**
+ * A node's drawn radius in pixels: its size says how many papers it is linked
+ * to, rising with the square root of the count so a hub is visibly a hub
+ * without swallowing its neighbors.
+ */
+export function nodeRadius(degree: number, options: LayoutOptions = DEFAULT_OPTIONS): number {
+  const share = Math.min(1, Math.sqrt(Math.max(0, degree) / options.fullDegree));
+  return options.pointRadius + (options.maxRadius - options.pointRadius) * share;
 }
 
 export const DEFAULT_OPTIONS: LayoutOptions = {
@@ -66,22 +78,21 @@ export const DEFAULT_OPTIONS: LayoutOptions = {
   alphaDecay: 0.028,
   alphaMin: 0.003,
   velocityDecay: 0.4,
-  repulsion: 6,
-  regionWeight: 12,
-  repulsionReach: 90,
-  pointRadius: 1.3,
-  regionRadius: 4.5,
-  collisionPadding: 1.4,
+  repulsion: 9,
+  repulsionReach: 120,
+  pointRadius: 2.2,
+  maxRadius: 6.5,
+  fullDegree: 12,
+  collisionPadding: 1.6,
   collisionStrength: 0.8,
-  anchor: 0.035,
-  regionAnchor: 0.2,
-  link: 0.012,
+  anchor: 0.012,
+  link: 0.5,
+  linkFloor: 0.78,
+  linkDistance: 26,
   center: 0.02,
   theta: 0.9,
 };
 
-const KIND_POINT = 0;
-const KIND_REGION = 1;
 const MAX_DEPTH = 24;
 
 /** A small deterministic jiggle, so coincident nodes separate the same way every run. */
@@ -115,14 +126,21 @@ export class ForceLayout {
   private homeY = new Float64Array(this.capacity);
   private fixedX = new Float64Array(this.capacity).fill(NaN);
   private fixedY = new Float64Array(this.capacity).fill(NaN);
-  private region = new Int32Array(this.capacity);
-  private kind = new Uint8Array(this.capacity);
   private radius = new Float64Array(this.capacity);
   private strength = new Float64Array(this.capacity);
   private chain = new Int32Array(this.capacity);
   private ids: string[] = [];
   private index = new Map<string, number>();
-  private regionIndex = new Map<number, number>();
+
+  // Links, by id so they survive nodes being dropped, and resolved to indexes
+  // only when the set of nodes has changed since the last tick.
+  private links: LayoutLink[] = [];
+  private linkKeys = new Set<string>();
+  private linkI = new Int32Array(0);
+  private linkJ = new Int32Array(0);
+  private linkW = new Float64Array(0);
+  private degree = new Int32Array(this.capacity);
+  private linksStale = true;
 
   // Quadtree, rebuilt every tick. Cells are squares; a leaf holds a chain of
   // coincident nodes, an internal cell always holds four children.
@@ -169,17 +187,25 @@ export class ForceLayout {
     return this.y[i];
   }
 
-  kindAt(i: number): NodeKind {
-    return this.kind[i] === KIND_REGION ? "region" : "point";
+  get linkCount(): number {
+    return this.links.length;
   }
 
-  regionAt(i: number): number {
-    return this.region[i];
+  /** How many links this node has, to nodes the layout holds. */
+  degreeAt(i: number): number {
+    this.resolveLinks();
+    return this.degree[i];
   }
 
-  /** Index of the node standing for a region, or -1 while the clustering has not reported it. */
-  regionNode(region: number): number {
-    return this.regionIndex.get(region) ?? -1;
+  /** The node's drawn radius at the base zoom, in pixels. */
+  radiusAt(i: number): number {
+    return nodeRadius(this.degreeAt(i), this.options);
+  }
+
+  /** Every link, as `[i, j, cosine]` over current node indexes; pairs whose ends are gone are skipped. */
+  eachLink(visit: (i: number, j: number, cosine: number) => void): void {
+    this.resolveLinks();
+    for (let l = 0; l < this.linkI.length; l += 1) visit(this.linkI[l], this.linkJ[l], this.linkW[l]);
   }
 
   /**
@@ -187,7 +213,7 @@ export class ForceLayout {
    *
    * Nodes it has never seen enter at their projected coordinates, which is the
    * only place there is any reason to put them. Nodes it has seen keep the
-   * position the forces gave them and only have their anchor and region updated.
+   * position the forces gave them and only have their anchor updated.
    * Nothing is removed here; see `retain`.
    */
   update(inputs: readonly LayoutInput[]): void {
@@ -197,18 +223,43 @@ export class ForceLayout {
       const existing = this.index.get(input.id);
       if (existing !== undefined) {
         if (this.homeX[existing] !== input.x || this.homeY[existing] !== input.y) moved = true;
-        if (this.region[existing] !== input.region) moved = true;
         this.homeX[existing] = input.x;
         this.homeY[existing] = input.y;
-        this.region[existing] = input.region;
         continue;
       }
-      const i = this.append(input);
-      if (input.kind === "region") this.regionIndex.set(input.region, i);
+      this.append(input);
       arrived += 1;
     }
-    if (arrived) this.alpha = Math.max(this.alpha, this.options.reheat);
-    else if (moved) this.alpha = Math.max(this.alpha, this.options.nudge);
+    if (arrived) {
+      this.linksStale = true;
+      this.alpha = Math.max(this.alpha, this.options.reheat);
+    } else if (moved) this.alpha = Math.max(this.alpha, this.options.nudge);
+  }
+
+  /**
+   * Adds springs between pairs of studies. A pair already linked keeps its
+   * first cosine; a link naming a node the layout has not seen waits for it.
+   */
+  link(links: readonly LayoutLink[]): void {
+    let added = 0;
+    for (const link of links) {
+      const key = link[0] < link[1] ? `${link[0]}\u0000${link[1]}` : `${link[1]}\u0000${link[0]}`;
+      if (this.linkKeys.has(key)) continue;
+      this.linkKeys.add(key);
+      this.links.push(link);
+      added += 1;
+    }
+    if (!added) return;
+    this.linksStale = true;
+    this.alpha = Math.max(this.alpha, this.options.nudge);
+  }
+
+  /** Forgets every link; the nodes stay. */
+  unlink(): void {
+    if (!this.links.length) return;
+    this.links = [];
+    this.linkKeys.clear();
+    this.linksStale = true;
   }
 
   /** Drops every node whose id is not in `ids`, keeping the survivors where they are. */
@@ -225,8 +276,6 @@ export class ForceLayout {
         this.homeY[write] = this.homeY[read];
         this.fixedX[write] = this.fixedX[read];
         this.fixedY[write] = this.fixedY[read];
-        this.region[write] = this.region[read];
-        this.kind[write] = this.kind[read];
         this.ids[write] = this.ids[read];
       }
       write += 1;
@@ -235,11 +284,8 @@ export class ForceLayout {
     this.ids.length = write;
     this.count = write;
     this.index.clear();
-    this.regionIndex.clear();
-    for (let i = 0; i < write; i += 1) {
-      this.index.set(this.ids[i], i);
-      if (this.kind[i] === KIND_REGION) this.regionIndex.set(this.region[i], i);
-    }
+    for (let i = 0; i < write; i += 1) this.index.set(this.ids[i], i);
+    this.linksStale = true;
     this.alpha = Math.max(this.alpha, this.options.nudge);
   }
 
@@ -295,15 +341,17 @@ export class ForceLayout {
     const slow = this.tickMs > 9;
     const theta = slow ? Math.min(1.6, options.theta * 1.5) : options.theta;
 
+    this.resolveLinks();
+    const strength = -options.repulsion * unit * unit;
     for (let i = 0; i < this.count; i += 1) {
-      const regionNode = this.kind[i] === KIND_REGION;
-      this.radius[i] = ((regionNode ? options.regionRadius : options.pointRadius) + options.collisionPadding) * unit;
-      this.strength[i] = -options.repulsion * (regionNode ? options.regionWeight : 1) * unit * unit;
+      this.radius[i] = (nodeRadius(this.degree[i], options) + options.collisionPadding) * unit;
+      this.strength[i] = strength;
     }
 
     this.buildQuadtree();
     this.manyBody(alpha, theta, unit);
     if (!slow || this.ticks % 2 === 0) this.collide();
+    this.attract(alpha, unit);
     this.springs(alpha);
 
     const decay = 1 - options.velocityDecay;
@@ -350,9 +398,8 @@ export class ForceLayout {
       this.homeY = grow(this.homeY, this.capacity);
       this.fixedX = grow(this.fixedX, this.capacity).fill(NaN, this.count);
       this.fixedY = grow(this.fixedY, this.capacity).fill(NaN, this.count);
-      this.region = grow(this.region, this.capacity);
-      this.kind = grow(this.kind, this.capacity);
       this.radius = grow(this.radius, this.capacity);
+      this.degree = grow(this.degree, this.capacity);
       this.strength = grow(this.strength, this.capacity);
       this.chain = grow(this.chain, this.capacity);
     }
@@ -366,8 +413,6 @@ export class ForceLayout {
     this.homeY[i] = input.y;
     this.fixedX[i] = NaN;
     this.fixedY[i] = NaN;
-    this.region[i] = input.region;
-    this.kind[i] = input.kind === "region" ? KIND_REGION : KIND_POINT;
     this.ids[i] = input.id;
     this.index.set(input.id, i);
     return i;
@@ -614,28 +659,69 @@ export class ForceLayout {
     }
   }
 
+  private resolveLinks(): void {
+    if (!this.linksStale) return;
+    this.linksStale = false;
+    const i: number[] = [];
+    const j: number[] = [];
+    const w: number[] = [];
+    this.degree.fill(0);
+    for (const [source, target, cosine] of this.links) {
+      const a = this.index.get(source);
+      const b = this.index.get(target);
+      if (a === undefined || b === undefined || a === b) continue;
+      i.push(a);
+      j.push(b);
+      w.push(cosine);
+      this.degree[a] += 1;
+      this.degree[b] += 1;
+    }
+    this.linkI = Int32Array.from(i);
+    this.linkJ = Int32Array.from(j);
+    this.linkW = Float64Array.from(w);
+  }
+
+  /**
+   * The link springs. A link's pull grows linearly with how far its cosine
+   * stands above the floor, and its rest length shrinks the same way, so two
+   * near-duplicates sit almost on top of each other while a pair that barely
+   * cleared the floor is held loosely at arm's length.
+   */
+  private attract(alpha: number, unit: number): void {
+    this.resolveLinks();
+    const { link, linkFloor, linkDistance } = this.options;
+    const { x, y, vx, vy, linkI, linkJ, linkW } = this;
+    const span = Math.max(1 - linkFloor, 1e-6);
+    for (let l = 0; l < linkI.length; l += 1) {
+      const i = linkI[l];
+      const j = linkJ[l];
+      const weight = Math.min(1, Math.max(0, (linkW[l] - linkFloor) / span));
+      if (!weight) continue;
+      const rest = linkDistance * (1 - 0.7 * weight) * unit;
+      let dx = x[j] + vx[j] - x[i] - vx[i];
+      let dy = y[j] + vy[j] - y[i] - vy[i];
+      if (dx === 0) dx = this.jiggle();
+      if (dy === 0) dy = this.jiggle();
+      const length = Math.sqrt(dx * dx + dy * dy);
+      const pull = ((length - rest) / length) * alpha * link * weight;
+      dx *= pull;
+      dy *= pull;
+      vx[j] -= dx * 0.5;
+      vy[j] -= dy * 0.5;
+      vx[i] += dx * 0.5;
+      vy[i] += dy * 0.5;
+    }
+  }
+
   private springs(alpha: number): void {
-    const { anchor, regionAnchor, link, center } = this.options;
+    const { anchor, center } = this.options;
     let sumX = 0;
     let sumY = 0;
     let homeSumX = 0;
     let homeSumY = 0;
     for (let i = 0; i < this.count; i += 1) {
-      const regionNode = this.kind[i] === KIND_REGION;
-      if (regionNode) {
-        // A region mark is the clustering's own report of where the region is, so
-        // it eases to that report instead of negotiating with the field.
-        this.x[i] += (this.homeX[i] - this.x[i]) * regionAnchor;
-        this.y[i] += (this.homeY[i] - this.y[i]) * regionAnchor;
-      } else {
-        this.vx[i] += (this.homeX[i] - this.x[i]) * anchor * alpha;
-        this.vy[i] += (this.homeY[i] - this.y[i]) * anchor * alpha;
-        const home = this.regionIndex.get(this.region[i]);
-        if (home !== undefined) {
-          this.vx[i] += (this.x[home] - this.x[i]) * link * alpha;
-          this.vy[i] += (this.y[home] - this.y[i]) * link * alpha;
-        }
-      }
+      this.vx[i] += (this.homeX[i] - this.x[i]) * anchor * alpha;
+      this.vy[i] += (this.homeY[i] - this.y[i]) * anchor * alpha;
       sumX += this.x[i];
       sumY += this.y[i];
       homeSumX += this.homeX[i];

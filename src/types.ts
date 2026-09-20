@@ -376,6 +376,12 @@ export interface MapCalibrationRow {
   laterNullShare: number | null;
 }
 /**
+ * A similarity edge between two drawn studies: `[i, j, cosine]`, with `i` and
+ * `j` positions in the cumulative point list and `i < j`. Only pairs above the
+ * server's cosine floor exist, each study keeping just its nearest few.
+ */
+export type MapEdge = [number, number, number];
+/**
  * What the map in hand actually describes. `clustered` of `corpus` embedded
  * studies shaped the regions, `drawn` of those are painted, and `complete` is
  * false while the build is still running — a partial map is never a whole one.
@@ -388,6 +394,10 @@ export interface MapCoverage {
   complete: boolean;
   /** How much of the corpus this build will read; present only while streaming. */
   target?: number;
+  /** `neighborhood` when the map is the studies nearest one question rather than the corpus. */
+  scope?: "neighborhood" | "corpus";
+  /** How many nearest studies a neighborhood map asked for. */
+  neighborhood?: number;
 }
 /** One real intermediate state of a build in progress, never an interpolation. */
 export interface MapProgress {
@@ -397,6 +407,8 @@ export interface MapProgress {
   coverage: MapCoverage;
   /** Points the stream has not sent before. */
   points: MapPoint[];
+  /** Edges the stream has not sent before, indexed over every point sent so far. */
+  edges?: MapEdge[];
   /** Region per drawn point, in the order the points arrived; membership moves as centroids do. */
   pointRegions: number[];
   regions: { id: number; size: number; x: number; y: number }[];
@@ -409,6 +421,7 @@ export interface GapMap {
   regions: MapRegion[];
   gaps: MapGap[];
   points: MapPoint[];
+  edges?: MapEdge[];
   placement: MapPlacement | null;
   calibration: {
     version: string;
