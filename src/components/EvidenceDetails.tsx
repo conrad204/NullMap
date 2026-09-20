@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { EvidencePool, Paper, QueryCosts, SearchResult } from "../types";
 import { formatCount, percent, signed } from "../lib/format";
 import { effectForPool } from "../lib/effects";
@@ -31,7 +32,7 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
     </section>}
     {!!result.yearCounts?.length && <details className="text-sm">
       <summary className="cursor-pointer font-medium text-ink-2">Matching studies by year</summary>
-      <div className="mt-3 grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-5">{[...result.yearCounts].sort((a, b) => a.year - b.year).map(({ year, count }) => <div key={year} className="flex justify-between gap-2 border-b border-line pb-1 text-xs"><span className="text-ink-3">{year}</span><span className="font-mono text-ink">{formatCount(count)}</span></div>)}</div>
+      <YearHistogram counts={result.yearCounts} />
     </details>}
     {result.costs && <Costs costs={result.costs} />}
   </>;
@@ -100,6 +101,51 @@ function Funnel({ studies, pooled }: { studies: { estimate: number; se: number }
     <text x="0" y={y(maxSe) + 4} fill="currentColor" fontSize="11">SE {maxSe.toFixed(2)}</text>
     <text x={x(pooled)} y="145" textAnchor="middle" fill="currentColor" fontSize="11">pooled {signed(pooled, 2)}</text>
   </svg>;
+}
+const YEAR_TICK_STEPS = [1, 2, 5, 10, 20, 50, 100];
+function YearHistogram({ counts }: { counts: { year: number; count: number }[] }) {
+  const [active, setActive] = useState<number | null>(null);
+  const byYear = new Map(counts.map(({ year, count }) => [year, count]));
+  const first = Math.min(...byYear.keys());
+  const last = Math.max(...byYear.keys());
+  // Years the index has nothing for are drawn as empty slots, so the time axis stays continuous.
+  const years = Array.from({ length: last - first + 1 }, (_, index) => first + index);
+  const max = Math.max(...byYear.values(), 1);
+  // A peak is named only when one year holds it alone.
+  const peaks = counts.filter((row) => row.count === max);
+  const peak = peaks.length === 1 ? peaks[0] : null;
+  const total = counts.reduce((sum, row) => sum + row.count, 0);
+  const left = 46, right = 540, top = 14, base = 120;
+  const slot = (right - left) / years.length;
+  const width = Math.min(Math.max(slot - 2, 1), 28);
+  const x = (year: number) => left + (year - first) * slot;
+  const step = YEAR_TICK_STEPS.find((size) => size * slot >= 44) ?? 100;
+  const ticks = years.filter((year) => year === first || year === last || (year % step === 0 && x(year) - x(first) >= 40 && x(last) - x(year) >= 40));
+  const studies = (count: number) => `${formatCount(count)} ${count === 1 ? "study" : "studies"}`;
+  return <div className="mt-3">
+    <p className="font-mono text-xs text-ink" aria-hidden>{active === null ? <>{studies(total)} · {first === last ? first : `${first}–${last}`}{peak && years.length > 1 && <span className="font-sans text-ink-3"> · most in {peak.year} ({formatCount(peak.count)})</span>}</> : <>{active} · {studies(byYear.get(active) ?? 0)}</>}</p>
+    <svg viewBox="0 0 540 140" role="img" aria-label={`Histogram of ${studies(total)} by year, ${first} to ${last}.${peak ? ` Most in ${peak.year}, with ${studies(peak.count)}.` : ""}`} className="mt-2 w-full text-ink-3" onMouseLeave={() => setActive(null)}>
+      <line x1={left} x2={right} y1={top} y2={top} stroke="var(--line)" strokeDasharray="3 3" />
+      <text x={left - 6} y={top + 4} textAnchor="end" fill="currentColor" fontSize="11">{formatCount(max)}</text>
+      <text x={left - 6} y={base + 4} textAnchor="end" fill="currentColor" fontSize="11">0</text>
+      {years.map((year) => {
+        const count = byYear.get(year) ?? 0;
+        const height = count ? Math.max((count / max) * (base - top), 2) : 0;
+        const r = Math.min(4, width / 2, height);
+        const x0 = x(year) + (slot - width) / 2;
+        return <g key={year} onMouseEnter={() => setActive(year)}>
+          {count > 0 && <path d={`M${x0} ${base}V${base - height + r}q0 ${-r} ${r} ${-r}h${width - 2 * r}q${r} 0 ${r} ${r}V${base}z`} fill="var(--accent)" opacity={active === null || active === year ? 1 : 0.4} />}
+          <rect x={x(year)} y={top} width={slot} height={base - top} fill="transparent" />
+        </g>;
+      })}
+      <line x1={left} x2={right} y1={base} y2={base} stroke="var(--line-strong)" />
+      {ticks.map((year) => <text key={year} x={x(year) + slot / 2} y="136" textAnchor={slot >= 30 ? "middle" : year === first ? "start" : year === last ? "end" : "middle"} dx={slot >= 30 ? 0 : year === first ? -slot / 2 : year === last ? slot / 2 : 0} fill="currentColor" fontSize="11">{year}</text>)}
+    </svg>
+    <details className="mt-2 text-xs">
+      <summary className="cursor-pointer text-ink-3">Show as table</summary>
+      <div className="mt-2 grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-5">{[...counts].sort((a, b) => a.year - b.year).map(({ year, count }) => <div key={year} className="flex justify-between gap-2 border-b border-line pb-1"><span className="text-ink-3">{year}</span><span className="font-mono text-ink">{formatCount(count)}</span></div>)}</div>
+    </details>
+  </div>;
 }
 function usd(value: number) { return `$${value.toFixed(value < 0.01 ? 5 : 3)}`; }
 function Costs({ costs }: { costs: QueryCosts }) {

@@ -5,6 +5,7 @@ import type { EffectTrend, InconclusiveReason, Paper, SearchResult, Source, Verd
 import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
+import { SORT_OPTIONS, sortPapers, type SortKey } from "../lib/sort";
 import EvidenceDetails from "./EvidenceDetails";
 
 type Filter = BarGroupKey | "inconclusive" | "all";
@@ -27,6 +28,7 @@ function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, numbe
 
 export default function ResultsView({ result }: { result: SearchResult }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<SortKey>("answer");
   // An API that predates a bucket omits its key; a missing count is zero, never NaN.
   const counts = { ...countByVerdict([]), ...(result.bucketCounts ?? countByVerdict(result.papers)) };
   // Without a server breakdown (mock data, older API), count the reasons on the displayed studies.
@@ -38,7 +40,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
   // Stated beside the active filters, not in the warnings list: a reader of filtered
   // results has to be told why unpublished trial records survived a citation bound.
   const exemption = registryExemptionNotice(result.filters, result.papers);
-  const shown = filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict));
+  const shown = sortPapers(filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict)), sort);
   return (
     <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
       <div className="flex min-w-0 flex-col gap-10">
@@ -64,7 +66,7 @@ export default function ResultsView({ result }: { result: SearchResult }) {
       <EvidenceDetails result={result} />
       </div>
       <aside className="min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
-        <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
+        <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} sort={sort} onSort={setSort} />
       </aside>
     </div>
   );
@@ -144,9 +146,14 @@ function InconclusiveNote({ count, reasons, active, onToggle }: { count: number;
     </div>)}</dl>
   </div>;
 }
-function PaperList({ papers, allDisplayed, filter, onClear }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void }) {
+function PaperList({ papers, allDisplayed, filter, onClear, sort, onSort }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void; sort: SortKey; onSort: (sort: SortKey) => void }) {
+  const inconclusive = papers.filter((paper) => paper.verdict === "inconclusive").length;
   return <section>
     <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={onClear} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
+    {papers.length > 1 && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+      <label className="flex items-center gap-2">Sort by<select value={sort} onChange={(event) => onSort(event.target.value as SortKey)} className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong">{SORT_OPTIONS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}</select></label>
+      {inconclusive > 0 && inconclusive < papers.length && <span>Inconclusive studies are listed last in every order, because they are not findings.</span>}
+    </div>}
     {papers.length === 0 ? <p className="mt-4 text-sm leading-relaxed text-ink-2">{filter === "all" ? "No studies were returned for this question. Missing evidence cannot establish a null effect." : "No studies from this bucket are on the displayed page. Headline counts may include other matching records."}</p> : <ol className="mt-2">{papers.map((paper) => <PaperRow key={paper.id} paper={paper} />)}</ol>}
   </section>;
 }
