@@ -67,10 +67,39 @@ function ForestPlot({ pool, papers, sesoi }: { pool: EvidencePool; papers: Paper
       {[low, ...(low !== 0 && high !== 0 ? [0] : []), high].filter((value, index, values) => values.indexOf(value) === index).map((tick) => <text key={tick} x={x(tick)} y={height - 4} textAnchor="middle" fill="currentColor" fontSize="11">{tick.toFixed(2)}</text>)}
     </svg>
     <p className="mt-1 font-mono text-xs text-ink">μ = {signed(pool.estimate, 3)} · 95% CI [{pool.ci[0].toFixed(3)}, {pool.ci[1].toFixed(3)}] · SE {pool.se.toFixed(3)} · τ² {pool.tau2.toFixed(4)}</p>
+    <PublicationBias pool={pool} studies={studies.length === pool.k ? studies.map(({ effect }) => ({ estimate: effect.value, se: (effect.ci![1] - effect.ci![0]) / (2 * 1.959964) })) : []} />
     {studies.length < pool.k && <p className="mt-1 text-xs text-ink-3">{studies.length} of {pool.k} pooled studies have compatible 95% intervals on this displayed page.</p>}
     {sesoi !== undefined && <p className="mt-1 text-xs text-ink-3">Shaded area: ±SESOI. Horizontal lines show 95% confidence intervals.</p>}
     {studies.length > 0 && <details className="mt-2 text-xs"><summary className="cursor-pointer text-ink-3">Identify plotted studies</summary><ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-2">{studies.map(({ paper }) => <li key={paper.id}>{paper.title}</li>)}</ol></details>}
   </div>;
+}
+function PublicationBias({ pool, studies }: { pool: EvidencePool; studies: { estimate: number; se: number }[] }) {
+  const egger = pool.egger;
+  if (!egger) return <p className="mt-2 text-xs leading-relaxed text-ink-3">Funnel asymmetry was not tested: Egger's regression needs at least 10 pooled studies of differing precision, and this pool has {pool.k}. A missing test is not evidence that reporting is unbiased.</p>;
+  return <div className="mt-3">
+    <h4 className="text-xs font-medium text-ink">Publication bias · Egger's test</h4>
+    <p className="mt-1 font-mono text-xs text-ink">intercept {signed(egger.intercept, 2)} · 95% CI [{egger.ci[0].toFixed(2)}, {egger.ci[1].toFixed(2)}] · t({egger.df}) = {egger.t.toFixed(2)} · p = {egger.pValue < 0.001 ? "<0.001" : egger.pValue.toFixed(3)}</p>
+    <Funnel studies={studies} pooled={pool.estimate} />
+    <p className="mt-1 text-xs leading-relaxed text-ink-3">{egger.asymmetric
+      ? `The funnel is asymmetric at p < ${egger.alpha}: smaller studies report systematically different effects, so the pooled estimate may reflect selective reporting.`
+      : `No funnel asymmetry was detected at p < ${egger.alpha}. This test is underpowered, so it cannot establish that nothing is missing.`}{" "}Asymmetry also arises from heterogeneity, study quality and chance; no estimate here is adjusted for it.</p>
+  </div>;
+}
+function Funnel({ studies, pooled }: { studies: { estimate: number; se: number }[]; pooled: number }) {
+  const maxSe = Math.max(...studies.map((row) => row.se));
+  if (!studies.length || !(maxSe > 0)) return null;
+  const half = Math.max(...studies.map((row) => Math.abs(row.estimate - pooled)), 1.959964 * maxSe) * 1.15;
+  const x = (value: number) => 75 + ((value - pooled + half) / (2 * half)) * 375;
+  const y = (se: number) => 10 + (se / maxSe) * 110;
+  return <svg viewBox="0 0 540 150" role="img" aria-label={`Funnel plot: ${studies.length} studies plotted by effect and standard error around the pooled estimate ${pooled.toFixed(3)}.`} className="mt-2 w-full text-ink-2">
+    <line x1={x(pooled)} x2={x(pooled)} y1={y(0)} y2={y(maxSe)} stroke="var(--accent)" strokeWidth="1.5" />
+    <line x1={x(pooled)} x2={x(pooled - 1.959964 * maxSe)} y1={y(0)} y2={y(maxSe)} stroke="var(--ink-3)" strokeDasharray="3 3" />
+    <line x1={x(pooled)} x2={x(pooled + 1.959964 * maxSe)} y1={y(0)} y2={y(maxSe)} stroke="var(--ink-3)" strokeDasharray="3 3" />
+    {studies.map((row, index) => <circle key={index} cx={x(row.estimate)} cy={y(row.se)} r="3.5" fill="var(--ink)" opacity="0.75"><title>{signed(row.estimate, 3)} (SE {row.se.toFixed(3)})</title></circle>)}
+    <text x="0" y={y(0) + 4} fill="currentColor" fontSize="11">SE 0</text>
+    <text x="0" y={y(maxSe) + 4} fill="currentColor" fontSize="11">SE {maxSe.toFixed(2)}</text>
+    <text x={x(pooled)} y="145" textAnchor="middle" fill="currentColor" fontSize="11">pooled {signed(pooled, 2)}</text>
+  </svg>;
 }
 function usd(value: number) { return `$${value.toFixed(value < 0.01 ? 5 : 3)}`; }
 function Costs({ costs }: { costs: QueryCosts }) {

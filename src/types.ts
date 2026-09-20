@@ -74,6 +74,23 @@ export interface PursuitEstimate {
   recommendation: Recommendation;
   drivers: string[];
 }
+/** Pre-search corpus restrictions. Every bound is independently optional. */
+export interface SearchFilters {
+  yearFrom?: number;
+  yearTo?: number;
+  minCitations?: number;
+  maxCitations?: number;
+}
+/** What the backend actually applied, and what it cost in coverage. */
+export interface AppliedFilters extends SearchFilters {
+  description: string[];
+  /** Registry rows have no citation count, so citation bounds never apply to them. */
+  registryCitationExemption: boolean;
+  /** Matching registry rows the citation bound would have removed had it applied. */
+  registryExempted?: number | null;
+  matchedBeforeFilters: number | null;
+  excluded: number | null;
+}
 export interface SearchRequest {
   idea: string;
   field?: string;
@@ -86,6 +103,7 @@ export interface SearchRequest {
   studyCost?: number;
   outcomeSd?: number;
   baselineRisk?: number;
+  filters?: SearchFilters;
 }
 export type SearchStage = "keywords" | "searching" | "classifying" | "estimating";
 export interface SearchProgress {
@@ -104,6 +122,19 @@ export interface Pico {
   sesoiRationale: string;
   effectType: string;
 }
+/** Egger regression of each study's estimate/SE on its precision 1/SE; the intercept is the asymmetry. */
+export interface EggerTest {
+  intercept: number;
+  se: number;
+  ci: [number, number];
+  t: number;
+  df: number;
+  pValue: number;
+  slope: number;
+  asymmetric: boolean;
+  alpha: number;
+  method: string;
+}
 export interface EvidencePool {
   effectType: string;
   outcome: string;
@@ -116,6 +147,8 @@ export interface EvidencePool {
   studyIds: string[];
   /** "model" when a language model judged these outcomes comparable; the numbers are still computed. */
   grouping?: "model";
+  /** null when the pool has fewer than ten studies, or too little spread in precision, to test. */
+  egger?: EggerTest | null;
 }
 export type ResultDirection = "favours_intervention" | "favours_comparator" | "unclear";
 /** What the effect-reporting studies have in common. Counts are computed; only the prose is generated. */
@@ -167,6 +200,8 @@ export interface SearchResult {
   /** Why the inconclusive matches are inconclusive, over the same full match set. */
   inconclusiveReasons?: Partial<Record<InconclusiveReason, number>> | null;
   countScope?: string;
+  /** Null unless a bound was set: a result must never look filtered when it is not. */
+  filters?: AppliedFilters | null;
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];
   pico?: Pico;

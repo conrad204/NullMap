@@ -88,6 +88,25 @@ The Painless bucket script was checked for parity with `assign_bucket` on real E
 HR alongside arm counts, and lexicon-versus-stated text labels. 311 backend tests (5 of them
 real-ES), 3 frontend test files, typecheck, the production build and Ruff passed.
 
+## Pre-search corpus filters
+
+Publication-year and citation-count filters were added after this record's runs and are covered
+by **synthetic tests only**. Checked automatically: the Elasticsearch clause shapes, that the
+bounds are mandatory `filter` clauses an expanded review reference cannot escape, that a zero
+citation floor is treated as a bound rather than an absence, that the same bounds reach
+retrieval, the registry sweep and the aggregation, that the comparison count drops them so the
+excluded figure is attributable, that a failed count is reported as uncounted rather than zero,
+that a citation bound counts the registry rows it exempted and a date-only filter neither
+exempts nor counts anything, that the exemption notice appears only when a bound applied and
+registry rows were kept, and that an empty filter object produces no `filters` payload and no
+warning. The real
+Elasticsearch parity test for filtered retrieval/sweep/aggregation agreement
+(`test_real_elasticsearch_filters_agree_across_retrieval_registry_sweep_and_counts`) was
+**skipped**: no Elasticsearch was running in this environment. **No filtered search has been
+run against the live index**, so nothing here measures how much of that corpus any bound removes.
+The registry citation exemption is a policy decision, not a measurement: ClinicalTrials.gov
+supplies no citation count and ingestion stores 0 for every trial row.
+
 ## Public S3 migration
 
 The current implementation removes OpenAlex API fetching and live singleton/reference lookups. Literature ingestion uses unsigned public S3 Parquet reads. Search expands citations already present in Elasticsearch, with an offline S3 backfill command for missing references. The default scope is hypertension or kidney research across all years, retaining records without abstracts. ClinicalTrials.gov remains a separate keyless API source.

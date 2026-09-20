@@ -1,0 +1,83 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { EMPTY_DRAFT, EMPTY_STATE, afterSearch, describeFilters, filterError, loadFilterState, parseFilters, registryExemptionNotice, saveFilterState } from './filters.ts';
+
+const draft = (values) => ({ ...EMPTY_DRAFT, ...values });
+const applied = (values) => ({ description: [], registryCitationExemption: true, matchedBeforeFilters: null, excluded: null, ...values });
+
+test('an untouched form sends no filter at all', () => {
+  assert.equal(parseFilters(EMPTY_DRAFT), undefined);
+  assert.equal(parseFilters(draft({ yearFrom: '   ', maxCitations: '' })), undefined);
+  assert.equal(parseFilters(draft({ minCitations: 'abc' })), undefined);
+});
+
+test('each bound is independent and zero is a bound, not an absence', () => {
+  assert.deepEqual(parseFilters(draft({ yearFrom: '2015' })), { yearFrom: 2015 });
+  assert.deepEqual(parseFilters(draft({ maxCitations: '0' })), { maxCitations: 0 });
+  assert.deepEqual(parseFilters(draft({ yearTo: ' 2020 ', minCitations: '5.9' })), { yearTo: 2020, minCitations: 5 });
+});
+
+test('the draft is rejected on the same grounds the API rejects it', () => {
+  assert.equal(filterError(EMPTY_DRAFT), null);
+  assert.equal(filterError(draft({ yearFrom: '2000', yearTo: '2020', minCitations: '5', maxCitations: '5' })), null);
+  assert.match(filterError(draft({ yearFrom: '2020', yearTo: '2010' })), /not be later/);
+  assert.match(filterError(draft({ minCitations: '9', maxCitations: '2' })), /not exceed/);
+  assert.match(filterError(draft({ yearFrom: '900' })), /between 1500 and 2100/);
+  assert.match(filterError(draft({ minCitations: '-3' })), /cannot be negative/);
+});
+
+test('active bounds are labelled for display beside the question', () => {
+  assert.deepEqual(describeFilters(undefined), []);
+  assert.deepEqual(describeFilters({ yearFrom: 2015, yearTo: 2020 }), ['Published 2015\u20132020']);
+  assert.deepEqual(describeFilters({ yearFrom: 2015 }), ['Published 2015 or later']);
+  assert.deepEqual(describeFilters({ yearTo: 1999 }), ['Published 1999 or earlier']);
+  assert.deepEqual(describeFilters({ minCitations: 5 }), ['\u2265 5 citations']);
+  assert.deepEqual(describeFilters({ maxCitations: 50 }), ['\u2264 50 citations']);
+  assert.deepEqual(describeFilters({ yearFrom: 2015, minCitations: 5, maxCitations: 50 }), ['Published 2015 or later', '5\u201350 citations']);
+});
+
+test('the registry exemption is stated only when a citation bound kept trial records', () => {
+  const trials = [{ source: 'clinicaltrials' }, { source: 'openalex' }];
+  // No citation bound at all: nothing to explain.
+  assert.equal(registryExemptionNotice(null, trials), null);
+  assert.equal(registryExemptionNotice(applied({ registryCitationExemption: false, registryExempted: 3 }), trials), null);
+  // A bound applied, but no registry row was exempted by it.
+  assert.equal(registryExemptionNotice(applied({ registryExempted: 0 }), trials), null);
+  assert.equal(registryExemptionNotice(applied({ registryExempted: null }), [{ source: 'openalex' }]), null);
+
+  const counted = registryExemptionNotice(applied({ registryExempted: 4 }), trials);
+  assert.match(counted, /^4 matching ClinicalTrials\.gov records are included without meeting the citation filter\./);
+  assert.match(counted, /carry no citation count/);
+  assert.doesNotMatch(counted, /could not be counted/);
+  assert.match(registryExemptionNotice(applied({ registryExempted: 1 }), trials), /^1 matching ClinicalTrials\.gov record is included/);
+  // An uncounted exemption says so instead of estimating, as long as trial rows are shown.
+  const uncounted = registryExemptionNotice(applied({ registryExempted: null }), trials);
+  assert.match(uncounted, /^Matching ClinicalTrials\.gov records are included/);
+  assert.match(uncounted, /could not be counted/);
+  // An older API omits the field entirely; the displayed trial rows still justify the notice.
+  assert.match(registryExemptionNotice(applied({}), [{ source: 'merged' }]), /could not be counted/);
+});
+
+test('only sticky filters survive a search; the toggle itself always does', () => {
+  const values = draft({ yearFrom: '2015', minCitations: '5' });
+  assert.deepEqual(afterSearch({ draft: values, sticky: true }), { draft: values, sticky: true });
+  assert.deepEqual(afterSearch({ draft: values, sticky: false }), { draft: EMPTY_DRAFT, sticky: false });
+});
+
+test('stored state round-trips, and anything else falls back to unfiltered', () => {
+  // Storage is absent in this runtime unless stubbed; that must not throw.
+  assert.deepEqual(loadFilterState(), EMPTY_STATE);
+  const store = new Map();
+  globalThis.localStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  try {
+    const state = { draft: draft({ yearTo: '2020' }), sticky: true };
+    saveFilterState(state);
+    assert.deepEqual(loadFilterState(), state);
+    for (const stored of ['not json', 'null', '{"draft":{"yearFrom":2015},"sticky":"yes"}']) {
+      store.set('nullmap-filters', stored);
+      assert.deepEqual(loadFilterState(), EMPTY_STATE);
+    }
+  } finally {
+    delete globalThis.localStorage;
+  }
+});

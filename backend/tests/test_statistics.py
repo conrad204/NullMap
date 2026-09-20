@@ -248,6 +248,49 @@ def test_heterogeneous_opposite_effects_increase_uncertainty():
     assert pool["ci"][0] < -0.5 < 0.5 < pool["ci"][1]
 
 
+_SES = [0.05, 0.07, 0.09, 0.12, 0.15, 0.19, 0.24, 0.3, 0.38, 0.5]
+_JITTER = [0.004, -0.003, 0.005, -0.006, 0.002, 0.006, -0.004, 0.003, -0.005, 0.004]
+
+
+def funnel(slope=0.0, ses=_SES):
+    """Studies whose effect is ``0.1 + slope * se``: slope > 0 is a small-study effect."""
+    z = NormalDist().inv_cdf(0.975)
+    return [
+        study(str(index), estimate=estimate, low=estimate - z * se, high=estimate + z * se)
+        for index, (se, noise) in enumerate(zip(ses, _JITTER, strict=False))
+        for estimate in [0.1 + slope * se + noise]
+    ]
+
+
+def test_symmetric_funnel_passes_eggers_test():
+    egger = analyze_studies(funnel(), plan())["pools"][0]["egger"]
+    assert egger["df"] == 8
+    assert egger["intercept"] == pytest.approx(0, abs=0.3)
+    assert egger["pValue"] > 0.1
+    assert egger["asymmetric"] is False
+    assert not [warning for warning in analyze_studies(funnel(), plan())["warnings"]
+                if "Egger" in warning]
+
+
+def test_small_study_effects_are_reported_as_funnel_asymmetry():
+    result = analyze_studies(funnel(slope=1.0), plan())
+    egger = result["pools"][0]["egger"]
+    assert egger["intercept"] == pytest.approx(1.0, abs=0.3)
+    assert egger["ci"][0] > 0
+    assert egger["pValue"] < 0.1
+    assert egger["asymmetric"] is True
+    assert any("funnel asymmetry" in warning for warning in result["warnings"])
+
+
+def test_eggers_test_needs_ten_studies_of_differing_precision():
+    small = analyze_studies(funnel(ses=_SES[:9]), plan())
+    assert small["pools"][0]["k"] == 9
+    assert small["pools"][0]["egger"] is None
+    assert any("at least 10 studies" in warning for warning in small["warnings"])
+    equal = analyze_studies(funnel(ses=[0.1] * 10), plan())
+    assert equal["pools"][0]["egger"] is None
+
+
 def test_log_ratio_and_already_logged_estimates_can_pool():
     studies = [study("raw", estimate=1.1, low=0.9, high=1.3, effect_type="OR")]
     studies += [
