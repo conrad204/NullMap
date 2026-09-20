@@ -14,7 +14,7 @@ nullMap searches *your* Elasticsearch index, not the live web. What it can find 
 - The default corpus scope is hypertension and kidney research. Questions outside the ingested scope will legitimately match little or nothing.
 - Ask a question represented in your index. `GET /ready` shows whether Elasticsearch is reachable and embeddings are enabled.
 - An OpenAI API key enables question parsing, evidence extraction from papers, and narration. Without it, searches still run but with reduced interpretation.
-- Local embeddings (torch + sentence-transformers, installed separately per the README) enable hybrid semantic retrieval and the Map tab's idea placement. Without them, search falls back to BM25 keyword retrieval — the report will carry a warning saying so.
+- Local embeddings (torch + sentence-transformers, installed separately per the README) enable hybrid semantic retrieval and the gap map's idea placement (`POST /map`). Without them, search falls back to BM25 keyword retrieval — the report will carry a warning saying so.
 
 ## The Search tab
 
@@ -84,7 +84,9 @@ Prefer conclusions that rest on numeric and derived evidence. A `text_only` "no 
 - If a question returns nothing, first suspect corpus coverage (was this topic ingested?) before concluding the field is empty. The report's own summary makes this distinction — trust it.
 - Re-running the same question is cheap (extraction cache) — iterate on phrasing.
 
-## The Map tab
+## The gap map (API only)
+
+The gap map has no tab in the interface on `main`; it is reachable through `POST /map`. The Map tab that draws it lives on the `map-tab` branch.
 
 Where search answers "what exists for this question", the map answers a different question: **for each region of your indexed literature, why is nothing new there?** It clusters a deterministic random sample of embedded studies into regions and labels each by what happened inside it, so "nothing here" can be told apart from "this was tried and did not work".
 
@@ -103,23 +105,23 @@ Labels describe **your index's sample**, and the coverage line says what fractio
 
 ### Sparse bands (gaps)
 
-The map also lists pairs of *related* regions with almost nothing between them: combinations the neighbouring literatures imply but nobody has run. Each band shows how many sampled papers sit in it, how much work sits on either side, and — importantly — the parent labels. A band flagged "neighbours failed" is open *because the surrounding work reported nulls or never reported*: read those refutations before treating the gap as an opportunity.
+The map also lists pairs of *related* regions with almost nothing between them: combinations the neighbouring literatures imply but nobody has run. Each band shows how many sampled papers sit in it, how much work sits on either side, and — importantly — the parent labels. A band with `discouraged: true` is open *because the surrounding work reported nulls or never reported*: read those refutations before treating the gap as an opportunity.
 
 ### Placing an idea
 
-Type an idea into "Your idea" and place it. You get back:
+Send an `idea` in the request body. You get back:
 
-- The **closest indexed papers** to your idea, each with a cosine similarity, and a headline band ("Essentially already published" ≥ 0.8, "Very close work exists" ≥ 0.6, "Related territory" ≥ 0.45, "Sparse territory" below).
+- The **closest indexed papers** to your idea, each with a cosine similarity.
 - The **region** your idea lands in, with its label and outcome mix.
 - The **nearest open band**, if one is close.
 
-Read the number for what it is. The redundancy score is the cosine between your idea's embedding and the single closest indexed paper — **a redundancy statistic, never a probability of novelty**. A high score means very similar work already exists in your index; verify by reading the listed neighbours, which is what they are shown for. A low score means only that *this sample of this index* holds nothing close — it cannot tell you the idea is good, novel, or unstudied elsewhere. The bands are heuristic landmarks for the embedding model, not calibrated scores.
+Read the number for what it is. The redundancy score is the cosine between your idea's embedding and the single closest indexed paper — **a redundancy statistic, never a probability of novelty**. A high score means very similar work already exists in your index; verify by reading the listed neighbours, which is what they are shown for. A low score means only that *this sample of this index* holds nothing close — it cannot tell you the idea is good, novel, or unstudied elsewhere. The cosine is a heuristic landmark for the embedding model, not a calibrated score.
 
 ### Steering with arithmetic
 
-The arithmetic boxes (start − remove + add) place a *combination* instead of a sentence: each phrase is embedded, combined, and the result is placed like any other point. `vitamin D for depression − depression + chronic kidney disease` asks "has anyone run the vitamin-D idea in kidney disease?" — and because the answer is the real papers nearest the implied point, it stays honest even when the analogy is loose. Comma-separate multiple terms to remove or add several at once.
+The `arithmetic` field (`{start, remove[], add[]}`: start − remove + add) places a *combination* instead of a sentence: each phrase is embedded, combined, and the result is placed like any other point. `vitamin D for depression − depression + chronic kidney disease` asks "has anyone run the vitamin-D idea in kidney disease?" — and because the answer is the real papers nearest the implied point, it stays honest even when the analogy is loose. List several terms in `remove` or `add` to apply them at once.
 
-### Calibration (API only)
+### Calibration
 
 `POST /map` with `cutoffYear` rebuilds the map as it looked before that year and reports what later papers did per historical label — did null-saturated regions keep producing nulls? This is a calibration record over one corpus and one cutoff, not a forecast.
 

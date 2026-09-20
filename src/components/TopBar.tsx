@@ -1,22 +1,12 @@
 import { useState } from "react";
 import { Moon, Sun } from "@phosphor-icons/react";
-import { cx } from "../lib/format";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 
-export type Mode = "search" | "map";
-
 interface Props {
-  mode: Mode;
-  onModeChange: (m: Mode) => void;
   sampleData: boolean;
 }
 
-const MODES: Array<{ id: Mode; label: string }> = [
-  { id: "search", label: "Search" },
-  { id: "map", label: "Map" },
-];
-
-export default function TopBar({ mode, onModeChange, sampleData }: Props) {
+export default function TopBar({ sampleData }: Props) {
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const nextTheme: Theme = theme === "dark" ? "light" : "dark";
   const toggleTheme = () => {
@@ -30,25 +20,6 @@ export default function TopBar({ mode, onModeChange, sampleData }: Props) {
         <a href="/" className="text-[17px] font-semibold tracking-tight text-ink">
           null<span className="text-accent">Map</span>
         </a>
-
-        <nav aria-label="Mode" className="flex items-center gap-1 rounded-control bg-surface-2 p-1">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onModeChange(m.id)}
-              aria-pressed={mode === m.id}
-              className={cx(
-                "h-8 rounded-[6px] px-3.5 text-sm font-medium transition-colors",
-                mode === m.id
-                  ? "bg-surface text-ink shadow-panel"
-                  : "text-ink-2 hover:text-ink",
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
-        </nav>
 
         <div className="flex items-center justify-end gap-3">
           {sampleData && (
