@@ -426,3 +426,54 @@ def test_cli_refuses_changed_pinned_manifest(tmp_path):
     manifest.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="manifest changed"):
         asyncio.run(run(args))
+
+
+def _manifest(sizes):
+    return {"date": "2026-06-26", "files": [
+        {"url": f"https://openalex.s3.amazonaws.com/data/parquet/works/p{i}.parquet",
+         "size_bytes": size} for i, size in enumerate(sizes)]}
+
+
+def test_largest_first_covers_more_bytes_without_changing_the_part_set():
+    from app.ingest.snapshot import plan_manifest
+    manifest = _manifest([10, 5000, 30, 4000, 20])
+    default = plan_manifest(manifest, max_files=2)
+    biggest = plan_manifest(manifest, max_files=2, largest_first=True)
+    assert default["physical_bytes_budgeted"] == 5010
+    assert biggest["physical_bytes_budgeted"] == 9000
+    assert default["selection_order"] == "manifest"
+    assert biggest["selection_order"] == "largest_first"
+    assert [f["size_bytes"] for f in biggest["files"]] == [5000, 4000]
+    # Neither claims complete coverage, and the fraction is reported honestly.
+    assert default["all_parts_selected"] is False and biggest["all_parts_selected"] is False
+    assert biggest["selected_bytes_fraction"] == round(9000 / 9060, 6)
+    # Ordering alone must not invent or drop parts on a full run.
+    full_default = plan_manifest(manifest)
+    full_sorted = plan_manifest(manifest, largest_first=True)
+    assert full_sorted["all_parts_selected"] is True
+    assert full_sorted["selected_bytes_fraction"] == 1.0
+    assert sorted(f["url"] for f in full_default["files"]) == sorted(
+        f["url"] for f in full_sorted["files"]
+    )
+    assert full_default["manifest_sha256"] == full_sorted["manifest_sha256"]
+
+
+def test_reordering_parts_invalidates_a_scan_checkpoint(tmp_path):
+    import json
+
+    import pytest
+
+    from app.ingest.snapshot import scan_snapshot
+    a = tmp_path / "a.parquet"
+    b = tmp_path / "b.parquet"
+    for path in (a, b):
+        path.write_bytes(b"not really parquet")
+    out = tmp_path / "works.jsonl"
+    checkpoint = out.with_suffix(out.suffix + ".checkpoint.json")
+    out.write_text("")
+    checkpoint.write_text(json.dumps({
+        "signature": "stale", "snapshot_id": "x", "records": 0, "bytes": 0,
+        "part": 0, "selected_parts": 2, "selected_parts_complete": False}))
+    with pytest.raises(ValueError, match="changed"):
+        scan_snapshot([str(b), str(a)], out, max_bytes=10_000, resume=True, snapshot_id="x",
+                      remote_sizes=None, profile="hypertension-kidney")

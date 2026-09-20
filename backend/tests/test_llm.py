@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -185,3 +186,47 @@ def test_parse_cache_keeps_concepts_stable_without_retaining_plan_overrides():
         assert repeat.outcomeAliases == ["depressive symptoms"]
 
     asyncio.run(run())
+
+
+def test_full_text_lines_are_quoted_verbatim_and_validated_against_the_lines_only(monkeypatch):
+    lines = [
+        "Abstract sentence without numbers.",
+        "The prespecified primary outcome was the change in PHQ-9 score at 12 weeks.",
+        "[Table 2 Outcomes] PHQ-9 change | −4.1 | −4.0 | 0.02 (−0.10 to 0.14) | 0.74",
+    ]
+    indexed = IndexedExtraction.model_validate(
+        {
+            **dict.fromkeys(IndexedExtraction.model_fields),
+            "outcome": {"value": "change in PHQ-9 score at 12 weeks", "sentence_index": 1},
+            "estimate": {"value": 0.02, "sentence_index": 2},
+            "ci_low": {"value": -0.10, "sentence_index": 2},
+            "ci_high": {"value": 0.14, "sentence_index": 2},
+            "p_value": {"value": 0.74, "sentence_index": 2},
+        }
+    )
+    captured = {}
+
+    async def structured(self, schema, prompt, data, purpose, usage, large=False):
+        captured.update(prompt=prompt, data=data)
+        return indexed
+
+    monkeypatch.setattr(LLMService, "structured", structured)
+    service = LLMService(Settings(_env_file=None, openai_api_key="test"))
+    # The study abstract is deliberately unrelated: validation must run against the lines.
+    study = {"id": "W1", "abstract": "Completely different abstract text."}
+    result = asyncio.run(service.extract(study, Usage(), lines=lines))
+    assert result["extraction_source"] == "full_text"
+    assert result["extraction_evidence"]["estimate"] == lines[2]
+    assert result["extraction_evidence"]["outcome"] == lines[1]
+    assert result["estimate"] == 0.02 and result["p_value"] == 0.74
+    # The CI level was never stated in the quoted row, so bounds are dropped, not assumed 95%.
+    assert result["ci_low"] is None and result["ci_high"] is None
+    assert json.loads(captured["data"]) == {"sentences": lines}
+    assert "table" in captured["prompt"].lower()
+    abstract = (
+        "Background. The prespecified primary outcome was the change in PHQ-9 score at 12 weeks. "
+        "PHQ-9 change was 0.02 (−0.10 to 0.14), p = 0.74."
+    )
+    plain = asyncio.run(service.extract({"id": "W2", "abstract": abstract}, Usage()))
+    assert plain["extraction_source"] == "abstract"
+    assert plain["extraction_evidence"]["estimate"] == "PHQ-9 change was 0.02 (−0.10 to 0.14), p = 0.74."

@@ -22,9 +22,9 @@ from dataclasses import asdict, dataclass, field
 
 from app.config import Settings, settings
 from app.embeddings import get_embedder
-from app.fulltext import FullTextClient
 from app.llm import LLMService, Usage
 from app.models import Claim, NoveltyAssessment
+from app.paper_text import FullTextClient
 from app.repository import ElasticRepository, lexical_query
 
 logger = logging.getLogger(__name__)

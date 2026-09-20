@@ -4,7 +4,9 @@ OpenAlex literature comes exclusively from the anonymous public bucket
 `s3://openalex/data/parquet/works/`. No OpenAlex API key, AWS account or signed URL
 is used. ClinicalTrials.gov still uses its separate, keyless API. The snapshot
 contains bibliographic metadata, citation references and available abstracts;
-it is not a collection of full-text PDFs.
+it is not a collection of full-text PDFs. The normalizer keeps each work's PubMed
+Central ID when present; the API uses it at query time to read open-access full text
+from Europe PMC (see [fulltext.py](../fulltext.py)). No full text is stored by ingestion.
 
 Run these commands from `backend/` **on the batch host**, such as the sponsor
 EC2 machine. Python reads selected Parquet columns over HTTPS, retains matching

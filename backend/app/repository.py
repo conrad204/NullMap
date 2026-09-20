@@ -18,6 +18,7 @@ BUCKETS = ("effect", "credible_null", "inconclusive", "failed", "unreported")
 _CACHE_FIELDS = set(
     (
         "extracted_at extraction_version extraction_status extraction_evidence evidence_span "
+        "extraction_source fulltext_status "
         "population intervention comparator outcome outcome_unit n n_intervention n_comparator "
         "estimate ci_low ci_high p_value effect_type ci_level ci_sides p_value_operator has_control "
         "design primary_outcome_met effect_direction outcome_direction"
@@ -32,7 +33,7 @@ _LINK_FIELDS = set(
 _PAPER_FIELDS = set(
     (
         "title abstract authors venue embedding embedding_model result_label null_score evidence_span "
-        "classification_method abstract_available work_type snapshot_provenance"
+        "classification_method abstract_available work_type snapshot_provenance pmcid"
     ).split()
 )
 
@@ -43,7 +44,8 @@ def index_mapping(dimensions: int = 384) -> dict:
         "record_kind source result_label bucket evidence_tier effect_type overall_status "
         "pmids nct_ids referenced_works result_pmids canonical_id canonical_ids outcome_unit "
         "p_value_operator ci_sides extraction_version extraction_status embedding_model "
-        "analysis_effect_type effect_direction outcome_direction work_type"
+        "analysis_effect_type effect_direction outcome_direction work_type "
+        "pmcid extraction_source fulltext_status"
     ).split():
         properties[name] = {"type": "keyword"}
     for name in "title abstract population intervention comparator outcome".split():

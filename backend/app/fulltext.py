@@ -1,200 +1,293 @@
-"""Open-access full text for a single paper, fetched and sectioned at read time.
+"""Query-time full text from Europe PMC for open-access papers with a PMCID.
 
-An abstract states what a paper claims; only the body states what it actually measured,
-in which system, at which dose, and what the numbers were. Novelty assessment reads the
-body, so this module resolves a work to Europe PMC and returns its sections.
+The OpenAlex snapshot carries abstracts only. When a paper is in PubMed Central,
+Europe PMC serves its JATS XML without a key. This module flattens that XML into
+verbatim lines (abstract sentences, primary-outcome sentences from the methods,
+results sentences, and table rows) so the existing sentence-index extraction and
+its exact-quote validation work unchanged. Papers without a PMCID stay abstract-only.
 """
 
-import asyncio
+from __future__ import annotations
+
 import logging
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from xml.etree import ElementTree
 
 import httpx
 
+from app.config import Settings, settings
+
 logger = logging.getLogger(__name__)
 
-EUROPE_PMC = "https://www.ebi.ac.uk/europepmc/webservices/rest"
-RESULT_SECTIONS = ("results", "discussion", "conclusion")
-# Front and back matter carries no evidence and would crowd the read budget.
-SKIP_SECTIONS = (
-    "reference", "acknowledg", "competing", "author contribution", "funding", "footnote",
-    "contributor", "data availability", "supplementary", "associated data", "ethics",
-    "abbreviation", "conflict",
+PMCID_RE = re.compile(r"PMC(\d{1,9})", re.IGNORECASE)
+SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\[])")
+PRIMARY_RE = re.compile(
+    r"\b(?:primary|principal|main)\s+(?:efficacy\s+|safety\s+|composite\s+)?(?:outcomes?|end[- ]?points?|"
+    r"objectives?)\b|\bsample size\b|\bpower(?:ed)? to\b|\bnon-?inferiority margin\b",
+    re.IGNORECASE,
 )
-# Headings vary between journals; match the informative ones by their stem.
-SECTION_KINDS = {
-    "abstract": ("abstract", "summary"),
-    "methods": ("method", "material", "experimental", "procedure"),
-    "results": ("result", "finding"),
-    "discussion": ("discussion", "conclusion", "interpretation"),
-}
+METHODS_RE = re.compile(
+    r"\b(?:methods?|materials|design|participants|patients|procedures?|statistic|analysis|"
+    r"outcomes? measures?|end ?points?|trial|study population|intervention)\b",
+    re.IGNORECASE,
+)
+RESULTS_RE = re.compile(r"\b(?:results?|findings|outcomes?|efficacy|effectiveness)\b", re.IGNORECASE)
+EXCLUDED_RE = re.compile(
+    r"\b(?:discussion|conclusions?|limitations|acknowledg|funding|conflicts?|competing|"
+    r"references?|supplementa|abbreviations|author contributions|ethic|consent|availability)\b",
+    re.IGNORECASE,
+)
+TABLE_CELL_TAGS = {"td", "th"}
+
+
+def normalize_pmcid(value) -> str | None:
+    """Accept 'PMC123', 'pmc123', a PMC URL, or bare digits; return 'PMC123' or None."""
+    if value is None or isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    match = PMCID_RE.search(text)
+    if match:
+        return f"PMC{int(match.group(1))}"
+    if text.isdigit():
+        return f"PMC{int(text)}"
+    return None
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def _text(element: ET.Element | None) -> str:
+    if element is None:
+        return ""
+    return re.sub(r"\s+", " ", "".join(element.itertext())).strip()
+
+
+def _sentences(text: str) -> list[str]:
+    return [part.strip() for part in SENTENCE_RE.split(text) if len(part.strip()) > 2]
+
+
+def _paragraph_texts(section: ET.Element) -> list[str]:
+    """Paragraph text of this section only, not of nested subsections or tables."""
+    out = []
+    for child in section:
+        name = _local(child.tag)
+        if name == "p":
+            text = _text(child)
+            if text:
+                out.append(text)
+        elif name in {"list", "disp-quote", "boxed-text", "statement"}:
+            for para in child.iter():
+                if _local(para.tag) == "p" and (text := _text(para)):
+                    out.append(text)
+    return out
+
+
+def _table_lines(wrap: ET.Element) -> list[str]:
+    label = _text(next((c for c in wrap if _local(c.tag) == "label"), None))
+    caption = _text(next((c for c in wrap if _local(c.tag) == "caption"), None))
+    heading = " ".join(part for part in (label, caption) if part).strip()
+    prefix = f"[{heading}] " if heading else "[Table] "
+    lines: list[str] = []
+    for table in wrap.iter():
+        if _local(table.tag) != "table":
+            continue
+        headers: list[str] = []
+        for row in table.iter():
+            if _local(row.tag) != "tr":
+                continue
+            cells = [_text(cell) for cell in row if _local(cell.tag) in TABLE_CELL_TAGS]
+            cells = [cell for cell in cells if cell]
+            if not cells:
+                continue
+            is_header = all(_local(cell.tag) == "th" for cell in row if _local(cell.tag) in TABLE_CELL_TAGS)
+            if is_header and not headers:
+                headers = cells
+                lines.append(prefix + "columns: " + " | ".join(cells))
+                continue
+            lines.append(prefix + " | ".join(cells))
+    return lines
+
+
+BASELINE_TABLE_RE = re.compile(
+    r"\b(?:baseline|demographic|characteristics|enrol+ment|disposition|adverse|safety|"
+    r"tolerability)\b",
+    re.IGNORECASE,
+)
+OUTCOME_TABLE_RE = re.compile(r"\b(?:primary|outcome|end ?point|efficacy|effect)\b", re.IGNORECASE)
+
+
+def _table_priority(wrap: ET.Element) -> int:
+    """0 for tables that name outcomes, 2 for baseline/safety tables, 1 otherwise."""
+    heading = " ".join(
+        _text(c) for c in wrap if _local(c.tag) in {"label", "caption"}
+    )
+    if OUTCOME_TABLE_RE.search(heading):
+        return 0
+    if BASELINE_TABLE_RE.search(heading):
+        return 2
+    return 1
+
+
+def _section_kind(section: ET.Element, inherited: str | None) -> str | None:
+    sec_type = (section.get("sec-type") or "").lower()
+    title = _text(next((c for c in section if _local(c.tag) == "title"), None))
+    if EXCLUDED_RE.search(sec_type) or EXCLUDED_RE.search(title):
+        return "excluded"
+    if "result" in sec_type:
+        return "results"
+    if "method" in sec_type or "material" in sec_type:
+        return "methods"
+    # Subsections inherit: "Outcomes" under Methods defines endpoints, under Results reports them.
+    if inherited in ("methods", "results"):
+        return inherited
+    if RESULTS_RE.search(title):
+        return "results"
+    if METHODS_RE.search(title):
+        return "methods"
+    return inherited
 
 
 @dataclass
-class FullText:
-    """One paper's retrieved body, or the abstract when no open full text exists."""
-
-    paper_id: str
-    availability: str  # full_text | abstract_only | unavailable
-    source: str = ""
-    sections: dict[str, str] = field(default_factory=dict)
-    # As the publisher record states them, which the index can contradict.
-    title: str = ""
-    year: int | None = None
-    venue: str = ""
+class FlattenedText:
+    lines: list[str] = field(default_factory=list)
+    abstract_lines: int = 0
+    methods_lines: int = 0
+    results_lines: int = 0
+    table_lines: int = 0
+    truncated: bool = False
 
     @property
-    def chars(self) -> int:
-        return sum(len(text) for text in self.sections.values())
+    def text(self) -> str:
+        return "\n".join(self.lines)
 
-    def evidence_text(self, limit: int = 24000) -> str:
-        """The part a reader checks for what was found, results first, then the rest."""
-        order = [*RESULT_SECTIONS, "abstract", "methods"]
-        ordered = sorted(
-            self.sections.items(),
-            key=lambda item: next(
-                (i for i, name in enumerate(order) if name in item[0]), len(order)
-            ),
-        )
-        out: list[str] = []
-        remaining = limit
-        for name, text in ordered:
-            if remaining <= 0:
-                break
-            body = text[:remaining]
-            remaining -= len(body) + len(name)
-            out.append(f"## {name}\n{body}")
-        return "\n\n".join(out)
+    def summary(self) -> dict:
+        return {
+            "lines": len(self.lines),
+            "abstract": self.abstract_lines,
+            "methods_primary": self.methods_lines,
+            "results": self.results_lines,
+            "tables": self.table_lines,
+            "truncated": self.truncated,
+        }
 
 
-def _clean(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+def flatten_jats(xml_text: str, abstract: str = "", *, max_lines: int = 160) -> FlattenedText:
+    """Turn JATS XML into verbatim candidate evidence lines, highest value first.
 
-
-def _kind(heading: str) -> str:
-    lowered = heading.lower()
-    if any(needle in lowered for needle in SKIP_SECTIONS):
-        return ""
-    for kind, needles in SECTION_KINDS.items():
-        if any(needle in lowered for needle in needles):
-            return kind
-    return heading.lower()[:60] or "body"
-
-
-def parse_jats(xml: str) -> dict[str, str]:
-    """JATS body into `{section kind: text}`; unrecognised headings keep their own name."""
+    Order and budget: abstract sentences, then methods sentences that define the
+    primary outcome or power, then results prose, then table rows with baseline and
+    demographics tables last so outcome tables survive the line budget. Discussion,
+    conclusions and back matter are never included; the numbers we want live in
+    results tables and results prose, and a discussion sentence can restate a
+    secondary finding as though it were the primary one.
+    """
+    result = FlattenedText()
     try:
-        root = ElementTree.fromstring(xml)
-    except ElementTree.ParseError as exc:
-        logger.warning("Full text is not parseable XML: %s", exc)
-        return {}
-    sections: dict[str, str] = {}
-
-    def add(name: str, text: str) -> None:
-        text = _clean(text)
-        if not name:
-            return
-        if len(text) < 40:
-            return
-        sections[name] = f"{sections[name]}\n{text}" if name in sections else text
-
-    for abstract in root.iter("abstract"):
-        add("abstract", " ".join(abstract.itertext()))
-    body = root.find(".//body")
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return result
+    body = next((el for el in root.iter() if _local(el.tag) == "body"), None)
+    abstract_sentences = _sentences(abstract) if abstract else []
+    if not abstract_sentences:
+        for el in root.iter():
+            if _local(el.tag) == "abstract":
+                # Structured abstracts nest <p> inside <sec>; take every paragraph.
+                paragraphs = [_text(p) for p in el.iter() if _local(p.tag) == "p"]
+                abstract_sentences = [s for p in paragraphs if p for s in _sentences(p)]
+                break
+    methods: list[str] = []
+    results: list[str] = []
+    table_groups: list[tuple[int, list[str]]] = []
     if body is not None:
-        for section in body.findall("sec"):
-            title = section.find("title")
-            heading = _clean("".join(title.itertext())) if title is not None else "body"
-            add(_kind(heading), " ".join(section.itertext()))
+        def walk(section: ET.Element, inherited: str | None):
+            kind = _section_kind(section, inherited)
+            if kind == "excluded":
+                return
+            paragraphs = _paragraph_texts(section)
+            if kind == "results":
+                results.extend(s for p in paragraphs for s in _sentences(p))
+            elif kind == "methods":
+                methods.extend(s for p in paragraphs for s in _sentences(p) if PRIMARY_RE.search(s))
+            for child in section:
+                name = _local(child.tag)
+                if name == "sec":
+                    walk(child, kind)
+                elif name == "table-wrap":
+                    table_groups.append((_table_priority(child), _table_lines(child)))
+        for child in body:
+            name = _local(child.tag)
+            if name == "sec":
+                walk(child, None)
+            elif name == "table-wrap":
+                table_groups.append((_table_priority(child), _table_lines(child)))
+            elif name == "p":
+                # Body text without sections: treat as results prose.
+                results.extend(_sentences(_text(child)))
+    seen: set[str] = set()
 
-        if not sections.keys() - {"abstract"}:
-            add("body", " ".join(body.itertext()))
-    return sections
+    def take(group: list[str], counter: str) -> None:
+        for line in group:
+            if len(result.lines) >= max_lines:
+                result.truncated = True
+                return
+            if line in seen:
+                continue
+            seen.add(line)
+            result.lines.append(line)
+            setattr(result, counter, getattr(result, counter) + 1)
+
+    tables = [line for _, group in sorted(table_groups, key=lambda item: item[0]) for line in group]
+    take(abstract_sentences, "abstract_lines")
+    take(methods, "methods_lines")
+    take(results, "results_lines")
+    take(tables, "table_lines")
+    return result
 
 
 class FullTextClient:
-    """Europe PMC lookup: DOI or PMID to an open-access body, cached per process."""
+    """Fetch and flatten one paper's Europe PMC full text; never raises for a missing paper."""
 
-    def __init__(self, client: httpx.AsyncClient | None = None, timeout: float = 30.0):
-        self._client = client
-        self._timeout = timeout
-        self._cache: dict[str, FullText] = {}
-        self._locks: dict[str, asyncio.Lock] = {}
+    def __init__(self, config: Settings = settings, transport: httpx.AsyncBaseTransport | None = None):
+        self.config = config
+        self.transport = transport
 
-    async def _http(self) -> httpx.AsyncClient:
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=self._timeout)
-        return self._client
+    def pmcid(self, study: dict) -> str | None:
+        return normalize_pmcid(study.get("pmcid"))
 
-    async def close(self) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
-
-    async def locate(self, doi: str = "", pmid: str = "") -> dict:
-        """The Europe PMC record for a work, which carries its PMCID when one exists."""
-        doi = (doi or "").replace("https://doi.org/", "").strip()
-        query = f'DOI:"{doi}"' if doi else f"EXT_ID:{pmid} AND SRC:MED" if pmid else ""
-        if not query:
-            return {}
-        client = await self._http()
-        response = await client.get(
-            f"{EUROPE_PMC}/search",
-            params={"query": query, "format": "json", "resultType": "core", "pageSize": 1},
-        )
+    async def fetch_xml(self, pmcid: str) -> str | None:
+        url = f"{self.config.europepmc_url.rstrip('/')}/{pmcid}/fullTextXML"
+        async with httpx.AsyncClient(
+            timeout=self.config.fulltext_timeout, transport=self.transport, follow_redirects=True
+        ) as client:
+            response = await client.get(url, headers={"Accept": "application/xml"})
+        if response.status_code == 404:
+            return None
         response.raise_for_status()
-        results = response.json().get("resultList", {}).get("result", [])
-        return results[0] if results else {}
+        text = response.text
+        # Europe PMC answers 200 with an empty body for records without full text.
+        return text if text.strip() else None
 
-    async def fetch(self, paper_id: str, doi: str = "", pmid: str = "", abstract: str = "") -> FullText:
-        lock = self._locks.setdefault(paper_id, asyncio.Lock())
-        async with lock:
-            if paper_id in self._cache:
-                return self._cache[paper_id]
-            result = await self._fetch(paper_id, doi, pmid, abstract)
-            self._cache[paper_id] = result
-            return result
-
-    async def _fetch(self, paper_id: str, doi: str, pmid: str, abstract: str) -> FullText:
-        fallback = FullText(
-            paper_id,
-            "abstract_only" if abstract else "unavailable",
-            sections={"abstract": abstract} if abstract else {},
-        )
+    async def lines(self, study: dict) -> tuple[list[str] | None, str | None]:
+        """Return (lines, status). status: None (no PMCID), 'used', 'unavailable', or 'error'."""
+        pmcid = self.pmcid(study)
+        if not pmcid or not self.config.fulltext_enabled:
+            return None, None
         try:
-            record = await self.locate(doi, pmid)
-        except (httpx.HTTPError, ValueError) as exc:
-            logger.warning("Full-text lookup failed for %s: %s", paper_id, type(exc).__name__)
-            return fallback
-        # Europe PMC titles keep inline markup such as <sub> from the publisher record.
-        fallback.title = _clean(re.sub(r"<[^>]+>", "", str(record.get("title") or "")))
-        fallback.year = int(year) if (year := str(record.get("pubYear") or "")).isdigit() else None
-        journal = record.get("journalInfo")
-        title = journal.get("journal", {}).get("title") if isinstance(journal, dict) else ""
-        fallback.venue = str(title or record.get("journalTitle") or "")
-        pmcid = record.get("pmcid")
-        if not pmcid or record.get("isOpenAccess") != "Y":
-            return fallback
-        client = await self._http()
-        try:
-            response = await client.get(f"{EUROPE_PMC}/{pmcid}/fullTextXML")
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.info("No open body for %s (%s)", pmcid, type(exc).__name__)
-            return fallback
-        sections = parse_jats(response.text)
-        if not sections:
-            return fallback
-        if abstract and "abstract" not in sections:
-            sections["abstract"] = abstract
-        return FullText(
-            paper_id,
-            "full_text",
-            source=f"europepmc:{pmcid}",
-            sections=sections,
-            title=fallback.title,
-            year=fallback.year,
-            venue=fallback.venue,
+            xml_text = await self.fetch_xml(pmcid)
+        except Exception as exc:
+            logger.warning("Full text fetch failed for %s: %s", pmcid, type(exc).__name__)
+            return None, "error"
+        if xml_text is None:
+            return None, "unavailable"
+        flattened = flatten_jats(
+            xml_text, study.get("abstract", ""), max_lines=self.config.fulltext_max_lines
         )
+        # Full text only counts when it adds evidence beyond the abstract.
+        if flattened.results_lines + flattened.table_lines + flattened.methods_lines == 0:
+            return None, "unavailable"
+        logger.info("Full text %s: %s", pmcid, flattened.summary())
+        return flattened.lines, "used"

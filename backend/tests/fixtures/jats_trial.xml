@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+  <front>
+    <article-meta>
+      <title-group><article-title>Vitamin D for depressive symptoms: a randomized trial</article-title></title-group>
+      <abstract>
+        <p>Background: Vitamin D has been proposed for depression. Results: Symptoms improved in both arms. Conclusions: Vitamin D did not outperform placebo.</p>
+      </abstract>
+    </article-meta>
+  </front>
+  <body>
+    <sec sec-type="intro"><title>Introduction</title>
+      <p>Observational data link low vitamin D with depressive symptoms (p &lt; 0.001 in one cohort). We tested supplementation.</p>
+    </sec>
+    <sec sec-type="methods"><title>Methods</title>
+      <p>We randomized adults with mild depression to vitamin D 4000 IU or placebo for 12 weeks.</p>
+      <sec><title>Outcomes</title>
+        <p>The prespecified primary outcome was the change in PHQ-9 score at 12 weeks. Secondary outcomes included sleep quality and fatigue.</p>
+        <p>We estimated that 400 participants would provide 80% power to detect a standardized difference of 0.3.</p>
+      </sec>
+    </sec>
+    <sec sec-type="results"><title>Results</title>
+      <p>Of 412 randomized participants, 396 completed follow-up. The mean change in PHQ-9 did not differ between groups (SMD 0.02; 95% CI &#8722;0.10 to 0.14; p = 0.74).</p>
+      <p>Sleep quality improved more with vitamin D (SMD 0.31; 95% CI 0.12 to 0.50; p = 0.002).</p>
+      <table-wrap id="T2">
+        <label>Table 2</label>
+        <caption><p>Primary and secondary outcomes at 12 weeks</p></caption>
+        <table>
+          <thead><tr><th>Outcome</th><th>Vitamin D</th><th>Placebo</th><th>Difference (95% CI)</th><th>p</th></tr></thead>
+          <tbody>
+            <tr><td>PHQ-9 change</td><td>&#8722;4.1</td><td>&#8722;4.0</td><td>0.02 (&#8722;0.10 to 0.14)</td><td>0.74</td></tr>
+            <tr><td>Sleep quality</td><td>1.8</td><td>1.1</td><td>0.31 (0.12 to 0.50)</td><td>0.002</td></tr>
+          </tbody>
+        </table>
+      </table-wrap>
+    </sec>
+    <sec sec-type="discussion"><title>Discussion</title>
+      <p>Vitamin D significantly improved sleep, a clinically important secondary finding.</p>
+    </sec>
+    <sec><title>Conclusions</title>
+      <p>Supplementation was well tolerated.</p>
+    </sec>
+  </body>
+  <back>
+    <ref-list><ref id="r1"><mixed-citation>Someone et al. 2020. A study. p = 0.01.</mixed-citation></ref></ref-list>
+  </back>
+</article>

@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     ttc_input_price: float = 0.0
     request_timeout: float = 45.0
     extraction_cache_version: str = "v2-sentence-evidence"
+    # Query-time full text from Europe PMC for papers with a PMCID; abstract otherwise.
+    fulltext_enabled: bool = True
+    europepmc_url: str = "https://www.ebi.ac.uk/europepmc/webservices/rest"
+    fulltext_timeout: float = 20.0
+    fulltext_max_lines: int = Field(default=160, ge=20, le=600)
     max_upload_bytes: int = 5 * 1024 * 1024
     max_upload_files: int = 3
     max_concurrent_searches: int = 4

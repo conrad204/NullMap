@@ -9,6 +9,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from app.config import Settings, settings
+from app.fulltext import FullTextClient
 from app.llm import LLMService, Usage
 from app.models import Pico, SearchRequest
 from app.repository import ElasticRepository, lexical_query, population_query, rrf_fuse
@@ -67,6 +68,8 @@ def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
             else None
         ),
         "extractionEvidence": study.get("extraction_evidence", {}),
+        "extractionSource": study.get("extraction_source"),
+        "pmcid": study.get("pmcid"),
         "ciLevel": study.get("ci_level"),
         "pValueOperator": study.get("p_value_operator"),
         "analysisEffectType": verdict.get("analysis_effect_type"),
@@ -82,9 +85,11 @@ class SearchPipeline:
         llm: LLMService,
         config: Settings = settings,
         embedder=None,
+        fulltext: FullTextClient | None = None,
     ):
         self.repo, self.llm, self.config = repository, llm, config
         self.embedder = embedder
+        self.fulltext = fulltext or FullTextClient(config)
         # Single API process shares document locks; concurrent warm-up pays once per work.
         self.locks: dict[str, asyncio.Lock] = {}
         self.active = asyncio.Semaphore(config.max_concurrent_searches)
@@ -160,7 +165,9 @@ class SearchPipeline:
         return [doc for _, doc in sorted(ranked, key=lambda pair: -pair[0])]
 
     async def extract_one(self, study: dict, usage: Usage, warnings: list[str]) -> dict:
-        if study.get("is_review") or not study.get("abstract"):
+        if study.get("is_review"):
+            return study
+        if not study.get("abstract") and not self.fulltext.pmcid(study):
             return study
         # Registry primary-outcome numbers are authoritative; papers cannot overwrite them.
         if study.get("source") == "ctgov" or (
@@ -171,10 +178,17 @@ class SearchPipeline:
         lock = self.locks.setdefault(study["id"], asyncio.Lock())
         async with lock:
             current = await self.repo.get(study["id"]) or study
-            if (
-                current.get("extracted_at")
-                and current.get("extraction_version") == self.config.extraction_cache_version
-            ):
+            fresh = bool(current.get("extracted_at")) and (
+                current.get("extraction_version") == self.config.extraction_cache_version
+            )
+            # Full text is a lazy upgrade: an abstract-only cache is re-read once when Europe
+            # PMC has the paper. A recorded 'used' or 'unavailable' verdict is never re-fetched.
+            upgrade = (
+                self.config.fulltext_enabled
+                and self.fulltext.pmcid(current) is not None
+                and current.get("fulltext_status") not in ("used", "unavailable")
+            )
+            if fresh and not upgrade:
                 usage.extraction_cache_hits += 1
                 if current.get("extraction_status") == "rejected":
                     warnings.append(
@@ -187,19 +201,42 @@ class SearchPipeline:
                 return current
             if not self.config.openai_api_key:
                 return current
+            lines, status = (None, None)
+            if self.config.fulltext_enabled:
+                lines, status = await self.fulltext.lines(current)
+            if status == "error":
+                warnings.append(
+                    "Full text could not be fetched for some open-access papers; their abstracts were used."
+                )
+                if fresh:
+                    usage.extraction_cache_hits += 1
+                    return current
+            if fresh and status == "unavailable":
+                # Nothing beyond the abstract exists; record that so the fetch is not repeated.
+                await self.repo.cache_extraction(study["id"], {"fulltext_status": "unavailable"})
+                usage.extraction_cache_hits += 1
+                return dict(current, fulltext_status="unavailable")
+            if not lines and not current.get("abstract"):
+                return current
             try:
-                extraction = await self.llm.extract(current, usage)
+                extraction = (
+                    await self.llm.extract(current, usage, lines=lines)
+                    if lines
+                    else await self.llm.extract(current, usage)
+                )
             except ValueError:
                 extraction = {
                     "extracted_at": datetime.now(UTC).isoformat(),
                     "extraction_version": self.config.extraction_cache_version,
                     "extraction_status": "rejected",
+                    "extraction_source": "full_text" if lines else "abstract",
                 }
                 if current.get("extraction_status") in ("verified", "retained_verified"):
                     extraction["extraction_status"] = "retained_verified"
                     extraction["extraction_facts_version"] = current.get(
                         "extraction_facts_version", current.get("extraction_version")
                     )
+                    extraction["extraction_source"] = current.get("extraction_source")
                     warnings.append(
                         "A new extraction failed verification; the previous verified facts were retained."
                     )
@@ -213,6 +250,8 @@ class SearchPipeline:
                     "Some paper extractions were unavailable; source classifications remain visible."
                 )
                 return current
+            if status in ("used", "unavailable"):
+                extraction["fulltext_status"] = status
             # Never replace trusted registry PICO fields with absent extraction fields.
             updated = dict(current, **extraction)
             extraction.update(assign_bucket(updated))

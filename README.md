@@ -95,9 +95,10 @@ Backend settings are read from `backend/.env`; examples contain names and defaul
 | `EMBEDDINGS_ENABLED=false` | Explicit BM25 fallback when local inference is unavailable |
 | `REFERENCE_MIN_SIMILARITY` | Review-reference cosine cutoff; defaults to 0.55 for the configured MiniLM model |
 | `CLASSIFIER_MODEL_PATH` | Optional evaluated classifier artifact; leave empty for the active weak classifier |
+| `FULLTEXT_ENABLED`, `EUROPEPMC_URL`, `FULLTEXT_MAX_LINES` | Query-time Europe PMC full text for open-access papers with a PMCID; keyless, on by default |
 | `TTC_API_KEY`, `COMPRESSION_ENABLED`, `COMPRESSION_VALIDATED` | Optional compression experiment; compression remains off by default |
 
-ClinicalTrials.gov needs no key. OpenAlex's [public snapshot](https://help.openalex.org/access/snapshot/) requires no OpenAlex API access or AWS credentials. It provides dated metadata and available abstracts, not full-text PDFs. Optional Voloridge SSH settings are for batch-machine access; the API does not launch remote jobs.
+ClinicalTrials.gov needs no key. OpenAlex's [public snapshot](https://help.openalex.org/access/snapshot/) requires no OpenAlex API access or AWS credentials. It provides dated metadata and available abstracts, not full-text PDFs. When a retrieved paper carries a PubMed Central ID, the API fetches its JATS XML from [Europe PMC](https://europepmc.org/RestfulWebService) at query time, flattens the abstract, primary-outcome methods sentences, results tables and results prose into verbatim lines, and runs the same quoted extraction over those lines. Papers outside PubMed Central remain abstract-only, and each result row states which it used. Optional Voloridge SSH settings are for batch-machine access; the API does not launch remote jobs.
 
 ## Verification
 
@@ -126,7 +127,7 @@ The current classifier is an explicitly heuristic phrase lexicon. A small traine
 - OR/RR/HR values remain inspectable as raw ratios; inference uses their logarithms and a compatible log-scale SESOI. Confidence levels and p-value inequalities are preserved.
 - Approximate reconstruction requires an estimate and an exact eligible p-value under stated assumptions; p-value bounds and sample size alone do not justify manufacturing an effect or interval.
 - Assurance is expected two-sided statistical power under the stated model, not the probability of meaningful clinical benefit. EV uses the user's success value, null-result value, and cost in common units.
-- Paper facts select numbered source sentences; code supplies exact quotations and rejects unsupported numeric values. Narration is deterministic when a compatible numerical pool is unavailable. Registry facts retain their JSON paths. Contributions are stored drafts with receipts, not automatic publications or emails.
+- Paper facts select numbered source sentences, or numbered full-text lines and table rows when Europe PMC has the paper; code supplies exact quotations and rejects unsupported numeric values. Discussion and conclusion sections are never offered as evidence. Narration is deterministic when a compatible numerical pool is unavailable. Registry facts retain their JSON paths. Contributions are stored drafts with receipts, not automatic publications or emails.
 
 See the [ingestion guide](backend/app/ingest/README.md) for checkpoints, scope rules, snapshot budgets, reference backfills and source limitations. The [demo guide](docs/DEMO.md) explains the workflow; the [validation record](docs/VALIDATION.md) distinguishes the S3 migration checks from historical demo measurements.
 

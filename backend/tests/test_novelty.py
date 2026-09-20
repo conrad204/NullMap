@@ -3,10 +3,10 @@ import asyncio
 import pytest
 
 from app.config import Settings
-from app.fulltext import FullText, FullTextClient, parse_jats
 from app.llm import LLMService, Usage
 from app.models import Claim
 from app.novelty import Candidate, NoveltyEngine, cosine, to_candidate
+from app.paper_text import FullText, FullTextClient, parse_jats
 
 JATS = """<article><front><article-meta><abstract><p>We asked whether a JAK2 inhibitor changes
 viability in leukemia cells, and measured viability at 24 hours.</p>

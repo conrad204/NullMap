@@ -22,6 +22,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--manifest", default=settings.openalex_snapshot_manifest)
     result.add_argument("--data-dir", type=Path, default=Path("data/research-s3"))
     result.add_argument("--max-files", type=int, help="Explicit partial snapshot for smoke tests")
+    result.add_argument(
+        "--largest-first",
+        action="store_true",
+        help="Order parts by descending size so a partial --max-files run covers more of the corpus",
+    )
     result.add_argument("--max-snapshot-bytes", type=int, default=5_000_000_000)
     result.add_argument(
         "--max-records", type=int, help="Explicit partial record cap; default has no cap"
@@ -51,7 +56,7 @@ async def bootstrap(args) -> dict:
     if args.max_snapshot_bytes <= 0 or args.min_free_bytes < 0:
         raise ValueError("Snapshot budget must be positive and free-space threshold nonnegative")
     manifest = await load_manifest(args.manifest)
-    plan = plan_manifest(manifest, max_files=args.max_files)
+    plan = plan_manifest(manifest, max_files=args.max_files, largest_first=args.largest_first)
     summary = {k: v for k, v in plan.items() if k != "files"}
     summary.update(
         source="public_s3",
