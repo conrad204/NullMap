@@ -121,7 +121,7 @@ export default function ConceptSearch({ hidden }: { hidden: boolean }) {
               );
             })}
             <span className="flex min-w-[14rem] flex-1 items-center gap-2">
-              <button type="button" onClick={() => setNextSign(nextSign === "positive" ? "negative" : "positive")}
+              <button type="button" onClick={() => { setNextSign(nextSign === "positive" ? "negative" : "positive"); fieldRef.current?.focus(); }}
                 title={nextSign === "positive" ? "Next concept is searched towards. Click to push away instead." : "Next concept is pushed away. Click to search towards it instead."}
                 aria-label={`Next concept: ${meta.label}`}
                 className={cx("flex h-5 w-5 shrink-0 items-center justify-center rounded-mark text-xs font-semibold text-[var(--on-accent)]", meta.bg)}>
