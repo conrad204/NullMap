@@ -192,7 +192,7 @@ export default function MapPanel() {
         </label>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium text-ink">Or steer with arithmetic</legend>
+          <legend className="text-sm font-medium text-ink">Or swap parts of a studied idea</legend>
           <div className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
             <input
               aria-label="Start from"
@@ -228,8 +228,13 @@ export default function MapPanel() {
             />
           </div>
           <p className="text-xs text-ink-3">
-            Each phrase is embedded and combined — start, minus, plus — then the map shows which
-            real papers sit nearest the implied point. Comma-separate several terms.
+            Start from a question the literature already knows, subtract the part you want to swap
+            out, and add its replacement — the example asks "has vitamin D been tried in chronic
+            kidney disease instead of depression?". The map answers with the real indexed papers
+            closest to that combination, each with a 0–1 similarity score. A high score means very
+            similar work is already published; a low score only means this sample holds nothing
+            close. The score measures overlap with existing papers — it is never the probability
+            that the idea is novel or worth running. Comma-separate several terms.
           </p>
         </fieldset>
 
