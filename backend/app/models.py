@@ -240,6 +240,23 @@ class MapRequest(BaseModel):
     refresh: bool = False
 
 
+ConceptTerm = Annotated[str, Field(min_length=2, max_length=200)]
+
+
+class ConceptSearchRequest(BaseModel):
+    """Concepts to add and to subtract before the index is searched by nearest neighbour.
+
+    The negatives are part of the query direction, not a post-filter: a paper is
+    pushed away by a subtracted concept rather than removed for mentioning it.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    positive: list[ConceptTerm] = Field(min_length=1, max_length=8)
+    negative: list[ConceptTerm] = Field(default_factory=list, max_length=8)
+    limit: int = Field(default=20, ge=1, le=50)
+    filters: SearchFilters | None = None
+
+
 class Claim(BaseModel):
     """The testable content of a hypothesis, as retrieval terms and comparable facets."""
 

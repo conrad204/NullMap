@@ -14,6 +14,7 @@ import asyncio
 import numpy as np
 
 from app.config import Settings, settings
+from app.embeddings import QueryEmbedder
 from app.gapmap import (
     _bucket,
     _corpus,
@@ -71,18 +72,12 @@ class GapMapService:
     def __init__(self, repository, config: Settings = settings):
         self.repo = repository
         self.config = config
-        self.embedder = None
+        self.embedder = QueryEmbedder(config)
         self._built: dict | None = None
         self._lock = asyncio.Lock()
 
     async def embed(self, text: str) -> list[float] | None:
-        if not self.config.embeddings_enabled:
-            return None
-        if self.embedder is None:
-            from app.embeddings import get_embedder
-
-            self.embedder = get_embedder(self.config.embedding_model, self.config.embedding_device)
-        return await asyncio.to_thread(self.embedder.embed_query, text)
+        return await self.embedder.embed(text)
 
     async def build(self, refresh: bool = False) -> dict:
         async with self._lock:

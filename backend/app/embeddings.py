@@ -4,6 +4,7 @@ No hosted embedding endpoint is used. Loading/downloading a model is deferred
 until embeddings are requested, so BM25 and metadata-only operation stay light.
 """
 
+import asyncio
 from functools import lru_cache
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -46,3 +47,22 @@ class Embedder:
 @lru_cache(maxsize=4)
 def get_embedder(model_name: str = DEFAULT_MODEL, device: str = "cpu") -> Embedder:
     return Embedder(model_name=model_name, device=device)
+
+
+class QueryEmbedder:
+    """One query embedding per call, loaded on first use and encoded off the loop.
+
+    ``None`` rather than a zero vector when embeddings are disabled: a caller
+    must say it could not embed, not search with a direction it invented.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.embedder: Embedder | None = None
+
+    async def embed(self, text: str) -> list[float] | None:
+        if not self.config.embeddings_enabled:
+            return None
+        if self.embedder is None:
+            self.embedder = get_embedder(self.config.embedding_model, self.config.embedding_device)
+        return await asyncio.to_thread(self.embedder.embed_query, text)
