@@ -47,15 +47,15 @@ Fifteen of the first 19 rejections were `Number absent from quoted evidence for 
 sizes ("Four hundred patients") and totals the model had summed. One discarded extraction held
 a mean difference of 0.308 with a 95% CI of −0.194 to 0.81. The interval count moved between
 4 and 7 across passes with no code change to that path, so treat it as run-to-run model
-variance, not a trend. The phrase lexicon labelled 17 of the 25 `inconclusive`; with
+variance, not a trend. The phrase lexicon labeled 17 of the 25 `inconclusive`; with
 `reported_result` 5 remained. **That is a coverage figure, not accuracy**: the labels were not
-checked against human judgement, at least two quoted sentences were weak support for their
+checked against human judgment, at least two quoted sentences were weak support for their
 label, and the sample included animal studies, which nothing in the pipeline excludes. About
 70% of these abstracts stayed text-only on every pass.
 
 **Effect direction, trend and outcome grouping** (real models, same 25 abstracts plus 23 numeric
 blood-pressure trials from the registry sample). Quoted `result_direction` came back as 15
-favours-intervention, 2 favours-comparator, 7 unclear, 1 absent; not checked against human
+favors-intervention, 2 favors-comparator, 7 unclear, 1 absent; not checked against human
 reading. The first trend paragraph was coherent and mentioned the reported nulls, but said
 "among 7 studies" when its table held 14, so the prompt now forbids counting and prose with a
 number absent from its table is rejected. Outcome grouping with `gpt-4.1-mini` and a looser
@@ -80,7 +80,7 @@ sweep fills the early ranks; screening 160 in batches of 40 kept 64 (10 of the 5
 papers) and the trend ran on 4 effect studies, at about $0.02 for that search. Two kept
 "papers" were corrupt records with a literary title on a salt abstract ("Ah! L’amour,
 l’amour…"), which the screen cannot see through because it reads the abstract. Screening
-accuracy was not measured against human judgement. When the match set exceeds the screened
+accuracy was not measured against human judgment. When the match set exceeds the screened
 page, bucket counts still describe unscreened keyword matches and the response says so.
 The screen now reaches 500 ranks (`SCREEN_LIMIT`, with retrieval widened to match via
 `repository.RETRIEVE_LIMIT`, at most 8 screening calls in flight). The figures above were
@@ -141,7 +141,7 @@ Local generated artifacts: [bootstrap summary](../backend/data/bootstrap-summary
 
 ## Classifier and compression decisions
 
-The pilot embedding classifier used **63 training examples and 16 held-out LLM-labelled examples**. Held-out agreement was **56.25%**; it recovered **0 of 2 null examples**. One mixed example was excluded because support was insufficient. This is agreement with generated labels on a small selected sample, not clinical accuracy. The model was **not promoted**; the auditable weak phrase classifier remains active.
+The pilot embedding classifier used **63 training examples and 16 held-out LLM-labeled examples**. Held-out agreement was **56.25%**; it recovered **0 of 2 null examples**. One mixed example was excluded because support was insufficient. This is agreement with generated labels on a small selected sample, not clinical accuracy. The model was **not promoted**; the auditable weak phrase classifier remains active.
 
 The second paired compression benchmark evaluated **20 abstracts**. Uncompressed extraction passed evidence validation for **13**, compressed extraction for **2**, and **2 pairs** had verified exact fact agreement. The compression gate remains **off**. These numbers do not establish human-reviewed extraction accuracy, and shorter prompts alone do not justify enabling compression.
 

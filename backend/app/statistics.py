@@ -18,7 +18,7 @@ References:
   only to pools of at least ten studies as Cochrane Handbook 13.3.5.3 recommends.
 
 Assurance here is two-sided statistical significance, including effects in the
-unfavourable direction. It is not a probability of clinically meaningful benefit.
+unfavorable direction. It is not a probability of clinically meaningful benefit.
 All intervals and power calculations use a normal approximation.
 """
 
@@ -569,16 +569,16 @@ def _egger(effects: np.ndarray, ses: np.ndarray) -> dict | None:
         return None
     precision = 1.0 / ses
     deviate = effects / ses
-    centre = float(precision.mean())
-    spread = float(np.sum((precision - centre) ** 2))
+    center = float(precision.mean())
+    spread = float(np.sum((precision - center) ** 2))
     # Studies of near-identical precision give a funnel with no vertical extent.
     if not math.isfinite(spread) or spread <= 0:
         return None
-    slope = float(np.sum((precision - centre) * (deviate - deviate.mean())) / spread)
-    intercept = float(deviate.mean() - slope * centre)
+    slope = float(np.sum((precision - center) * (deviate - deviate.mean())) / spread)
+    intercept = float(deviate.mean() - slope * center)
     degrees = k - 2
     residual_variance = float(np.sum((deviate - intercept - slope * precision) ** 2)) / degrees
-    se = math.sqrt(residual_variance * (1 / k + centre * centre / spread))
+    se = math.sqrt(residual_variance * (1 / k + center * center / spread))
     if not math.isfinite(intercept) or not math.isfinite(se) or se <= 0:
         return None
     statistic = intercept / se
@@ -728,7 +728,7 @@ def _decide(
     else:
         side = "a real effect" if state == "favours_effect" else "no effect"
         reasons.append(
-            f"The record already favours {side}: only a {pursuit['pOpen']:.0%} chance that lean "
+            f"The record already favors {side}: only a {pursuit['pOpen']:.0%} chance that lean "
             "is wrong."
         )
     if power is not None:
@@ -891,7 +891,7 @@ def analyze_studies(
     model judged comparable (same construct, same kind of comparison). It replaces only
     the exact-text match on outcome and comparison wording; scale, units for mean
     differences and every number are still checked and computed here, and such pools
-    are marked so the judgement can be reviewed.
+    are marked so the judgment can be reviewed.
 
     Pools require >=3 independent primary studies with the same normalized effect
     type, outcome, outcome unit, intervention/comparator orientation and explicit

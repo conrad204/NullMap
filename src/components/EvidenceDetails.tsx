@@ -52,7 +52,7 @@ export function YearBreakdown({ counts }: { counts: { year: number; count: numbe
 const RECOMMENDATIONS: Record<Recommendation, { label: string; tone: string }> = {
   pursue: { label: "Worth pursuing as posed", tone: "text-v-effect" },
   pursue_with_changes: { label: "Worth pursuing with changes", tone: "text-v-unreported" },
-  deprioritize: { label: "Deprioritise", tone: "text-v-null" },
+  deprioritize: { label: "Deprioritize", tone: "text-v-null" },
 };
 function PursuitPanel({ pursuit, sesoi }: { pursuit: Pursuit; sesoi?: number }) {
   const state = PURSUIT_STATES[pursuit.state];

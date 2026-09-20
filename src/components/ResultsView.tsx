@@ -17,7 +17,7 @@ const matchesFilter = (filter: Filter, paper: Paper) => filter === "all" || (isV
 const filterLabel = (filter: Filter) => isVerdict(filter) ? VERDICT_META[filter].label : filterGroup(filter)?.label ?? "";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
-const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
+const DIRECTIONS = { favours_intervention: "Favors the intervention", favours_comparator: "Favors the comparator", unclear: "" };
 const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
@@ -148,8 +148,8 @@ function OverviewPanel({ overview }: { overview: NonNullable<SearchResult["overv
 }
 function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
   const split = [
-    { label: "favour the intervention", count: trend.favoursIntervention, tone: "text-v-effect" },
-    { label: "favour the comparator", count: trend.favoursComparator, tone: "text-v-failed" },
+    { label: "favor the intervention", count: trend.favoursIntervention, tone: "text-v-effect" },
+    { label: "favor the comparator", count: trend.favoursComparator, tone: "text-v-failed" },
     { label: "direction not stated", count: trend.unclear, tone: "text-ink-2" },
   ];
   return <section className="border-l-2 border-v-effect pl-4">
@@ -181,7 +181,7 @@ function VerdictBreakdown({ counts, directions, directionsOverMatchSet, reasons,
         <span className="text-xs leading-relaxed text-ink-3">{group.detail(counts)}</span>
       </button>
     </li>)}</ul>
-    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} {directionsOverMatchSet ? `Which arm an effect favoured is the study's own stated result, read from a quoted sentence; benefit, harm and any unstated direction together make up the ${formatCount(counts.effect)} that found a difference.` : "No direction breakdown came back for the match set, so the direction counts cover the displayed studies only and a dash means none of them stated it."} Select an answer to filter the displayed studies below.</p>
+    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} {directionsOverMatchSet ? `Which arm an effect favored is the study's own stated result, read from a quoted sentence; benefit, harm and any unstated direction together make up the ${formatCount(counts.effect)} that found a difference.` : "No direction breakdown came back for the match set, so the direction counts cover the displayed studies only and a dash means none of them stated it."} Select an answer to filter the displayed studies below.</p>
     {unstated > 0 && <UnstatedDirectionNote count={unstated} scoped={directionsOverMatchSet} active={filter === UNSTATED_DIRECTION_GROUP.key} onToggle={() => onFilter(filter === UNSTATED_DIRECTION_GROUP.key ? "all" : UNSTATED_DIRECTION_GROUP.key)} />}
     <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
@@ -190,7 +190,7 @@ function UnstatedDirectionNote({ count, scoped, active, onToggle }: { count: num
   return <div className="mt-6 border-t border-line pt-5">
     <button type="button" onClick={onToggle} aria-pressed={active} className={cx("group -m-2 flex items-baseline gap-2 rounded-control p-2 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2/60")}>
       <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(count)}</span>
-      <span className="text-sm text-ink-2 group-hover:text-ink">further {count === 1 ? "match" : "matches"} found a difference without saying which arm it favoured</span>
+      <span className="text-sm text-ink-2 group-hover:text-ink">further {count === 1 ? "match" : "matches"} found a difference without saying which arm it favored</span>
     </button>
     <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-ink-2">{UNSTATED_DIRECTION_GROUP.description} It is left out of the bar because it answers neither benefit nor harm.{scoped ? "" : " Counted over the displayed studies only."}</p>
   </div>;

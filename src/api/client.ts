@@ -60,7 +60,7 @@ export async function searchIdea(
 /**
  * The map, streamed as it is built. `onProgress` receives the real intermediate
  * states — points as they arrive, region centroids as clustering moves them —
- * each one labelled with the coverage it actually has. A server without the
+ * each one labeled with the coverage it actually has. A server without the
  * streaming route, or a map the backend already holds, simply yields the result.
  */
 export async function streamMap(
