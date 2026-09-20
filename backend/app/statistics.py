@@ -868,7 +868,7 @@ def analyze_studies(
                 f"Egger's test indicates funnel asymmetry for {pool['outcome']} "
                 f"({pool['effectType']}): intercept {egger['intercept']:.2f} "
                 f"(p = {egger['pValue']:.3f}); small studies report systematically different "
-                "effects, so the pooled estimate may reflect publication bias."
+                "effects, so the pooled estimate may reflect selective reporting."
             )
     drawer = _file_drawer(unique_studies, file_drawer)
     if file_drawer is None:

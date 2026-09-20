@@ -81,7 +81,7 @@ function PublicationBias({ pool, studies }: { pool: EvidencePool; studies: { est
     <p className="mt-1 font-mono text-xs text-ink">intercept {signed(egger.intercept, 2)} · 95% CI [{egger.ci[0].toFixed(2)}, {egger.ci[1].toFixed(2)}] · t({egger.df}) = {egger.t.toFixed(2)} · p = {egger.pValue < 0.001 ? "<0.001" : egger.pValue.toFixed(3)}</p>
     <Funnel studies={studies} pooled={pool.estimate} />
     <p className="mt-1 text-xs leading-relaxed text-ink-3">{egger.asymmetric
-      ? `The funnel is asymmetric at p < ${egger.alpha}: smaller studies report systematically different effects, so the pooled estimate may be inflated by unpublished null results.`
+      ? `The funnel is asymmetric at p < ${egger.alpha}: smaller studies report systematically different effects, so the pooled estimate may reflect selective reporting.`
       : `No funnel asymmetry was detected at p < ${egger.alpha}. This test is underpowered, so it cannot establish that nothing is missing.`}{" "}Asymmetry also arises from heterogeneity, study quality and chance; no estimate here is adjusted for it.</p>
   </div>;
 }
