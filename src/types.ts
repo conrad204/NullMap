@@ -264,3 +264,35 @@ export interface SearchResult {
   retrieval?: { mode: string; expanded: number };
   spin?: { eligible: number; disagreements: number };
 }
+
+/** Concept search: nearest neighbours of `sum(positive) − sum(negative)` in the embedding space. */
+export type ConceptSign = "positive" | "negative";
+export interface Concept {
+  id: string;
+  text: string;
+  sign: ConceptSign;
+}
+export interface ConceptSearchRequest {
+  positive: string[];
+  negative: string[];
+  limit?: number;
+}
+export interface ConceptMatch {
+  id: string;
+  title: string;
+  year: number | null;
+  url: string;
+  source: Source;
+  verdict: Verdict;
+  citations: number;
+  /** Cosine to the combined direction, never a probability of relevance. */
+  cosine: number;
+  /** This paper's cosine to each supplied concept, positives first. */
+  concepts: { text: string; sign: ConceptSign; cosine: number }[];
+}
+export interface ConceptSearchResult {
+  version: string;
+  concepts: { text: string; sign: ConceptSign }[];
+  matches: ConceptMatch[];
+  warnings?: string[];
+}

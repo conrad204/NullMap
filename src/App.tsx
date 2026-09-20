@@ -7,6 +7,7 @@ import QuestionHeader, { GLIDE_MS, type GlideOrigin } from "./components/Questio
 import ResultsView from "./components/ResultsView";
 import ResultsSkeleton from "./components/ResultsSkeleton";
 import EmptyState from "./components/EmptyState";
+import ConceptSearch from "./components/ConceptSearch";
 import ErrorNotice from "./components/ErrorNotice";
 import { SAMPLE_RESULT } from "./api/mock";
 import { afterSearch, loadFilterState, saveFilterState, type FilterState } from "./lib/filters";
@@ -96,6 +97,9 @@ export default function App() {
         <div hidden={status.kind !== "idle"} className="pt-[max(0.5rem,calc(50dvh-22.5rem))]">
           <IdeaComposer hidden={status.kind !== "idle"} onSubmit={run} filters={filters} onFiltersChange={setFilters} />
           <div className="mx-auto mt-24 w-full max-w-[720px] border-t border-line pt-10">
+            <ConceptSearch />
+          </div>
+          <div className="mx-auto mt-16 w-full max-w-[720px] border-t border-line pt-10">
             <EmptyState />
           </div>
         </div>
