@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { ArrowsOut, Minus, Plus } from "@phosphor-icons/react";
-import type { MapGap, MapPoint, MapRegion, RegionLabel, Verdict } from "../types";
-import { REGION_META, REGION_ORDER } from "../lib/regions";
+import type { MapGap, MapPoint, MapRegion, Verdict } from "../types";
+import { CLUSTER_META, CLUSTER_ORDER, REGION_META, clusterDetail, clusterMetaOf } from "../lib/regions";
 import { VERDICT_META } from "../lib/verdicts";
 
 interface MapCanvasProps {
@@ -10,16 +10,6 @@ interface MapCanvasProps {
   gaps: MapGap[];
   placementPoint?: { x: number; y: number } | null;
 }
-
-/** Region label -> the theme variable the canvas resolves at draw time. */
-const LABEL_VAR: Record<RegionLabel, string> = {
-  active: "--v-effect",
-  contested: "--v-inconclusive",
-  null_saturated: "--v-reported-null",
-  dark: "--v-unreported",
-  unread: "--ink-3",
-  thin: "--ink-3",
-};
 
 const HOVER_RADIUS = 6;
 const MIN_ZOOM = 1;
@@ -47,6 +37,7 @@ interface Hover {
   top: number;
   below: boolean;
   point: MapPoint;
+  region: MapRegion | undefined;
 }
 
 export default function MapCanvas({ points, regions, gaps, placementPoint = null }: MapCanvasProps) {
@@ -123,7 +114,7 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       const regionColor = new Map<number, string>();
       const regionById = new Map<number, MapRegion>();
       for (const region of regions) {
-        regionColor.set(region.id, color(LABEL_VAR[region.label], grey));
+        regionColor.set(region.id, color(clusterMetaOf(region.label).colorVar, grey));
         regionById.set(region.id, region);
       }
 
@@ -273,15 +264,17 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
       top: y,
       below: y < 70,
       point: best,
+      region: regions.find((region) => region.id === best.region),
     });
   }
 
-  const present = REGION_ORDER.filter((label) =>
-    regions.some((region) => region.label === label),
-  );
+  const presentLabels = regions.map((region) => region.label);
+  const presentClusters = CLUSTER_ORDER.filter((cluster) => clusterDetail(cluster, presentLabels));
   const ariaLabel =
     `Scatter map of ${points.length} sampled studies in ${regions.length} regions` +
-    (gaps.length ? ", with dashed lines marking open bands between literatures" : "") +
+    (gaps.length
+      ? ", with dashed lines marking stretches between two neighbouring literatures where the sample holds almost no papers"
+      : "") +
     ". Each region is described in the list below.";
 
   return (
@@ -338,29 +331,41 @@ export default function MapCanvas({ points, regions, gaps, placementPoint = null
               {hover.point.year ?? "year unknown"} ·{" "}
               {VERDICT_META[hover.point.bucket as Verdict]?.label ?? hover.point.bucket}
             </p>
+            {hover.region && (
+              <p className="mt-0.5 text-xs text-ink-3">
+                {clusterMetaOf(hover.region.label).label} · {REGION_META[hover.region.label].label.toLowerCase()}
+              </p>
+            )}
           </div>
         )}
       </div>
       <figcaption className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-3">
         <span>Drag to pan, scroll to zoom{transform.k > 1 ? ` · ${transform.k.toFixed(1)}×` : ""}</span>
-        {present.map((label) => (
-          <span key={label} className="inline-flex items-center gap-1.5">
+        {presentClusters.map((cluster) => (
+          <span
+            key={cluster}
+            className="inline-flex items-center gap-1.5"
+            title={`${CLUSTER_META[cluster].description} In this map: ${clusterDetail(cluster, presentLabels)}.`}
+          >
             <span
               className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: `var(${LABEL_VAR[label]})` }}
+              style={{ backgroundColor: `var(${CLUSTER_META[cluster].colorVar})` }}
               aria-hidden
             />
-            {REGION_META[label].label}
+            {CLUSTER_META[cluster].label}
           </span>
         ))}
         {gaps.length > 0 && (
-          <span className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-flex items-center gap-1.5"
+            title="A stretch between two neighbouring literatures where the sample holds almost no papers."
+          >
             <span
               className="w-3.5"
               style={{ borderTop: "2px dashed var(--line-strong)" }}
               aria-hidden
             />
-            open band
+            almost no papers between two literatures
           </span>
         )}
         {placementPoint && (
