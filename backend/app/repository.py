@@ -2,9 +2,11 @@
 
 import asyncio
 import calendar
+import contextlib
 import math
 import re
 import unicodedata
+from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -25,6 +27,12 @@ from app.statistics import (
 )
 
 BUCKETS = ("effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported")
+# Direction is a property of an effect, not a bucket: these partition the effect bucket.
+EFFECT_DIRECTIONS = {
+    "favours_intervention": "favoursIntervention",
+    "favours_comparator": "favoursComparator",
+    "unclear": "unclear",
+}
 _CACHE_FIELDS = set(
     (
         "extracted_at extraction_version extraction_status extraction_evidence evidence_span "
@@ -50,6 +58,34 @@ _PAPER_FIELDS = set(
         "classification_method abstract_available work_type snapshot_provenance pmcid"
     ).split()
 )
+
+
+# Embedded studies, the corpus the gap map is drawn from. Reviews stay in: they
+# occupy the space too, and `gapmap` excludes them from a region's attempts.
+_EMBEDDED_QUERY = {
+    "bool": {"filter": [{"term": {"record_kind": "study"}}, {"exists": {"field": "embedding"}}]}
+}
+# Everything the map needs per document and nothing else: abstracts would
+# multiply the bytes on the wire without changing a single position.
+_MAP_FIELDS = [
+    "embedding",
+    "title",
+    "year",
+    "bucket",
+    "record_kind",
+    "is_review",
+    "cited_by_count",
+    "source",
+]
+_PIT_KEEP_ALIVE = "10m"
+
+
+def _split_budget(limit: int, slices: int) -> list[int | None]:
+    """Share a document budget between concurrent slices; no limit means no cap."""
+    if limit <= 0:
+        return [None] * slices
+    base, extra = divmod(limit, slices)
+    return [base + (1 if index < extra else 0) for index in range(slices)]
 
 
 def index_mapping(dimensions: int = 384) -> dict:
@@ -845,11 +881,7 @@ class ElasticRepository:
         sample so a caller can say which fraction of the corpus it describes.
         """
         await self.ensure_index()
-        query = {
-            "bool": {
-                "filter": [{"term": {"record_kind": "study"}}, {"exists": {"field": "embedding"}}],
-            }
-        }
+        query = _EMBEDDED_QUERY
         total = await self.client.count(index=self.index, query=query)
         body = {
             "index": self.index,
@@ -866,26 +898,136 @@ class ElasticRepository:
                     "boost_mode": "replace",
                 }
             },
+            "source_includes": _MAP_FIELDS,
+        }
+        result = await self._search_with_vectors(body)
+        return {"documents": self.hits(result), "corpus": total["count"]}
+
+    async def count_embedded(self) -> int:
+        """How many embedded studies exist, so coverage can be stated as a fraction."""
+        await self.ensure_index()
+        result = await self.client.count(index=self.index, query=_EMBEDDED_QUERY)
+        return int(result["count"])
+
+    async def scan_embedded(
+        self,
+        batch_size: int = 2000,
+        slices: int = 8,
+        limit: int = 0,
+    ) -> AsyncIterator[list[dict]]:
+        """Every embedded study, in batches, over one point in time.
+
+        Paginated rather than fetched at once: the embedded corpus is millions of
+        384-float vectors, so a single oversized search would neither fit in one
+        response nor let a caller show anything before the last document arrived.
+        Slices run concurrently because a single `search_after` walk is limited by
+        round-trip latency, not by Elasticsearch — measured against the live index,
+        one walk moved ~3.2k documents/s and sixteen slices ~11k/s.
+
+        A point in time keeps the walk consistent, so the same document is never
+        yielded twice and none is missed while the index is written to.
+        """
+        await self.ensure_index()
+        slices = max(1, slices)
+        pit = (await self.client.open_point_in_time(index=self.index, keep_alive=_PIT_KEEP_ALIVE))
+        pit_id = pit["id"]
+        queue: asyncio.Queue = asyncio.Queue(maxsize=slices * 2)
+        budgets = _split_budget(limit, slices)
+
+        async def walk(slice_id: int, budget: int | None) -> None:
+            after: list | None = None
+            taken = 0
+            while budget is None or taken < budget:
+                size = batch_size if budget is None else min(batch_size, budget - taken)
+                # No index: a point in time already names one, and Elasticsearch
+                # rejects a search that specifies both.
+                body: dict[str, Any] = {
+                    "size": size,
+                    "query": _EMBEDDED_QUERY,
+                    "pit": {"id": pit_id, "keep_alive": _PIT_KEEP_ALIVE},
+                    "sort": [{"_shard_doc": "asc"}],
+                    "source_includes": _MAP_FIELDS,
+                }
+                if slices > 1:
+                    body["slice"] = {"id": slice_id, "max": slices}
+                if after is not None:
+                    body["search_after"] = after
+                response = await self._search_with_vectors(body)
+                hits = response["hits"]["hits"]
+                if not hits:
+                    return
+                after = hits[-1]["sort"]
+                taken += len(hits)
+                await queue.put(self.hits(response))
+
+        async def produce() -> None:
+            try:
+                await asyncio.gather(*(walk(index, budgets[index]) for index in range(slices)))
+            finally:
+                await queue.put(None)
+
+        producer = asyncio.create_task(produce())
+        try:
+            while True:
+                batch = await queue.get()
+                if batch is None:
+                    break
+                yield batch
+            await producer
+        finally:
+            producer.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await producer
+            with contextlib.suppress(Exception):  # the walk is over either way
+                await self.client.close_point_in_time(id=pit_id)
+
+    async def _search_with_vectors(self, body: dict) -> Any:
+        """Search keeping the stored vectors in `_source`, on 9.1 and on 9.2+."""
+        if not self._vector_source_filter:
+            return await self.client.search(**body)
+        try:
+            return await self.client.search(**body, source_exclude_vectors=False)
+        except (BadRequestError, TypeError):
+            self._vector_source_filter = False
+            return await self.client.search(**body)
+
+    async def knn_studies(
+        self, vector: list[float], limit: int, filters: dict | None = None
+    ) -> list[dict]:
+        """Nearest studies to an arbitrary vector, each with its own embedding.
+
+        The vectors travel back because the caller reports a cosine per concept,
+        which cannot be recomputed without them. Elasticsearch scores a `cosine`
+        dense vector as `(1 + cos) / 2`, so the score is converted back to the
+        cosine rather than reported as an opaque relevance number.
+        """
+        await self.ensure_index()
+        body = {
+            "index": self.index,
+            "size": limit,
+            "knn": {
+                "field": "embedding",
+                "query_vector": vector,
+                "k": limit,
+                "num_candidates": min(10 * limit, 1000),
+                "filter": [{"term": {"record_kind": "study"}}, *filter_clauses(filters)],
+            },
             "source_includes": [
                 "embedding",
                 "title",
                 "year",
-                "bucket",
-                "record_kind",
-                "is_review",
-                "cited_by_count",
+                "url",
                 "source",
+                "bucket",
+                "query_bucket",
+                "cited_by_count",
             ],
         }
-        if self._vector_source_filter:
-            try:
-                result = await self.client.search(**body, source_exclude_vectors=False)
-            except (BadRequestError, TypeError):
-                self._vector_source_filter = False
-                result = await self.client.search(**body)
-        else:
-            result = await self.client.search(**body)
-        return {"documents": self.hits(result), "corpus": total["count"]}
+        result = await self._search_with_vectors(body)
+        return [
+            dict(hit["_source"], id=hit["_id"], cosine=2 * float(hit["_score"]) - 1)
+            for hit in result["hits"]["hits"]
+        ]
 
     async def retrieve(self, query: dict, vector: list[float] | None) -> tuple[list[dict], str]:
         base = {"index": self.index, "size": RETRIEVE_LIMIT, "source_excludes": ["embedding"]}
@@ -1138,6 +1280,18 @@ class ElasticRepository:
                         },
                     },
                 },
+                "effect_directions": {
+                    "filter": {"term": {"query_bucket": "effect"}},
+                    "aggs": {
+                        "directions": {
+                            "terms": {
+                                "field": "result_direction",
+                                "missing": "unclear",
+                                "size": len(EFFECT_DIRECTIONS),
+                            }
+                        }
+                    },
+                },
                 "spin_candidates": {
                     "filter": {
                         "bool": {
@@ -1159,12 +1313,17 @@ class ElasticRepository:
             counts[bucket] += row["doc_count"]
             if reason:
                 reasons[reason] += row["doc_count"]
+        directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
+        for row in aggs["effect_directions"]["directions"]["buckets"]:
+            # An unrecognized direction is not a fourth answer; it is one nobody stated.
+            directions[EFFECT_DIRECTIONS.get(row["key"], "unclear")] += row["doc_count"]
         registered = aggs["completed"]["doc_count"]
         unreported = aggs["completed"]["missing"]["doc_count"]
         return {
             "total": result["hits"]["total"]["value"],
             "bucketCounts": counts,
             "inconclusiveReasons": reasons,
+            "effectDirections": directions,
             "yearCounts": [
                 {"year": int(b["key_as_string"][:4]), "count": b["doc_count"]}
                 for b in aggs["years"]["buckets"]

@@ -26,7 +26,7 @@ test('the draft is rejected on the same grounds the API rejects it', () => {
   assert.match(filterError(draft({ minCitations: '-3' })), /cannot be negative/);
 });
 
-test('active bounds are labelled for display beside the question', () => {
+test('active bounds are labeled for display beside the question', () => {
   assert.deepEqual(describeFilters(undefined), []);
   assert.deepEqual(describeFilters({ yearFrom: 2015, yearTo: 2020 }), ['Published 2015\u20132020']);
   assert.deepEqual(describeFilters({ yearFrom: 2015 }), ['Published 2015 or later']);

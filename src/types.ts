@@ -37,7 +37,7 @@ export interface Paper {
   rationale: string;
   /** Set only when verdict is "inconclusive". */
   inconclusiveReason?: InconclusiveReason | null;
-  /** Which arm the reported primary result favours; a significant result is not always a benefit. */
+  /** Which arm the reported primary result favors; a significant result is not always a benefit. */
   resultDirection?: ResultDirection | null;
   sampleSize: number | null;
   effectSize: EffectSize | null;
@@ -68,11 +68,26 @@ export type Recommendation = "pursue" | "pursue_with_changes" | "deprioritize";
 export interface PursuitEstimate {
   /** Bayesian expected power, not probability of meaningful benefit. */
   pSuccess: number | null;
+  /** Chance the study should be pursued: how unsettled the record is times the planned design's power. */
+  pPursue?: number;
   /** Raw expected utility, in the units supplied by the user. */
   expectedValue: number | null;
   confidence: "low" | "medium" | "high";
   recommendation: Recommendation;
   drivers: string[];
+}
+export type PicoField = "population" | "intervention" | "comparator" | "outcome";
+export interface PicoChange {
+  field: PicoField;
+  to: string;
+  reason: string;
+}
+/** The PICO a new study should ask, given the record; `changes` is empty when the question is worth asking as posed. */
+export interface RecommendedPico {
+  pico: Record<PicoField, string>;
+  changes: PicoChange[];
+  rationale: string;
+  source: "model" | "rules";
 }
 /** Pre-search corpus restrictions. Every bound is independently optional. */
 export interface SearchFilters {
@@ -104,6 +119,8 @@ export interface SearchRequest {
   outcomeSd?: number;
   baselineRisk?: number;
   filters?: SearchFilters;
+  /** Optional concept tags that steer the ranking of this same search. */
+  concepts?: ConceptSteer;
 }
 export type SearchStage = "keywords" | "searching" | "classifying" | "estimating";
 export interface SearchProgress {
@@ -162,8 +179,43 @@ export interface EffectTrend {
   patterns: string[];
   scope: string;
 }
+/** Which arm the effects favor, over the full match set, unlike EffectTrend's read studies. */
+export interface EffectDirections {
+  favoursIntervention: number;
+  favoursComparator: number;
+  unclear: number;
+}
+export type PursuitState = "unknown" | "open" | "contested" | "favours_effect" | "favours_null";
+/** Beta(1, 1) prior updated by tier-weighted verdicts: the chance a real effect exists, as the record stands. */
+export interface Pursuit {
+  prior: [number, number];
+  posterior: [number, number];
+  pEffect: number;
+  /** Twice the smaller posterior tail around even odds: 1 when nothing (or a balanced conflict) settles it, near 0 when the record leans hard. */
+  pOpen: number;
+  /** Two-sided power of the planned design against the SESOI; null when no usable plan. */
+  power: number | null;
+  /** pOpen x power (pOpen alone when power is null). */
+  pPursue: number;
+  recommendation: Recommendation;
+  reasons: string[];
+  ci: [number, number];
+  successes: number;
+  failures: number;
+  counted: { effect: number; credible_null: number; reported_null: number };
+  uninformative: number;
+  /** Share of the informative weight on the minority side; 0.5 is a perfect split. */
+  conflict: number;
+  state: PursuitState;
+  /** Predictive probability that the pooled true effect reaches the SESOI in either direction; null without one matching pool. */
+  pMeaningful: number | null;
+  pFavours: number | null;
+  poolStudyIds: string[];
+  method: string;
+}
 export interface Statistics {
   pools: EvidencePool[];
+  pursuit?: Pursuit;
   assurance: number | null;
   requiredN: number | null;
   expectedValue: number | null;
@@ -199,12 +251,15 @@ export interface SearchResult {
   bucketCounts?: Record<Verdict, number>;
   /** Why the inconclusive matches are inconclusive, over the same full match set. */
   inconclusiveReasons?: Partial<Record<InconclusiveReason, number>> | null;
+  /** Splits bucketCounts.effect by direction over the same match set; the three sum to it. */
+  effectDirections?: EffectDirections | null;
   countScope?: string;
   /** Null unless a bound was set: a result must never look filtered when it is not. */
   filters?: AppliedFilters | null;
   yearCounts?: { year: number; count: number }[];
   nullTerms?: { term: string; score: number; count: number }[];
   pico?: Pico;
+  recommendedPico?: RecommendedPico | null;
   statistics?: Statistics;
   costs?: QueryCosts;
   warnings?: string[];
@@ -216,8 +271,26 @@ export interface SearchResult {
   /** Relevance screen over keyword matches; `complete` means the counts cover relevant studies only. */
   screening?: { screened: number; relevant: number; complete: boolean } | null;
   alternativeRoutes?: { label: string; reason: string; evidenceCount: number }[];
-  retrieval?: { mode: string; expanded: number };
+  /** `concepts` is null unless tags were supplied: a ranking must never look steered when it is not. */
+  retrieval?: { mode: string; expanded: number; concepts?: ConceptSteer | null };
   spin?: { eligible: number; disagreements: number };
+}
+
+/**
+ * Concept tags: terms added to and subtracted from the question's own vector
+ * before retrieval, the way `king − man + woman` lands near queen. They move
+ * papers up and down the ranking of the question's matches; they never change
+ * which papers matched.
+ */
+export type ConceptSign = "positive" | "negative";
+export interface Concept {
+  id: string;
+  text: string;
+  sign: ConceptSign;
+}
+export interface ConceptSteer {
+  positive: string[];
+  negative: string[];
 }
 /** Gap map: regions of the embedded corpus, described by what happened in them. */
 export type RegionLabel =
@@ -260,7 +333,7 @@ export interface MapPoint {
   title: string;
   year: number | null;
 }
-export interface MapNeighbour extends MapExemplar {
+export interface MapNeighbor extends MapExemplar {
   cosine: number;
 }
 export interface MapGap {
@@ -270,7 +343,7 @@ export interface MapGap {
   support: number;
   band: number;
   separation: number;
-  nearest: MapNeighbour;
+  nearest: MapNeighbor;
   exemplars: MapExemplar[][];
   discouraged: boolean;
   /** Present only when an idea was placed against the gaps. */
@@ -283,9 +356,9 @@ export interface MapArithmetic {
 }
 export interface MapPlacement {
   redundancy: number | null;
-  nearest: MapNeighbour | null;
+  nearest: MapNeighbor | null;
   /** The next-closest papers after `nearest`, so closeness can be judged by reading. */
-  neighbors?: MapNeighbour[];
+  neighbors?: MapNeighbor[];
   region: MapRegion | null;
   nearestGap: MapGap | null;
   /** The idea projected into the map's 2-D plane. */
@@ -302,9 +375,37 @@ export interface MapCalibrationRow {
   laterEffect: number;
   laterNullShare: number | null;
 }
+/**
+ * What the map in hand actually describes. `clustered` of `corpus` embedded
+ * studies shaped the regions, `drawn` of those are painted, and `complete` is
+ * false while the build is still running — a partial map is never a whole one.
+ */
+export interface MapCoverage {
+  clustered: number;
+  corpus: number;
+  regions: number;
+  drawn: number;
+  complete: boolean;
+  /** How much of the corpus this build will read; present only while streaming. */
+  target?: number;
+}
+/** One real intermediate state of a build in progress, never an interpolation. */
+export interface MapProgress {
+  stage: "scanning" | "clustering";
+  /** The k-means pass this state came out of; absent while documents are still arriving. */
+  iteration: number | null;
+  coverage: MapCoverage;
+  /** Points the stream has not sent before. */
+  points: MapPoint[];
+  /** Region per drawn point, in the order the points arrived; membership moves as centroids do. */
+  pointRegions: number[];
+  regions: { id: number; size: number; x: number; y: number }[];
+  /** Where this viewer's question sits on the plane being drawn, once there is one. */
+  placement?: { x: number; y: number } | null;
+}
 export interface GapMap {
   version: string;
-  coverage: { sampled: number; corpus: number; regions: number };
+  coverage: MapCoverage;
   regions: MapRegion[];
   gaps: MapGap[];
   points: MapPoint[];

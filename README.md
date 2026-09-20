@@ -2,6 +2,8 @@
 
 Find prior clinical studies, inspect null and missing results, and explore whether a proposed study is adequately powered. The application combines OpenAlex papers and ClinicalTrials.gov records in one Elasticsearch index, with a React interface and a FastAPI service.
 
+New to the application? The [user guide](docs/USER_GUIDE.md) walks through every feature — search, the verdict buckets, the power panel, the gap map, and the API — and how to read the numbers honestly.
+
 OpenAlex ingestion uses its **public S3 Parquet snapshot**, with no OpenAlex API or API key. The default corpus scope is hypertension **or** kidney research across all years, including records without abstracts. Full imports run on the batch/compute host; the browser receives search results. The previous small demo index is preserved. A full replacement corpus has not been imported yet.
 
 See the [S3 ingestion guide](backend/app/ingest/README.md) for the remote workflow, exact scope, storage requirements, checkpoints and reference backfills. Running `python -m app.bootstrap` defaults to a manifest-only plan; scanning requires `--run` and an adequate explicit byte budget.
@@ -119,7 +121,7 @@ The repository tests opt into real Elasticsearch only when `NULLMAP_TEST_ELASTIC
 
 The implementation follows [the architecture proposal](docs/ARCHITECTURE.md), updated for S3-only literature ingestion: index-time classification and embeddings; hybrid BM25/vector retrieval fused with citation authority; indexed review-reference expansion; separate full-match aggregations; structured registry parsing; quoted, cached paper extraction; and pure-Python statistical analysis. Elasticsearch stores studies, vectors, and extraction caches. Missing review references are reported and can be backfilled by an offline S3 pass. No additional database or queue is required.
 
-The current classifier is an explicitly heuristic phrase lexicon. A small trained pilot achieved 56.25% agreement on 16 held-out LLM-labelled abstracts and missed both held-out nulls, so it was not promoted. These are model-agreement metrics, not human-validated clinical accuracy. The new anonymous S3 path was checked with a 20-record scan from one 3.6 MB public part. Full-snapshot processing has not been run.
+The current classifier is an explicitly heuristic phrase lexicon. A small trained pilot achieved 56.25% agreement on 16 held-out LLM-labeled abstracts and missed both held-out nulls, so it was not promoted. These are model-agreement metrics, not human-validated clinical accuracy. The new anonymous S3 path was checked with a 20-record scan from one 3.6 MB public part. Full-snapshot processing has not been run.
 
 - A textual “no significant difference” is inconclusive unless compatible numerical evidence supports equivalence within the chosen SESOI. Missing reports have unknown outcomes; they are not null findings.
 - Explicit condition and anatomical terms constrain both direct matches and review references. Generic demographics affect ranking. The parser may propose up to four equivalent names of the same condition (for hypertension: high blood pressure); each is an alternative to the condition clause, never to the anatomical site. These aliases are model output, so full-match counts can vary slightly between parses of the same idea. Reference screening is heuristic and does not replace a systematic review's eligibility assessment.

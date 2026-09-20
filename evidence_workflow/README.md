@@ -125,7 +125,7 @@ Outputs:
 ## Production workflow
 
 1. Register the hypothesis and estimand: PICO, design, outcome, timepoint, effect scale, direction, SESOI, primary analysis, and planned sensitivity analyses.
-2. Search multiple sources, including registries and grey literature. Deduplicate reports and link multiple papers to the same underlying study.
+2. Search multiple sources, including registries and gray literature. Deduplicate reports and link multiple papers to the same underlying study.
 3. Use structured extraction with provenance: page/table/sentence, extractor, timestamp, and reviewer status. Dual-review a validation sample.
 4. Gate PICO compatibility with hard fields first; use embeddings only to retrieve near matches and proposed subgroups.
 5. Normalize effect direction and scale. Keep unsupported conversions separate.

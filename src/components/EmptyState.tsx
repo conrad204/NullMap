@@ -1,4 +1,4 @@
-import { VERDICT_META, VERDICT_ORDER } from "../lib/verdicts";
+import { BAR_GROUPS } from "../lib/verdicts";
 import { cx } from "../lib/format";
 
 export default function EmptyState() {
@@ -7,28 +7,33 @@ export default function EmptyState() {
       <div>
         <h2 className="text-sm font-medium text-ink-2">What comes back</h2>
         <p className="mt-2 max-w-[58ch] leading-relaxed text-ink-2">
-          Matching studies are grouped by the strength of their results. Counts cover the
-          indexed match set; source evidence and study-planning estimates appear below them.
+          Matching studies are sorted into four answers, with benefit and harm kept apart.
+          Counts cover the indexed match set; source evidence and study-planning estimates
+          appear below them.
         </p>
       </div>
 
-      <ul className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
-        {VERDICT_ORDER.map((v) => {
-          const meta = VERDICT_META[v];
-          return (
-            <li key={v} className="flex gap-3">
-              <span
-                aria-hidden
-                className={cx("mt-[7px] h-2.5 w-2.5 shrink-0 rounded-mark", meta.bg)}
-              />
-              <div>
-                <p className="font-medium text-ink">{meta.label}</p>
-                <p className="mt-1 text-sm leading-relaxed text-ink-2">{meta.description}</p>
-              </div>
-            </li>
-          );
-        })}
+      <ul className="flex max-w-[58ch] flex-col gap-6">
+        {BAR_GROUPS.map((group) => (
+          <li key={group.key} className="flex gap-3">
+            <span
+              aria-hidden
+              className={cx("mt-[7px] h-2.5 w-2.5 shrink-0 rounded-mark", group.bg)}
+            />
+            <div>
+              <p className="font-medium text-ink">{group.label}</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-2">{group.description}</p>
+            </div>
+          </li>
+        ))}
       </ul>
+
+      <p className="max-w-[58ch] text-sm leading-relaxed text-ink-2">
+        Matches that were too imprecise to call, or that could not be read, are counted beside
+        the answers as inconclusive, each with its reason. That is not a finding. A study that
+        found a difference without saying which arm it favored is counted there too, rather
+        than under benefit or harm.
+      </p>
 
       <p className="max-w-[58ch] text-sm leading-relaxed text-ink-3">
         Sources: OpenAlex literature and ClinicalTrials.gov registry records. Coverage depends

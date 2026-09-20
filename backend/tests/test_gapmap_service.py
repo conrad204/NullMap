@@ -15,13 +15,20 @@ class FakeRepository:
         self.corpus = len(documents) if corpus is None else corpus
         self.calls = 0
 
-    async def sample_embedded(self, limit: int = 4000, seed: int = 0) -> dict:
+    async def count_embedded(self) -> int:
+        return self.corpus
+
+    async def scan_embedded(self, batch_size: int = 2000, slices: int = 8, limit: int = 0):
         self.calls += 1
-        return {"documents": self.documents[:limit], "corpus": self.corpus}
+        documents = self.documents if limit <= 0 else self.documents[:limit]
+        for start in range(0, len(documents), batch_size):
+            yield [dict(document) for document in documents[start : start + batch_size]]
 
 
 def service(documents: list[dict], corpus: int | None = None, **overrides) -> GapMapService:
-    config = Settings(gapmap_sample=1000, gapmap_regions=2, gapmap_seed=2, **overrides)
+    config = Settings(
+        _env_file=None, gapmap_regions=2, gapmap_seed=2, gapmap_batch=100, **overrides
+    )
     return GapMapService(FakeRepository(documents, corpus), config=config)
 
 
@@ -31,7 +38,13 @@ def corpus() -> list[dict]:
 
 def test_map_describes_regions_and_gaps_without_shipping_centroids():
     result = asyncio.run(service(corpus()).assess())
-    assert result["coverage"] == {"sampled": 16, "corpus": 16, "regions": 2}
+    assert result["coverage"] == {
+        "clustered": 16,
+        "corpus": 16,
+        "regions": 2,
+        "drawn": 16,
+        "complete": True,
+    }
     assert sorted(region["label"] for region in result["regions"]) == ["active", "null_saturated"]
     assert all("centroid" not in region for region in result["regions"])
     assert len(result["gaps"]) == 1
@@ -64,11 +77,69 @@ def test_the_layout_is_identical_across_rebuilds():
     ]
 
 
-def test_a_sampled_map_says_so():
+def test_a_partial_map_says_so():
     result = asyncio.run(service(corpus(), corpus=900).assess())
     assert result["warnings"] == [
-        "The map describes a random sample of 16 of 900 embedded studies, not the whole index."
+        "The map clusters 16 of 900 embedded studies, not the whole index."
     ]
+
+
+def test_a_scan_limit_is_reported_as_the_coverage_it_actually_reached():
+    """A capped build must not describe itself as the index it did not read."""
+    result = asyncio.run(service(corpus(), gapmap_scan_limit=8).assess())
+    assert result["coverage"]["clustered"] == 8 and result["coverage"]["corpus"] == 16
+    assert result["warnings"] == [
+        "The map clusters 8 of 16 embedded studies, not the whole index."
+    ]
+
+
+def test_drawing_fewer_points_than_were_clustered_says_which_is_which():
+    documents = cluster("null", 0.0, "reported_null", 200) + cluster(
+        "effect", 0.8, "effect", 200
+    )
+    result = asyncio.run(service(documents, gapmap_points=100).assess())
+    coverage = result["coverage"]
+    assert coverage["clustered"] == 400
+    assert coverage["drawn"] == len(result["points"]) < 400
+    assert result["warnings"] == [
+        f"All 400 clustered studies shape the regions; the canvas draws {coverage['drawn']} "
+        "of them."
+    ]
+
+
+def test_the_build_is_streamed_as_it_happens_and_only_the_last_state_is_whole():
+    """Progress must be the real intermediate map, never a replay of the result."""
+    built = service(corpus())
+    events: list[dict] = []
+
+    async def run():
+        async def progress(payload):
+            events.append(payload)
+
+        return await built.stream(progress=progress)
+
+    result = asyncio.run(run())
+    assert events, "the build published no intermediate state"
+    assert all(not event["coverage"]["complete"] for event in events)
+    assert all(event["coverage"]["corpus"] == 16 for event in events)
+    assert [event["stage"] for event in events][-1] == "clustering"
+    assert any(event["points"] for event in events)
+    assert result["coverage"]["complete"] is True
+
+
+def test_a_cached_map_streams_no_progress():
+    built = service(corpus())
+    asyncio.run(built.assess())
+    events: list[dict] = []
+
+    async def run():
+        async def progress(payload):
+            events.append(payload)
+
+        return await built.stream(progress=progress)
+
+    assert asyncio.run(run())["coverage"]["complete"] is True
+    assert events == []
 
 
 def test_the_map_is_built_once_and_rebuilt_on_request():
@@ -138,6 +209,31 @@ def test_calibration_is_returned_only_when_a_cutoff_is_given():
     result = asyncio.run(service(documents).assess(cutoff_year=2020))
     assert result["calibration"]["cutoffYear"] == 2020
     assert result["calibration"]["future"] == 4
+
+
+def test_coverage_never_reports_fewer_studies_than_it_clustered():
+    """The count runs beside the scan, so ingestion can outrun it; it may not shrink coverage."""
+    result = asyncio.run(service(corpus(), corpus=4).assess())
+    assert result["coverage"]["clustered"] == 16
+    assert result["coverage"]["corpus"] == 16
+    assert result["warnings"] == []
+
+
+def test_the_question_is_placed_on_the_streamed_map_before_it_is_finished():
+    built = service(corpus())
+    built.embed = lambda text: _resolved(unit(0.01))
+    events: list[dict] = []
+
+    async def run():
+        async def progress(payload):
+            events.append(payload)
+
+        return await built.stream(idea="a new trial of the same thing", progress=progress)
+
+    asyncio.run(run())
+    placed = [event["placement"] for event in events if event.get("placement")]
+    assert placed, "the question never reached the streaming map"
+    assert all(isinstance(place["x"], float) and isinstance(place["y"], float) for place in placed)
 
 
 def _resolved(value):

@@ -33,6 +33,9 @@ MAP_VERSION = "gapmap-v1"
 # A region needs this many primary studies before its verdict mix means anything;
 # below it the honest label is "thin", not a finding about the science.
 MIN_REGION_ATTEMPTS = 5
+# Rows per chunk when multiplying the corpus against the centroids. Bounds the
+# intermediate to a few tens of megabytes whatever the corpus size.
+ASSIGN_CHUNK = 50_000
 # Share of attempts that must be null (or unreported) before the region is called
 # saturated (or dark). Both are deliberately majority-ish rather than "any".
 NULL_SATURATED_SHARE = 0.5
@@ -75,13 +78,8 @@ def normalize(vectors: np.ndarray) -> np.ndarray:
     return vectors / np.clip(norms, 1e-8, None)
 
 
-def kmeans(vectors: np.ndarray, k: int, seed: int = 0, iterations: int = 40) -> np.ndarray:
-    """Spherical k-means with k-means++ seeding, returning a label per row.
-
-    Deterministic for a given seed so a map can be rebuilt and compared. Written
-    out here rather than pulled from scikit-learn because the ingest extra that
-    provides it is optional and the serving path must not depend on it.
-    """
+def seed_centroids(vectors: np.ndarray, k: int, seed: int = 0) -> np.ndarray:
+    """k-means++ seeding over a cosine space, deterministic for a given seed."""
     rng = np.random.default_rng(seed)
     count = len(vectors)
     k = max(1, min(k, count))
@@ -93,18 +91,121 @@ def kmeans(vectors: np.ndarray, k: int, seed: int = 0, iterations: int = 40) -> 
         total = distance.sum()
         pick = rng.integers(count) if total <= 0 else rng.choice(count, p=distance / total)
         centroids[index] = vectors[pick]
-    labels = np.full(count, -1, dtype=np.int64)
-    for _ in range(iterations):
-        assigned = (vectors @ centroids.T).argmax(axis=1)
-        if np.array_equal(assigned, labels):
-            break
-        labels = assigned
-        for index in range(k):
-            members = vectors[labels == index]
-            if len(members):
-                centroids[index] = members.mean(axis=0)
-        centroids = normalize(centroids)
+    return centroids
+
+
+def assign(vectors: np.ndarray, centroids: np.ndarray, chunk: int = ASSIGN_CHUNK) -> np.ndarray:
+    """Nearest centroid per row, in chunks so a corpus-sized matrix is never built.
+
+    ``vectors @ centroids.T`` over two million rows and eighty centroids is a
+    640 MB intermediate; the chunked loop is the same arithmetic in 16 MB pieces.
+    """
+    if not len(vectors):
+        return np.zeros(0, dtype=np.int64)
+    labels = np.empty(len(vectors), dtype=np.int64)
+    for start in range(0, len(vectors), chunk):
+        stop = start + chunk
+        labels[start:stop] = (vectors[start:stop] @ centroids.T).argmax(axis=1)
     return labels
+
+
+def _recentre(vectors: np.ndarray, labels: np.ndarray, centroids: np.ndarray) -> np.ndarray:
+    """Move each centroid onto the mean direction of the rows assigned to it.
+
+    Empty clusters keep their previous position rather than being reseeded, so a
+    warm-started run cannot make the map jump between successive iterations.
+    """
+    moved = centroids.copy()
+    order = np.argsort(labels, kind="stable")
+    bounds = np.searchsorted(labels[order], np.arange(len(centroids) + 1))
+    for index in range(len(centroids)):
+        members = order[bounds[index] : bounds[index + 1]]
+        if len(members):
+            moved[index] = vectors[members].mean(axis=0)
+    return normalize(moved)
+
+
+def kmeans_steps(
+    vectors: np.ndarray,
+    k: int,
+    seed: int = 0,
+    iterations: int = 40,
+    centroids: np.ndarray | None = None,
+):
+    """Spherical k-means, yielding ``(centroids, labels)`` after every iteration.
+
+    Yielding the intermediate states is what lets a caller show the map settling
+    instead of a spinner: each yielded pair is a real assignment of the corpus,
+    not an interpolation. Deterministic for a given seed and starting position,
+    and stops early once the assignment stops changing.
+    """
+    if not len(vectors):
+        return
+    if centroids is None:
+        centroids = seed_centroids(vectors, k, seed)
+    centroids = normalize(np.asarray(centroids, dtype=np.float32))
+    labels = np.full(len(vectors), -1, dtype=np.int64)
+    for _ in range(max(1, iterations)):
+        assigned = assign(vectors, centroids)
+        settled = np.array_equal(assigned, labels)
+        labels = assigned
+        centroids = _recentre(vectors, labels, centroids)
+        yield centroids, labels
+        if settled:
+            return
+
+
+def kmeans(vectors: np.ndarray, k: int, seed: int = 0, iterations: int = 40) -> np.ndarray:
+    """Spherical k-means with k-means++ seeding, returning a label per row.
+
+    Deterministic for a given seed so a map can be rebuilt and compared. Written
+    out here rather than pulled from scikit-learn because the ingest extra that
+    provides it is optional and the serving path must not depend on it.
+    """
+    labels = np.zeros(len(vectors), dtype=np.int64)
+    for _, labels in kmeans_steps(vectors, k, seed=seed, iterations=iterations):
+        pass
+    return labels
+
+
+class RunningClusters:
+    """Mini-batch spherical k-means: centroids that exist before the scan ends.
+
+    The full corpus cannot be clustered until it has all arrived, but a map that
+    only appears at the end cannot be watched. Each batch is assigned to the
+    current centroids and each centroid is moved towards the mean of what it
+    just received, weighted by how much it has seen — the standard mini-batch
+    update. These centroids are provisional and are replaced by full-corpus
+    k-means once the scan finishes; nothing is reported as final until then.
+    """
+
+    def __init__(self, k: int, seed: int = 0):
+        self.k = max(1, k)
+        self.seed = seed
+        self.centroids: np.ndarray | None = None
+        self.counts: np.ndarray | None = None
+
+    def update(self, vectors: np.ndarray) -> np.ndarray | None:
+        if not len(vectors):
+            return self.centroids
+        if self.centroids is None:
+            if len(vectors) < self.k:
+                return None  # too few rows to seed k distinct centroids honestly
+            self.centroids = normalize(seed_centroids(vectors, self.k, self.seed))
+            self.counts = np.zeros(len(self.centroids), dtype=np.float64)
+        labels = assign(vectors, self.centroids)
+        sums = np.zeros_like(self.centroids, dtype=np.float32)
+        np.add.at(sums, labels, vectors)
+        counts = np.bincount(labels, minlength=len(self.centroids)).astype(np.float64)
+        assert self.counts is not None
+        seen = self.counts + counts
+        rate = np.divide(counts, seen, out=np.zeros_like(seen), where=seen > 0)[:, None]
+        self.centroids = normalize(
+            self.centroids * (1 - rate)
+            + np.divide(sums, np.clip(counts, 1, None)[:, None]) * rate
+        )
+        self.counts = seen
+        return self.centroids
 
 
 def fit_projection(vectors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -207,51 +308,88 @@ def _exemplars(documents: list[dict], limit: int = 3) -> list[dict]:
     ]
 
 
-def build_regions(documents: list[dict], regions: int = 24, seed: int = 0) -> dict:
-    """Cluster embedded documents and describe each cluster by what happened in it.
+def group(labels: np.ndarray, clusters: int) -> list[np.ndarray]:
+    """Row indices per cluster. One sort rather than a scan per cluster: the
+    obvious ``labels == index`` loop is O(rows × clusters), which is hours of
+    Python over a corpus of millions."""
+    order = np.argsort(labels, kind="stable")
+    bounds = np.searchsorted(labels[order], np.arange(clusters + 1))
+    return [order[bounds[index] : bounds[index + 1]] for index in range(clusters)]
 
-    Documents without a stored vector are counted in ``skipped`` rather than
-    dropped silently: a region map over a partly unembedded corpus describes the
-    embedded part only, and saying so is the difference between a map and a claim.
+
+def describe_regions(
+    documents: list[dict], vectors: np.ndarray, labels: np.ndarray, clusters: int
+) -> list[dict]:
+    """Describe each occupied cluster by what happened in the documents it holds.
+
+    Cluster indices are the region ids, and an empty cluster yields no region, so
+    a region keeps its identity between two runs that share centroids — which is
+    what lets a partially built map be redrawn rather than replaced.
     """
-    embedded = [(doc, vector) for doc in documents if (vector := _vector(doc)) is not None]
-    skipped = len(documents) - len(embedded)
-    if not embedded:
-        return {"version": MAP_VERSION, "regions": [], "documents": 0, "skipped": skipped}
-    corpus = [doc for doc, _ in embedded]
-    vectors = normalize(np.vstack([vector for _, vector in embedded]))
-    labels = kmeans(vectors, regions, seed=seed)
     described = []
-    for index in sorted(set(labels.tolist())):
-        members = [doc for doc, label in zip(corpus, labels) if label == index]
-        centroid = normalize(vectors[labels == index].mean(axis=0, keepdims=True))[0]
-        primary = [doc for doc in members if _is_primary(doc)]
+    for index, members in enumerate(group(labels, clusters)):
+        if not len(members):
+            continue
+        rows = vectors[members]
+        centroid = normalize(rows.mean(axis=0, keepdims=True))[0]
+        held = [documents[row] for row in members.tolist()]
+        primary = [doc for doc in held if _is_primary(doc)]
         counts = Counter(_bucket(doc) for doc in primary)
-        years = [doc["year"] for doc in members if isinstance(doc.get("year"), int)]
+        years = [doc["year"] for doc in held if isinstance(doc.get("year"), int)]
         citations = [doc.get("cited_by_count") or 0 for doc in primary]
         described.append(
             {
                 "id": int(index),
-                "size": len(members),
+                "size": len(held),
                 "attempts": len(primary),
                 "centroid": [float(value) for value in centroid],
                 "label": label_region(counts, len(primary)),
                 "bucketCounts": dict(counts),
                 "medianYear": int(np.median(years)) if years else None,
                 "medianCitations": float(np.median(citations)) if citations else None,
-                "coherence": float((vectors[labels == index] @ centroid).mean()),
-                "exemplars": _exemplars(members),
+                "coherence": float((rows @ centroid).mean()),
+                "exemplars": _exemplars(held),
             }
         )
+    return described
+
+
+def build_regions(
+    documents: list[dict],
+    regions: int = 24,
+    seed: int = 0,
+    vectors: np.ndarray | None = None,
+) -> dict:
+    """Cluster embedded documents and describe each cluster by what happened in it.
+
+    Documents without a stored vector are counted in ``skipped`` rather than
+    dropped silently: a region map over a partly unembedded corpus describes the
+    embedded part only, and saying so is the difference between a map and a claim.
+
+    ``vectors`` lets a caller that already holds the corpus as one normalized
+    matrix — the streaming build does — skip rebuilding it from the documents,
+    which would cost a second copy of several gigabytes.
+    """
+    corpus, matrix = _corpus(documents, vectors)
+    skipped = len(documents) - len(corpus)
+    if not len(matrix):
+        return {"version": MAP_VERSION, "regions": [], "documents": 0, "skipped": skipped}
+    clusters = max(1, min(regions, len(matrix)))
+    labels = kmeans(matrix, clusters, seed=seed)
     return {
         "version": MAP_VERSION,
-        "regions": described,
-        "documents": len(embedded),
+        "regions": describe_regions(corpus, matrix, labels, clusters),
+        "documents": len(corpus),
         "skipped": skipped,
     }
 
 
-def _corpus(documents: list[dict]) -> tuple[list[dict], np.ndarray]:
+def _corpus(
+    documents: list[dict], vectors: np.ndarray | None = None
+) -> tuple[list[dict], np.ndarray]:
+    """Documents paired with their unit vectors, from the dicts or from a matrix."""
+    if vectors is not None:
+        return documents, vectors
     embedded = [(doc, vector) for doc in documents if (vector := _vector(doc)) is not None]
     if not embedded:
         return [], np.zeros((0, 0), dtype=np.float32)
@@ -270,7 +408,11 @@ def nearest_neighbors(
     real papers near a point is the legible form of "how occupied is this spot".
     """
     similarity = vectors @ vector
-    order = np.argsort(-similarity)[: max(1, limit)]
+    limit = max(1, min(limit, len(similarity)))
+    # argpartition first: a full sort of a corpus-sized array to read five rows
+    # off the top is seconds of wasted work on the live index.
+    top = np.argpartition(-similarity, limit - 1)[:limit]
+    order = top[np.argsort(-similarity[top])]
     return [
         {
             "id": documents[index].get("id", ""),
@@ -302,6 +444,7 @@ def find_gaps(
     limit: int = 10,
     neighbour_cosine: float | None = None,
     occupancy: float = GAP_OCCUPANCY,
+    vectors: np.ndarray | None = None,
 ) -> list[dict]:
     """Bands between neighbouring regions that the indexed corpus barely occupies.
 
@@ -322,13 +465,13 @@ def find_gaps(
     The parent labels carry the warning that matters — an open band between two
     null-saturated regions is unexplored *because the neighbours failed*.
     """
-    corpus, vectors = _corpus(documents)
+    corpus, vectors = _corpus(documents, vectors)
     if not corpus or len(regions) < 2:
         return []
     centroids = normalize(np.vstack([region["centroid"] for region in regions]).astype(np.float32))
     if neighbour_cosine is None:
         neighbour_cosine = neighbour_threshold(centroids)
-    assigned = (vectors @ centroids.T).argmax(axis=1)
+    assigned = assign(vectors, centroids)
     gaps = []
     for left in range(len(regions)):
         for right in range(left + 1, len(regions)):
@@ -340,14 +483,10 @@ def find_gaps(
             others = np.delete(to_midpoint, [left, right])
             if len(others) and others.max() >= min(to_midpoint[left], to_midpoint[right]):
                 continue  # a third literature already sits in the band
-            members = (assigned == left) | (assigned == right)
-            owner = np.vstack(
-                [
-                    vectors[members] @ centroids[left],
-                    vectors[members] @ centroids[right],
-                    vectors[members] @ midpoint,
-                ]
-            ).argmax(axis=0)
+            members = vectors[(assigned == left) | (assigned == right)]
+            owner = (
+                members @ np.vstack([centroids[left], centroids[right], midpoint]).T
+            ).argmax(axis=1)
             support = min(int((owner == 0).sum()), int((owner == 1).sum()))
             if not support:
                 continue
@@ -380,6 +519,7 @@ def place(
     regions: list[dict],
     gaps: list[dict] | None = None,
     nearest_limit: int = 5,
+    vectors: np.ndarray | None = None,
 ) -> dict:
     """Locate an idea on the map: how redundant it is and what surrounds it.
 
@@ -388,7 +528,7 @@ def place(
     published, and the nearest papers are shown so the claim can be checked by
     reading them.
     """
-    corpus, vectors = _corpus(documents)
+    corpus, vectors = _corpus(documents, vectors)
     query = normalize(np.asarray(vector, dtype=np.float32)[None, :])[0]
     if not corpus:
         return {
@@ -442,6 +582,7 @@ def calibrate(
     cutoff_year: int,
     regions: int = 24,
     seed: int = 0,
+    vectors: np.ndarray | None = None,
 ) -> dict:
     """Rebuild the map as it would have looked at ``cutoff_year`` and score it since.
 
@@ -453,11 +594,21 @@ def calibrate(
     study: a region can be mislabelled and still look right if later authors
     simply copied the earlier design.
     """
-    past = [doc for doc in documents if isinstance(doc.get("year"), int) and doc["year"] < cutoff_year]
-    future = [
-        doc for doc in documents if isinstance(doc.get("year"), int) and doc["year"] >= cutoff_year
+    corpus, matrix = _corpus(documents, vectors)
+    dated = [
+        index for index, doc in enumerate(corpus) if isinstance(doc.get("year"), int)
     ]
-    built = build_regions(past, regions=regions, seed=seed)
+    before = np.array(
+        [index for index in dated if corpus[index]["year"] < cutoff_year], dtype=np.int64
+    )
+    after = np.array(
+        [index for index in dated if corpus[index]["year"] >= cutoff_year], dtype=np.int64
+    )
+    past = [corpus[index] for index in before.tolist()]
+    future = [corpus[index] for index in after.tolist()]
+    built = build_regions(
+        past, regions=regions, seed=seed, vectors=matrix[before] if len(before) else None
+    )
     if not built["regions"] or not future:
         return {
             "version": MAP_VERSION,
@@ -470,7 +621,7 @@ def calibrate(
         np.vstack([region["centroid"] for region in built["regions"]]).astype(np.float32)
     )
     later: dict[int, list[dict]] = {region["id"]: [] for region in built["regions"]}
-    corpus, vectors = _corpus(future)
+    corpus, vectors = _corpus(future, matrix[after] if len(after) else None)
     for document, vector in zip(corpus, vectors):
         later[built["regions"][int((centroids @ vector).argmax())]["id"]].append(document)
     rows: dict[str, dict] = {}

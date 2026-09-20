@@ -53,11 +53,12 @@ async def label_file(source: Path, output: Path, *, limit: int = 100,
                                           source.stat().st_mtime_ns, settings.small_model,
                                           LABEL_PROMPT]).encode()).hexdigest()
     checkpoint = output.with_suffix(output.suffix + ".checkpoint.json")
-    state = {"signature": signature, "input_records": 0, "labelled_records": 0,
+    state = {"signature": signature, "input_records": 0, "labeled_records": 0,
              "attempted_records": 0, "rejected_labels": [], "bytes": 0,
              "usage_records": [], "done": False}
     if resume and checkpoint.exists():
         state = json.loads(checkpoint.read_text())
+        state.setdefault("labeled_records", state.pop("labelled_records", 0))
         if state.get("signature") != signature:
             raise ValueError("Label input/model changed since checkpoint")
     elif output.exists() and not (resume and output.stat().st_size == 0):
@@ -91,21 +92,21 @@ async def label_file(source: Path, output: Path, *, limit: int = 100,
         try:
             return validate_label(result, row)
         except ValueError:
-            # Reject unsupported labels without throwing away the valid neighbours in a batch.
+            # Reject unsupported labels without throwing away the valid neighbors in a batch.
             return {"rejected_id": row.get("id"), "reason": "evidence_not_verbatim"}
 
     async def commit(rows):
         responses = await asyncio.gather(*(one(row) for row in rows))
-        labelled = [row for row in responses if "rejected_id" not in row]
+        labeled = [row for row in responses if "rejected_id" not in row]
         state["rejected_labels"].extend(row for row in responses if "rejected_id" in row)
         with output.open("ab") as handle:
-            for row in labelled:
+            for row in labeled:
                 row["label_model"] = settings.small_model
                 handle.write((json.dumps(row, ensure_ascii=False) + "\n").encode())
             handle.flush()
             os.fsync(handle.fileno())
             state["bytes"] = handle.tell()
-        state["labelled_records"] += len(labelled)
+        state["labeled_records"] += len(labeled)
         state["attempted_records"] += len(rows)
         state["usage_records"] = usage.records
         atomic_json(checkpoint, state)
@@ -138,6 +139,6 @@ async def label_file(source: Path, output: Path, *, limit: int = 100,
                      "estimated_usd": sum(row["estimatedUsd"] for row in usage.records),
                      "records": usage.records}
     atomic_json(output.with_suffix(output.suffix + ".usage.json"), usage_summary)
-    return {"labelled_records": state["labelled_records"], "source_exhausted": state["done"],
+    return {"labeled_records": state["labeled_records"], "source_exhausted": state["done"],
             "attempted_records": state["attempted_records"], "rejected_labels": len(state["rejected_labels"]),
             "usage": {key: value for key, value in usage_summary.items() if key != "records"}}

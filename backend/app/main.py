@@ -11,10 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.concepts import ConceptError, ConceptVectorService
 from app.config import settings
 from app.gapmap_service import GapMapService
 from app.llm import LLMService
-from app.models import MapRequest, NoveltyRequest, SearchRequest
+from app.models import ConceptSearchRequest, MapRequest, NoveltyRequest, SearchRequest
 from app.novelty import NoveltyEngine
 from app.pipeline import SearchPipeline
 from app.repository import ElasticRepository
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     app.state.pipeline = SearchPipeline(repo, llm)
     app.state.novelty = NoveltyEngine(llm, repo=repo)
     app.state.gapmap = GapMapService(repo)
+    app.state.concepts = ConceptVectorService(repo)
     yield
     await app.state.novelty.fulltext.close()
     await llm.close()
@@ -167,6 +169,85 @@ async def gap_map(body: MapRequest, request: Request):
         raise HTTPException(
             status_code=503,
             detail="The evidence map could not be built. Please retry or inspect the backend logs.",
+        ) from None
+
+
+@app.post("/map/stream")
+@app.post("/api/map/stream", include_in_schema=False)
+async def gap_map_stream(body: MapRequest, request: Request):
+    """The map as it is built: the same payload as ``/map``, plus the states on
+    the way to it. A cached map arrives as one `result` event with no progress
+    before it, which is the honest thing for work that did not happen."""
+
+    async def stream():
+        queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+
+        async def progress(payload):
+            await queue.put(("progress", payload))
+
+        async def run():
+            try:
+                result = await request.app.state.gapmap.stream(
+                    idea=body.idea,
+                    arithmetic=body.arithmetic,
+                    cutoff_year=body.cutoffYear,
+                    refresh=body.refresh,
+                    progress=progress,
+                )
+                await queue.put(("result", result))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error("Streamed gap map failed: %s", type(exc).__name__)
+                await queue.put(
+                    (
+                        "error",
+                        {
+                            "message": "The evidence map could not be built. "
+                            "Please retry or inspect the backend logs."
+                        },
+                    )
+                )
+
+        task = asyncio.create_task(run())
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event, payload = await asyncio.wait_for(queue.get(), timeout=10)
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                yield f"event: {event}\ndata: {json.dumps(payload, allow_nan=False)}\n\n"
+                if event in ("result", "error"):
+                    break
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/concepts/search")
+@app.post("/api/concepts/search", include_in_schema=False)
+async def concept_search(body: ConceptSearchRequest, request: Request):
+    try:
+        return await request.app.state.concepts.search(body)
+    except ConceptError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+    except Exception as exc:
+        logger.error("Concept search failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="Elasticsearch could not complete the concept search. Check the backend connection and index setup.",
         ) from None
 
 

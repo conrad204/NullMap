@@ -1,4 +1,4 @@
-import type { InconclusiveReason, Verdict } from "../types";
+import type { EffectDirections, InconclusiveReason, Paper, ResultDirection, Verdict } from "../types";
 
 export const VERDICT_ORDER: Verdict[] = [
   "effect",
@@ -12,36 +12,119 @@ export const VERDICT_ORDER: Verdict[] = [
 /** Inconclusive is not a finding, so it is reported as a count beside the bar, not in it. */
 export const BAR_VERDICTS: Verdict[] = VERDICT_ORDER.filter((verdict) => verdict !== "inconclusive");
 
-export type BarGroupKey = "difference" | "no_difference" | "no_answer";
+export type BarGroupKey =
+  | "favours_intervention"
+  | "favours_comparator"
+  | "no_difference"
+  | "no_answer"
+  | "direction_unstated";
 
 /**
- * The bar has three answers. The buckets inside a group are still counted apart in the line under
- * each answer, because "confirmed" and "claimed" nulls are different strengths of evidence, but
- * they are not separate categories: one segment, one count and one filter per answer.
+ * An answer in the bar. A group can be finer than a bucket — the two effect directions split one —
+ * so it carries its own test on a study and its own total, and the bar, the legend and the
+ * study-list filter all read from here rather than re-deriving the grouping.
  */
-export const BAR_GROUPS: { key: BarGroupKey; label: string; description: string; verdicts: Verdict[]; bg: string }[] = [
+export interface BarGroup {
+  key: BarGroupKey;
+  label: string;
+  description: string;
+  /** The buckets a group draws from, for the study-type breakdown under its count. */
+  verdicts: Verdict[];
+  /** Set when the group is finer than its bucket, so its total needs a direction breakdown. */
+  direction?: ResultDirection;
+  matches: (paper: Paper) => boolean;
+  total: (counts: Record<Verdict, number>, directions: EffectDirections) => number;
+  /** The line under the count in the legend. */
+  detail: (counts: Record<Verdict, number>) => string;
+  bg: string;
+}
+
+const isEffect = (paper: Paper, direction: ResultDirection) =>
+  paper.verdict === "effect" && (paper.resultDirection ?? "unclear") === direction;
+const bucketDetail = (verdicts: Verdict[]) => (counts: Record<Verdict, number>) =>
+  verdicts.length === 1
+    ? VERDICT_META[verdicts[0]].short
+    : verdicts.map((verdict) => `${counts[verdict]} ${VERDICT_META[verdict].short}`).join(" · ");
+
+/**
+ * The bar's answers. Direction is a property of an effect, not a bucket, so the backend taxonomy is
+ * unchanged: `effect` is split by the direction its own report stated. Nulls stay one answer, with
+ * "confirmed" and "claimed" counted apart in the line under it, because they are strengths of the
+ * same evidence rather than separate answers.
+ */
+export const BAR_GROUPS: BarGroup[] = [
   {
-    key: "difference",
-    label: "Made a difference",
-    description: "The groups ended up different, in either direction, so this includes harm.",
+    key: "favours_intervention",
+    label: "Favored the intervention",
+    description: "The groups ended up different and the study's own report puts the intervention ahead. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers. The direction is only as good as the quoted sentence it was read from.",
     verdicts: ["effect"],
+    direction: "favours_intervention",
+    matches: (paper) => isEffect(paper, "favours_intervention"),
+    total: (_counts, directions) => directions.favoursIntervention,
+    detail: () => "significant difference, intervention ahead",
     bg: "bg-v-effect",
+  },
+  {
+    key: "favours_comparator",
+    label: "Favored the comparator",
+    description: "The groups ended up different and the study's own report puts the comparator ahead, so this is where harm from the intervention appears. The evidence rules are the same as for the opposite direction, and the direction is only as good as the quoted sentence it was read from.",
+    verdicts: ["effect"],
+    direction: "favours_comparator",
+    matches: (paper) => isEffect(paper, "favours_comparator"),
+    total: (_counts, directions) => directions.favoursComparator,
+    detail: () => "significant difference, comparator ahead, including harm",
+    bg: "bg-v-failed",
   },
   {
     key: "no_difference",
     label: "Made no difference",
-    description: "Confirmed means the interval rules out any effect large enough to matter. Claimed means the report says no significant difference, which is not evidence of equivalence.",
+    description: "Confirmed means the whole 95% interval sits inside your meaningful-effect threshold, so any effect is too small to matter. Claimed means a controlled study reports no significant difference, which is not evidence of equivalence.",
     verdicts: ["credible_null", "reported_null"],
+    matches: (paper) => paper.verdict === "credible_null" || paper.verdict === "reported_null",
+    total: (counts) => counts.credible_null + counts.reported_null,
+    detail: bucketDetail(["credible_null", "reported_null"]),
     bg: "bg-v-null",
   },
   {
     key: "no_answer",
     label: "No answer",
-    description: "The study was run but never answered the question: stopped early, flawed or retracted, or completed without ever reporting results.",
+    description: "The study never answered the question. Stopped or flawed means retracted, terminated, withdrawn or suspended, enrolled under half of plan, or run without a control arm. Never reported means a registered trial completed over 12 months ago with no posted results or linked publication.",
     verdicts: ["failed", "unreported"],
+    matches: (paper) => paper.verdict === "failed" || paper.verdict === "unreported",
+    total: (counts) => counts.failed + counts.unreported,
+    detail: bucketDetail(["failed", "unreported"]),
     bg: "bg-v-unreported",
   },
 ];
+
+/**
+ * An effect whose report never said which arm it favored. It is a difference, so it cannot be
+ * dropped, but it is not an answer to "benefit or harm": it is counted beside the bar under its own
+ * label, the way inconclusive matches are.
+ */
+export const UNSTATED_DIRECTION_GROUP: BarGroup = {
+  key: "direction_unstated",
+  label: "Made a difference, direction not stated",
+  description: "The groups ended up different, but the report does not make the better arm evident, so it is not counted as benefit or as harm.",
+  verdicts: ["effect"],
+  direction: "unclear",
+  matches: (paper) => isEffect(paper, "unclear"),
+  total: (_counts, directions) => directions.unclear,
+  detail: () => "significant difference, neither arm identified",
+  bg: "bg-v-effect",
+};
+
+/** Every group a study list can be filtered by: the bar's answers plus the unstated-direction note. */
+export const FILTER_GROUPS: BarGroup[] = [...BAR_GROUPS, UNSTATED_DIRECTION_GROUP];
+
+/** Displayed studies only: the fallback for a payload that carries no direction split. */
+export function directionsFromPapers(papers: Paper[]): EffectDirections {
+  return {
+    favoursIntervention: papers.filter((paper) => isEffect(paper, "favours_intervention")).length,
+    favoursComparator: papers.filter((paper) => isEffect(paper, "favours_comparator")).length,
+    unclear: papers.filter((paper) => isEffect(paper, "unclear")).length,
+  };
+}
 
 /** Ordered from "says something about the study" to "says something about what we could read". */
 export const INCONCLUSIVE_REASONS: { key: InconclusiveReason; label: string; detail: string }[] = [
@@ -86,8 +169,8 @@ interface VerdictMeta {
 export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   effect: {
     label: "Made a difference",
-    short: "In either direction, including harm",
-    description: "The groups ended up different: an interval excluding zero and an effect reaching the selected meaningful-effect threshold. Either direction counts, so this includes harm.",
+    short: "a difference in one direction or the other",
+    description: "The groups ended up different. Either the 95% interval excludes zero and the estimate reaches your meaningful-effect threshold, or a controlled study states a significant result without usable numbers, in which case its size is unverified. A difference is not a benefit: which arm it favored is counted separately, and the bar answers favoring the intervention and favoring the comparator are both made of this bucket.",
     bg: "bg-v-effect",
     text: "text-v-effect",
     tint: "bg-[color-mix(in_srgb,var(--v-effect)_12%,transparent)]",
@@ -95,7 +178,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   credible_null: {
     label: "Made no difference (confirmed)",
     short: "confirmed by an interval",
-    description: "The confidence interval sits entirely within the selected equivalence bounds, so any effect is too small to matter.",
+    description: "The whole 95% interval sits inside your meaningful-effect threshold, so any effect is too small to matter. This can include a statistically significant effect that is smaller than the threshold.",
     bg: "bg-v-null",
     text: "text-v-null",
     tint: "bg-[color-mix(in_srgb,var(--v-null)_12%,transparent)]",
@@ -103,7 +186,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   reported_null: {
     label: "Made no difference (claimed)",
     short: "claimed, not confirmed",
-    description: "The abstract reports no significant difference, but no interval shows the effect is too small to matter. Not evidence of equivalence.",
+    description: "A controlled study says it found no significant difference, in a quoted statement or in the wording of its abstract, but no comparable interval shows the effect is too small to matter. Not evidence of equivalence.",
     bg: "bg-v-reported-null",
     text: "text-v-reported-null",
     tint: "bg-[color-mix(in_srgb,var(--v-reported-null)_12%,transparent)]",
@@ -111,7 +194,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   inconclusive: {
     label: "Inconclusive",
     short: "inconclusive",
-    description: "Neither an effect nor a null could be established, because the result was too imprecise or could not be read.",
+    description: "Not a finding. The interval was too wide to tell no effect from a meaningful one, the primary results conflicted, the result was on a different scale from your threshold, or no comparative result could be read.",
     bg: "bg-v-inconclusive",
     text: "text-v-inconclusive",
     tint: "bg-[color-mix(in_srgb,var(--v-inconclusive)_14%,transparent)]",
@@ -119,7 +202,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   failed: {
     label: "Stopped or flawed",
     short: "stopped or flawed",
-    description: "A stopped trial, retraction, inadequate enrollment, or identified design failure.",
+    description: "A retracted publication, a trial the registry lists as terminated, withdrawn or suspended, enrollment under half of what was planned, or a study with no control arm. These override any result the study reported.",
     bg: "bg-v-stopped",
     text: "text-v-stopped",
     tint: "bg-[color-mix(in_srgb,var(--v-stopped)_12%,transparent)]",
@@ -127,7 +210,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
   unreported: {
     label: "Never reported",
     short: "never reported",
-    description: "Completed over 12 months ago, with no posted results or linked result publication. Outcomes remain unknown.",
+    description: "A registered trial whose primary completion was over 12 months ago, with no results posted on the registry and no linked publication. The outcome is unknown, not null.",
     bg: "bg-v-unreported",
     text: "text-v-unreported",
     tint: "bg-[color-mix(in_srgb,var(--v-unreported)_14%,transparent)]",

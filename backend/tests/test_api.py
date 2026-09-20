@@ -97,36 +97,124 @@ def test_extraction_cache_serializes_concurrent_requests():
     asyncio.run(run())
 
 
-def test_map_route_returns_the_service_payload(client):
+def _map_service():
+    from app.config import Settings
     from app.gapmap_service import GapMapService
 
     class Repo:
-        async def sample_embedded(self, limit=4000, seed=0):
+        def _documents(self):
             from tests.test_gapmap import cluster
 
-            documents = cluster("null", 0.0, "reported_null", 8) + cluster(
-                "effect", 0.8, "effect", 8
-            )
-            return {"documents": documents, "corpus": len(documents)}
+            return cluster("null", 0.0, "reported_null", 8) + cluster("effect", 0.8, "effect", 8)
 
-    from app.config import Settings
+        async def count_embedded(self):
+            return len(self._documents())
 
-    app.state.gapmap = GapMapService(
+        async def scan_embedded(self, batch_size=2000, slices=8, limit=0):
+            for document in self._documents():
+                yield [document]
+
+    return GapMapService(
         Repo(), config=Settings(_env_file=None, gapmap_regions=2, gapmap_seed=2)
     )
+
+
+def test_map_route_returns_the_service_payload(client):
+    app.state.gapmap = _map_service()
     body = client.post("/map", json={}).json()
-    assert body["coverage"]["sampled"] == 16
+    assert body["coverage"] == {
+        "clustered": 16,
+        "corpus": 16,
+        "regions": 2,
+        "drawn": 16,
+        "complete": True,
+    }
     assert sorted(region["label"] for region in body["regions"]) == ["active", "null_saturated"]
+
+
+def test_map_stream_sends_partial_states_before_the_finished_map(client):
+    app.state.gapmap = _map_service()
+    with client.stream("POST", "/map/stream", json={}) as response:
+        assert response.status_code == 200
+        events = [line for line in response.iter_lines() if line.startswith("event:")]
+    assert events[-1] == "event: result"
+    assert "event: progress" in events
 
 
 def test_map_failures_do_not_expose_provider_details(client):
     async def fail(**kwargs):
         raise RuntimeError("ELASTIC_API_KEY=secret")
 
-    app.state.gapmap = SimpleNamespace(assess=fail)
+    app.state.gapmap = SimpleNamespace(assess=fail, stream=fail)
     response = client.post("/map", json={})
     assert response.status_code == 503 and "secret" not in response.text
+    streamed = client.post("/map/stream", json={}).text
+    assert "event: error" in streamed and "secret" not in streamed
 
 
 def test_map_rejects_unknown_fields(client):
     assert client.post("/map", json={"idea": "a measurable idea", "scan": 3}).status_code == 422
+
+
+def test_concept_search_route_returns_the_service_payload(client):
+    from app.concepts import ConceptVectorService
+    from app.config import Settings
+
+    class Repo:
+        async def knn_studies(self, vector, limit, filters=None):
+            return [
+                {
+                    "id": "W1",
+                    "title": "Kidney cohort",
+                    "year": 2019,
+                    "cosine": 0.6,
+                    "embedding": [1.0, 0.0, 0.0],
+                }
+            ]
+
+    built = ConceptVectorService(Repo(), config=Settings(_env_file=None))
+    built.embed = _resolved_embedding
+    app.state.concepts = built
+    body = client.post("/concepts/search", json={"positive": ["chronic kidney disease"]}).json()
+    assert body["version"] == "concepts-v1"
+    assert body["concepts"] == [{"text": "chronic kidney disease", "sign": "positive"}]
+    assert body["matches"][0]["id"] == "W1" and body["matches"][0]["cosine"] == 0.6
+    assert body["matches"][0]["concepts"] == [
+        {"text": "chronic kidney disease", "sign": "positive", "cosine": 1.0}
+    ]
+    assert body["warnings"] == []
+
+
+def test_concept_search_maps_domain_failures_to_their_own_status(client):
+    from app.concepts import ConceptsCancelOut, EmbeddingsUnavailable
+
+    async def cancel(body):
+        raise ConceptsCancelOut("The concepts cancel each other out.")
+
+    async def unavailable(body):
+        raise EmbeddingsUnavailable("Embeddings are disabled.")
+
+    app.state.concepts = SimpleNamespace(search=cancel)
+    assert client.post("/concepts/search", json={"positive": ["ckd"]}).status_code == 422
+    app.state.concepts = SimpleNamespace(search=unavailable)
+    assert client.post("/concepts/search", json={"positive": ["ckd"]}).status_code == 503
+
+
+def test_concept_search_failures_do_not_expose_provider_details(client):
+    async def fail(body):
+        raise RuntimeError("ELASTIC_API_KEY=secret")
+
+    app.state.concepts = SimpleNamespace(search=fail)
+    response = client.post("/concepts/search", json={"positive": ["ckd"]})
+    assert response.status_code == 503 and "secret" not in response.text
+
+
+def test_concept_search_rejects_unknown_fields(client):
+    assert client.post("/concepts/search", json={"positive": []}).status_code == 422
+    assert client.post("/concepts/search", json={"positive": ["ckd"], "k": 3}).status_code == 422
+
+
+def _resolved_embedding(text):
+    future: asyncio.Future = asyncio.Future()
+    future.set_result([1.0, 0.0, 0.0])
+    return future

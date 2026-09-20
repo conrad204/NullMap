@@ -8,12 +8,14 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from app.concepts import aim
 from app.config import Settings, settings
 from app.fulltext import FullTextClient
 from app.llm import LLMService, Usage
-from app.models import Pico, SearchRequest
+from app.models import ConceptSteer, Pico, SearchRequest
 from app.repository import (
     BUCKETS,
+    EFFECT_DIRECTIONS,
     ElasticRepository,
     filter_clauses,
     lexical_query,
@@ -77,16 +79,60 @@ SCREEN_BATCH = 40
 SCREEN_CONCURRENCY = 8
 
 
+def rules_pico_changes(
+    pursuit: dict, sparse_populations: list[str], null_terms: list[dict]
+) -> tuple[list[dict], str]:
+    """Fixed-rule PICO suggestion: at most one change, only where the record points somewhere."""
+    state = pursuit["state"]
+    if state == "favours_null" and sparse_populations:
+        return [
+            {
+                "field": "population",
+                "to": sparse_populations[0],
+                "reason": "Rarely studied among the matches, while the asked population "
+                "already leans towards no effect.",
+            }
+        ], (
+            "The record leans towards no effect in the asked population; a population the "
+            "matches barely cover is where a new study could still change the answer."
+        )
+    if state == "favours_null" and null_terms:
+        return [], (
+            f"The record leans towards no effect. Abstracts reporting nulls over-represent "
+            f"'{null_terms[0]['term']}'; reconsider that element of the design before repeating it."
+        )
+    if state == "contested":
+        return [], (
+            "Studies disagree. Keep the intervention and comparator but narrow the population "
+            "or fix one outcome definition, so the new study can say when the effect appears."
+        )
+    if state == "favours_effect":
+        return [], (
+            "The record already leans towards a real effect; extend it (a new population, a "
+            "longer follow-up or a harder outcome) rather than repeating the same comparison."
+        )
+    return [], "The question is unsettled as posed; no change to the PICO is indicated."
+
+
 def recount(studies: list[dict], sesoi: float, effect_type: str) -> dict:
     """Bucket counts over screened studies, replacing the keyword-match aggregation."""
     counts = dict.fromkeys(BUCKETS, 0)
     reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+    directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
     for study in studies:
         verdict = assign_bucket(study, sesoi, effect_type)
         counts[verdict["bucket"]] += 1
         if verdict["inconclusive_reason"]:
             reasons[verdict["inconclusive_reason"]] += 1
-    return {"total": len(studies), "bucketCounts": counts, "inconclusiveReasons": reasons}
+        if verdict["bucket"] == "effect":
+            key = study.get("result_direction") or "unclear"
+            directions[EFFECT_DIRECTIONS.get(key, "unclear")] += 1
+    return {
+        "total": len(studies),
+        "bucketCounts": counts,
+        "inconclusiveReasons": reasons,
+        "effectDirections": directions,
+    }
 
 
 def to_paper(study: dict, sesoi: float, effect_type: str) -> dict:
@@ -175,6 +221,45 @@ class SearchPipeline:
 
             self.embedder = get_embedder(self.config.embedding_model, self.config.embedding_device)
         return await asyncio.to_thread(self.embedder.embed_query, text)
+
+    async def aim(
+        self, vector: list[float] | None, steer: ConceptSteer, warnings: list[str]
+    ) -> list[float] | None:
+        """Move the question's vector towards the kept concepts and away from the pushed ones.
+
+        The tags change ranking, never the match set: the lexical query is
+        untouched, so a search with tags returns the question's studies in a
+        different order rather than a different search's studies.
+        """
+        if vector is None:
+            warnings.append(
+                "Concept tags need embeddings to steer ranking, and embeddings are "
+                "unavailable here, so the tags were ignored."
+            )
+            return None
+        terms = list(dict.fromkeys([*steer.positive, *steer.negative]))
+        try:
+            embedded = await asyncio.gather(*(self.embed(term) for term in terms))
+        except Exception as exc:
+            logger.warning("Concept embedding unavailable: %s", type(exc).__name__)
+            warnings.append("The concept tags could not be embedded, so ranking was not steered.")
+            return vector
+        by_term = dict(zip(terms, embedded))
+        if any(by_term[term] is None for term in terms):
+            warnings.append("The concept tags could not be embedded, so ranking was not steered.")
+            return vector
+        steered = aim(
+            vector,
+            [by_term[term] for term in steer.positive],
+            [by_term[term] for term in steer.negative],
+        )
+        if steered is None:
+            warnings.append(
+                "The concept tags canceled the question out, leaving no direction to "
+                "search in, so ranking was not steered."
+            )
+            return vector
+        return steered
 
     async def expand(
         self,
@@ -357,7 +442,7 @@ class SearchPipeline:
                 "abstract": (d.get("abstract") or "")[:280],
             }
             # Batch by id, not by rank: a study's verdict should not depend on which
-            # neighbours the ranking happened to put beside it. `kept` restores rank order.
+            # neighbors the ranking happened to put beside it. `kept` restores rank order.
             for d in sorted(head, key=lambda d: d["id"])
         ]
         slots = asyncio.Semaphore(SCREEN_CONCURRENCY)
@@ -460,6 +545,74 @@ class SearchPipeline:
             ],
             "scope": f"Generated from the extracted facts and verdicts of the {len(rows)} "
             "matched studies read in detail; it introduces no findings or numbers of its own.",
+        }
+
+    async def recommend_pico(
+        self,
+        pico: Pico,
+        pursuit: dict,
+        studies: list[dict],
+        verdicts: dict,
+        aggregation: dict,
+        alternatives: list[dict],
+        usage: Usage,
+        warnings: list[str],
+    ) -> dict:
+        """The PICO a new study should ask, given the record: model-written when available.
+
+        Without a model (or when it fails) the rules fallback names the one change the
+        record itself supports, so the block never invents a design from nothing.
+        """
+        recommended = {
+            key: getattr(pico, key)
+            for key in ("population", "intervention", "comparator", "outcome")
+        }
+        sparse = [alt["label"] for alt in alternatives if not alt["label"].startswith("Reconsider")]
+        result = None
+        if studies and self.config.openai_api_key:
+            rows = [
+                {
+                    "id": d["id"],
+                    "population": (d.get("population") or "")[:160],
+                    "intervention": (d.get("intervention") or "")[:160],
+                    "comparator": (d.get("comparator") or "")[:120],
+                    "outcome": (d.get("outcome") or "")[:200],
+                    "verdict": verdicts[d["id"]]["bucket"],
+                }
+                for d in studies[:12]
+            ]
+            table = {
+                "pico": recommended,
+                "record": {
+                    key: pursuit[key] for key in ("state", "pEffect", "recommendation", "reasons")
+                }
+                | {
+                    "nullTerms": [term["term"] for term in aggregation["nullTerms"][:5]],
+                    "sparsePopulations": sparse[:3],
+                },
+                "rows": rows,
+            }
+            try:
+                result = await self.llm.recommend_pico(table, usage)
+            except Exception as exc:
+                logger.warning("PICO recommendation unavailable: %s", type(exc).__name__)
+                warnings.append(
+                    "The generated PICO recommendation was unavailable; the suggestion below "
+                    "follows fixed rules."
+                )
+        if result is not None:
+            changes = [change.model_dump() for change in result.changes]
+            rationale, source = result.rationale, "model"
+        else:
+            changes, rationale = rules_pico_changes(pursuit, sparse, aggregation["nullTerms"])
+            source = "rules"
+        for change in changes:
+            recommended[change["field"]] = change["to"]
+        return {
+            "pico": recommended,
+            "changes": changes,
+            "rationale": rationale,
+            "source": source,
         }
 
     async def effect_trend(
@@ -654,6 +807,9 @@ class SearchPipeline:
             vector = None
             logger.warning("Local embeddings unavailable: %s", type(exc).__name__)
             warnings.append("Local embeddings are unavailable; retrieval used BM25 keyword search.")
+        steer = request.concepts if request.concepts and request.concepts.active else None
+        if steer:
+            vector = await self.aim(vector, steer, warnings)
         hits, mode = await self.repo.retrieve(query, vector)
         expanded = await self.expand(hits, vector, warnings, pico.model_dump(), filters)
         expansion_ids = [d["id"] for d in expanded]
@@ -832,8 +988,9 @@ class SearchPipeline:
                 }
             )
         ev = stats.get("expectedValue")
-        recommendation = (
-            "pursue_with_changes" if ev is None else ("pursue" if ev >= 0 else "deprioritize")
+        pursuit = stats["pursuit"]
+        recommended_pico = await self.recommend_pico(
+            pico, pursuit, studies, verdicts, aggregation, alternatives, usage, warnings
         )
         return {
             "queryId": f"q_{uuid4().hex}",
@@ -848,15 +1005,19 @@ class SearchPipeline:
             "summary": summary,
             "estimate": {
                 "pSuccess": stats.get("assurance"),
+                "pPursue": pursuit["pPursue"],
                 "expectedValue": ev,
                 "confidence": "low",
-                "recommendation": recommendation,
+                "recommendation": pursuit["recommendation"],
                 "drivers": drivers,
             },
+            "recommendedPico": recommended_pico,
             "completedAt": datetime.now(UTC).isoformat(),
             "pico": pico.model_dump(),
             "bucketCounts": aggregation["bucketCounts"],
             "inconclusiveReasons": aggregation.get("inconclusiveReasons"),
+            # Over the full match set, unlike effectTrend, which covers the studies read.
+            "effectDirections": aggregation.get("effectDirections"),
             "yearCounts": aggregation["yearCounts"],
             "countScope": count_scope,
             # Null unless a bound was set, so a result can never look filtered when it is not.
@@ -875,6 +1036,8 @@ class SearchPipeline:
             "retrieval": {
                 "mode": mode,
                 "expanded": len(expanded),
+                # Echoed so a reordered page can say what reordered it.
+                "concepts": steer.model_dump() if steer else None,
                 "durationMs": round((perf_counter() - started) * 1000),
             },
             "spin": aggregation["spin"],

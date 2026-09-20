@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+ConceptTerm = Annotated[str, Field(min_length=2, max_length=200)]
+
 Bucket = Literal[
     "effect", "credible_null", "reported_null", "inconclusive", "failed", "unreported"
 ]
@@ -50,6 +52,24 @@ class SearchFilters(BaseModel):
         return self.yearFrom is not None or self.yearTo is not None
 
 
+class ConceptSteer(BaseModel):
+    """Concepts that aim the same search, rather than a search of their own.
+
+    Each term is one more direction added to (or subtracted from) the question's
+    own vector before retrieval, so the tags change what ranks highest among the
+    question's matches. Subtracting is a direction, not a filter: a paper is
+    pushed down for being about the term, never removed for mentioning it.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    positive: list[ConceptTerm] = Field(default_factory=list, max_length=8)
+    negative: list[ConceptTerm] = Field(default_factory=list, max_length=8)
+
+    @property
+    def active(self) -> bool:
+        return bool(self.positive or self.negative)
+
+
 class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
     idea: str = Field(min_length=8, max_length=12000)
@@ -64,6 +84,7 @@ class SearchRequest(BaseModel):
     outcomeSd: float | None = Field(default=None, gt=0, le=1e6)
     baselineRisk: float | None = Field(default=None, gt=0, lt=1)
     filters: SearchFilters | None = None
+    concepts: ConceptSteer | None = None
 
 
 class Pico(BaseModel):
@@ -102,7 +123,7 @@ Direction = Literal["favours_intervention", "favours_comparator", "unclear"]
 
 
 class DirectionEvidence(BaseModel):
-    """Which arm the reported primary result favours; significance is a separate fact."""
+    """Which arm the reported primary result favors; significance is a separate fact."""
 
     value: Direction
     quote: str
@@ -177,6 +198,19 @@ class Overview(BaseModel):
     notes: list[StudyNote]
 
 
+class PicoChange(BaseModel):
+    field: Literal["population", "intervention", "comparator", "outcome"]
+    to: str
+    reason: str
+
+
+class PicoRecommendation(BaseModel):
+    """How the asked PICO should change, given what the record shows; empty when it should not."""
+
+    changes: list[PicoChange]
+    rationale: str
+
+
 class EffectTrend(BaseModel):
     summary: str
     patterns: list[str]
@@ -229,6 +263,20 @@ class MapRequest(BaseModel):
     arithmetic: MapArithmetic | None = None
     cutoffYear: int | None = Field(default=None, ge=1900, le=2100)
     refresh: bool = False
+
+
+class ConceptSearchRequest(BaseModel):
+    """Concepts to add and to subtract before the index is searched by nearest neighbor.
+
+    The negatives are part of the query direction, not a post-filter: a paper is
+    pushed away by a subtracted concept rather than removed for mentioning it.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+    positive: list[ConceptTerm] = Field(min_length=1, max_length=8)
+    negative: list[ConceptTerm] = Field(default_factory=list, max_length=8)
+    limit: int = Field(default=20, ge=1, le=50)
+    filters: SearchFilters | None = None
 
 
 class Claim(BaseModel):

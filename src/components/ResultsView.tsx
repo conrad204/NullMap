@@ -1,22 +1,44 @@
 import { useState } from "react";
 import { ArrowUpRight, Funnel, Info } from "@phosphor-icons/react";
 import { registryExemptionNotice } from "../lib/filters";
-import type { EffectTrend, InconclusiveReason, Paper, SearchResult, Source, Verdict } from "../types";
-import { BAR_GROUPS, BAR_VERDICTS, INCONCLUSIVE_REASONS, VERDICT_META, countByVerdict, type BarGroupKey } from "../lib/verdicts";
+import type { ConceptSteer, EffectDirections, EffectTrend, InconclusiveReason, Paper, RecommendedPico, SearchResult, Source, Verdict } from "../types";
+import { SIGN_META, fromSteer } from "../lib/concepts";
+import { BAR_GROUPS, BAR_VERDICTS, FILTER_GROUPS, INCONCLUSIVE_REASONS, UNSTATED_DIRECTION_GROUP, VERDICT_META, VERDICT_ORDER, countByVerdict, directionsFromPapers, type BarGroup, type BarGroupKey } from "../lib/verdicts";
 import { headline } from "../lib/headline";
 import { cx, formatAuthors, formatCount } from "../lib/format";
-import EvidenceDetails from "./EvidenceDetails";
+import { SORT_OPTIONS, sortPapers, type SortKey } from "../lib/sort";
+import EvidenceDetails, { Costs, YearBreakdown } from "./EvidenceDetails";
+import MapPanel from "./MapPanel";
 
-type Filter = BarGroupKey | "inconclusive" | "all";
-const filterVerdicts = (filter: Filter): Verdict[] => filter === "inconclusive" ? ["inconclusive"] : BAR_GROUPS.find((group) => group.key === filter)?.verdicts ?? [];
-const filterLabel = (filter: Filter) => filter === "inconclusive" ? VERDICT_META.inconclusive.label : BAR_GROUPS.find((group) => group.key === filter)?.label ?? "";
+type Filter = BarGroupKey | Verdict | "all";
+const isVerdict = (filter: Filter): filter is Verdict => (VERDICT_ORDER as string[]).includes(filter);
+const filterGroup = (filter: Filter) => FILTER_GROUPS.find((group) => group.key === filter);
+const matchesFilter = (filter: Filter, paper: Paper) => filter === "all" || (isVerdict(filter) ? paper.verdict === filter : filterGroup(filter)?.matches(paper) === true);
+const filterLabel = (filter: Filter) => isVerdict(filter) ? VERDICT_META[filter].label : filterGroup(filter)?.label ?? "";
 const SOURCES: Record<Source, string> = { openalex: "OpenAlex", clinicaltrials: "ClinicalTrials.gov", ctgov: "ClinicalTrials.gov", merged: "Linked paper + registry", arxiv: "arXiv", pubmed: "PubMed", osf: "OSF" };
 const TIERS = { numeric: "Reported numbers", derived: "Computed from arm-level results", reconstructed: "Reconstructed estimate", text_only: "Text only · provisional" };
-const DIRECTIONS = { favours_intervention: "Favours the intervention", favours_comparator: "Favours the comparator", unclear: "" };
+const DIRECTIONS = { favours_intervention: "Favors the intervention", favours_comparator: "Favors the comparator", unclear: "" };
 const EXTRACTION_SOURCES = { abstract: "numbers read from abstract", full_text: "numbers read from full text" };
 export function safeUrl(url: string): string | undefined {
   try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href : undefined; }
   catch { return undefined; }
+}
+
+/** Why this page is in this order. The tags moved papers up and down; they never removed any. */
+function ConceptSteerNote({ steer }: { steer: ConceptSteer }) {
+  const tags = fromSteer(steer);
+  if (!tags.length) return null;
+  return (
+    <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-ink-3">
+      Ranked towards
+      {tags.map((tag) => (
+        <span key={tag.id} className={cx("rounded-mark px-1.5 py-0.5 text-ink", SIGN_META[tag.sign].tint)}>
+          <span aria-hidden className={cx("font-mono", SIGN_META[tag.sign].text)}>{SIGN_META[tag.sign].symbol}</span> {tag.text}
+        </span>
+      ))}
+      <span>· ordering only, no study was added or removed</span>
+    </p>
+  );
 }
 
 function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, number>> {
@@ -27,23 +49,30 @@ function countReasons(papers: Paper[]): Partial<Record<InconclusiveReason, numbe
 
 export default function ResultsView({ result }: { result: SearchResult }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [sort, setSort] = useState<SortKey>("answer");
   // An API that predates a bucket omits its key; a missing count is zero, never NaN.
   const counts = { ...countByVerdict([]), ...(result.bucketCounts ?? countByVerdict(result.papers)) };
   // Without a server breakdown (mock data, older API), count the reasons on the displayed studies.
   const reasons = result.inconclusiveReasons ?? countReasons(result.papers);
   // Provisional when no displayed effect is backed by numbers.
   const effects = result.papers.filter((paper) => paper.verdict === "effect");
-  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled);
   const matched = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  // Older payloads carry no direction split over the match set; the displayed studies are all we can count.
+  const directions = result.effectDirections ?? directionsFromPapers(result.papers);
+  const answer = headline(counts, effects.length > 0 && effects.every((paper) => (paper.evidenceTier ?? "text_only") === "text_only"), result.evidenceBase?.controlled, result.effectDirections ?? undefined);
   // Stated beside the active filters, not in the warnings list: a reader of filtered
   // results has to be told why unpublished trial records survived a citation bound.
   const exemption = registryExemptionNotice(result.filters, result.papers);
-  const shown = filter === "all" ? result.papers : result.papers.filter((paper) => filterVerdicts(filter).includes(paper.verdict));
+  const shown = sortPapers(result.papers.filter((paper) => matchesFilter(filter, paper)), sort);
   return (
-    <div className="fade-up flex flex-col gap-10">
+    <div className="fade-up grid grid-cols-1 gap-10 xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)] xl:items-start xl:gap-x-14">
+      {/* One rule between every top-level block, including the sections EvidenceDetails returns
+          as a fragment, so the report reads as separate sections rather than one column of text. */}
+      <div className="flex min-w-0 flex-col [&>*+*]:mt-8 [&>*+*]:border-t [&>*+*]:border-line [&>*+*]:pt-8">
       <header>
         <p className="text-sm leading-relaxed text-ink-2">{formatCount(result.totalScanned)} matching indexed records · {result.searchedSources.map((source) => SOURCES[source] ?? source).join(" + ") || "No sources available"}</p>
         {result.retrieval && <p className="mt-1 text-xs text-ink-3">Retrieval: {result.retrieval.mode} · {result.retrieval.expanded} additional review references</p>}
+        {result.retrieval?.concepts && <ConceptSteerNote steer={result.retrieval.concepts} />}
         {result.filters && <AppliedFilterNote filters={result.filters} />}
         {exemption && <p className="mt-2 max-w-[78ch] rounded-control border border-line bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2"><Info size={14} className="mr-1.5 inline align-[-2px] text-ink-3" aria-hidden />{exemption}</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">{result.keywords.map((keyword) => <span key={keyword} className="rounded-mark bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink">{keyword}</span>)}</div>
@@ -57,12 +86,42 @@ export default function ResultsView({ result }: { result: SearchResult }) {
         : result.overview ? <OverviewPanel overview={result.overview} />
         : matched > 0 && <p className="max-w-[65ch] border-l-2 border-line pl-4 text-sm leading-relaxed text-ink-2">No summary of effects is shown because none of the {formatCount(matched)} matching {matched === 1 ? "study" : "studies"} reported an effect, so there is no trend to describe. What each one did report is listed under the studies below.</p>}
       {result.pico && <details className="text-sm"><summary className="cursor-pointer text-ink-2">Interpreted question</summary><dl className="mt-2 space-y-2">{(["population", "intervention", "comparator", "outcome"] as const).map((key) => <div key={key}><dt className="capitalize text-ink-3">{key}</dt><dd className="text-ink">{result.pico![key] || "Not specified"}</dd></div>)}</dl></details>}
+      {result.recommendedPico && <RecommendedPicoPanel recommended={result.recommendedPico} />}
       {!!result.warnings?.length && <div className="rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink-2"><p className="font-medium text-ink">Coverage & limitations</p><ul className="mt-2 list-disc space-y-1 pl-4">{result.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div>}
-      <VerdictBreakdown counts={counts} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
-      <section><h2 className="text-sm font-medium text-ink-2">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
+      <VerdictBreakdown counts={counts} directions={directions} directionsOverMatchSet={result.effectDirections != null} reasons={reasons} filter={filter} onFilter={setFilter} scope={result.countScope ?? (result.bucketCounts ? "Full lexical match set in the index." : "Counts cover the displayed studies only.")} />
+      <section><h2 className="section-label">What the evidence says</h2><p className="mt-3 max-w-[65ch] leading-relaxed text-ink">{result.summary}</p></section>
       <EvidenceDetails result={result} />
-      <PaperList papers={shown} allDisplayed={result.papers.length} filter={filter} onClear={() => setFilter("all")} />
+      <MapPanel idea={result.idea} />
+      {!!result.yearCounts?.length && <YearBreakdown counts={result.yearCounts} />}
+      {result.costs && <Costs costs={result.costs} />}
+      </div>
+      <aside tabIndex={0} aria-label="Matching studies" className="scrollbar-none min-w-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:border-l xl:border-line xl:pl-8">
+        <PaperList papers={shown} allDisplayed={result.papers.length} displayedCounts={countByVerdict(result.papers)} filter={filter} onFilter={setFilter} sort={sort} onSort={setSort} />
+      </aside>
     </div>
+  );
+}
+/** The PICO a new study should ask. Changed fields are marked; unchanged ones are the question as posed. */
+function RecommendedPicoPanel({ recommended }: { recommended: RecommendedPico }) {
+  const changed = new Map(recommended.changes.map((change) => [change.field, change]));
+  return (
+    <section className="rounded-control border border-line p-4">
+      <h2 className="text-sm font-medium text-ink">Recommended PICO</h2>
+      <p className="mt-1 max-w-[65ch] text-sm leading-relaxed text-ink-2">{recommended.rationale}</p>
+      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+        {(["population", "intervention", "comparator", "outcome"] as const).map((key) => {
+          const change = changed.get(key);
+          return (
+            <div key={key}>
+              <dt className="flex items-baseline gap-2 text-xs capitalize text-ink-3">{key}{change && <span className="rounded-mark bg-accent/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">changed</span>}</dt>
+              <dd className="mt-0.5 text-sm text-ink">{recommended.pico[key] || "Not specified"}</dd>
+              {change && <dd className="mt-0.5 text-xs leading-relaxed text-ink-3">{change.reason}</dd>}
+            </div>
+          );
+        })}
+      </dl>
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">{recommended.changes.length === 0 ? "No change to the question is indicated. " : ""}{recommended.source === "model" ? "Wording suggested by a language model from the extracted fields, verdicts and the pursuit decision above; it introduces no findings of its own. Check the studies it points to before adopting it." : "Suggested by fixed rules from the pursuit decision and the populations represented among the matches; no language model was used."}</p>
+    </section>
   );
 }
 /** A filtered report describes a subset of the index, so say which subset and what it cost. */
@@ -89,8 +148,8 @@ function OverviewPanel({ overview }: { overview: NonNullable<SearchResult["overv
 }
 function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
   const split = [
-    { label: "favour the intervention", count: trend.favoursIntervention, tone: "text-v-effect" },
-    { label: "favour the comparator", count: trend.favoursComparator, tone: "text-v-failed" },
+    { label: "favor the intervention", count: trend.favoursIntervention, tone: "text-v-effect" },
+    { label: "favor the comparator", count: trend.favoursComparator, tone: "text-v-failed" },
     { label: "direction not stated", count: trend.unclear, tone: "text-ink-2" },
   ];
   return <section className="border-l-2 border-v-effect pl-4">
@@ -104,24 +163,37 @@ function EffectTrendPanel({ trend }: { trend: EffectTrend }) {
     <p className="mt-3 max-w-[70ch] text-xs leading-relaxed text-ink-3">{trend.scope} An “effect” is a significant difference in either direction, so the split matters. {trend.summary ? "The counts are computed; the paragraph is a generated reading of the studies’ extracted facts and quotes, and introduces no numbers of its own." : "A written summary needs at least two such studies."}</p>
   </section>;
 }
-function VerdictBreakdown({ counts, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
+function VerdictBreakdown({ counts, directions, directionsOverMatchSet, reasons, filter, onFilter, scope }: { counts: Record<Verdict, number>; directions: EffectDirections; directionsOverMatchSet: boolean; reasons: Partial<Record<InconclusiveReason, number>>; filter: Filter; onFilter: (filter: Filter) => void; scope: string }) {
   const classified = BAR_VERDICTS.reduce((sum, verdict) => sum + counts[verdict], 0);
-  const groups = BAR_GROUPS.map((group) => ({ group, total: group.verdicts.reduce((sum, verdict) => sum + counts[verdict], 0) }));
+  const groups = BAR_GROUPS.map((group) => ({ group, total: group.total(counts, directions) }));
+  // A direction counted off the page is not a count of the match set: show no number rather than a zero.
+  const display = (group: BarGroup, total: number) => total === 0 && group.direction && !directionsOverMatchSet ? "—" : formatCount(total);
+  const unstated = UNSTATED_DIRECTION_GROUP.total(counts, directions);
   return <section>
-    <h2 className="text-sm font-medium text-ink-2">What prior work found <span className="font-normal text-ink-3">· {formatCount(classified)} classified matches</span></h2>
-    <div role="img" aria-label={groups.map(({ group, total }) => `${total} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
+    <h2 className="section-label">What prior work found <span className="font-normal">· {formatCount(classified)} classified matches</span></h2>
+    <div role="img" aria-label={groups.map(({ group, total }) => `${display(group, total)} ${group.label}`).join(", ")} className="mt-3 flex h-3 w-full gap-1">
       {classified === 0 && <div className="w-full rounded-mark bg-surface-2" />}
       {groups.filter(({ total }) => total > 0).map(({ group, total }) => <div key={group.key} style={{ flexGrow: total }} className={cx(group.bg, "min-w-1 basis-0 rounded-mark transition-opacity duration-300", filter !== "all" && filter !== group.key && "opacity-25")} />)}
     </div>
-    <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">{groups.map(({ group, total }) => <li key={group.key}>
+    <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">{groups.map(({ group, total }) => <li key={group.key}>
       <button type="button" title={group.description} onClick={() => onFilter(filter === group.key ? "all" : group.key)} aria-pressed={filter === group.key} className={cx("group -mx-2 flex w-[calc(100%+1rem)] flex-col gap-1.5 rounded-control p-2 text-left transition-colors", filter === group.key ? "bg-surface-2" : "hover:bg-surface-2/60")}>
-        <span className="flex items-baseline gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 self-center rounded-mark", group.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(total)}</span><span className="text-sm font-medium text-ink">{group.label}</span></span>
-        <span className="text-xs leading-relaxed text-ink-3">{group.verdicts.length === 1 ? VERDICT_META[group.verdicts[0]].short : group.verdicts.map((verdict) => `${formatCount(counts[verdict])} ${VERDICT_META[verdict].short}`).join(" · ")}</span>
+        <span className="flex items-baseline gap-2"><span aria-hidden className={cx("h-2.5 w-2.5 shrink-0 self-center rounded-mark", group.bg)} /><span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{display(group, total)}</span><span className="text-sm font-medium text-ink">{group.label}</span></span>
+        <span className="text-xs leading-relaxed text-ink-3">{group.detail(counts)}</span>
       </button>
     </li>)}</ul>
-    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} Select an answer to filter the displayed studies below.</p>
+    <p className="mt-4 text-xs leading-relaxed text-ink-3">{scope} {directionsOverMatchSet ? `Which arm an effect favored is the study's own stated result, read from a quoted sentence; benefit, harm and any unstated direction together make up the ${formatCount(counts.effect)} that found a difference.` : "No direction breakdown came back for the match set, so the direction counts cover the displayed studies only and a dash means none of them stated it."} Select an answer to filter the displayed studies below.</p>
+    {unstated > 0 && <UnstatedDirectionNote count={unstated} scoped={directionsOverMatchSet} active={filter === UNSTATED_DIRECTION_GROUP.key} onToggle={() => onFilter(filter === UNSTATED_DIRECTION_GROUP.key ? "all" : UNSTATED_DIRECTION_GROUP.key)} />}
     <InconclusiveNote count={counts.inconclusive} reasons={reasons} active={filter === "inconclusive"} onToggle={() => onFilter(filter === "inconclusive" ? "all" : "inconclusive")} />
   </section>;
+}
+function UnstatedDirectionNote({ count, scoped, active, onToggle }: { count: number; scoped: boolean; active: boolean; onToggle: () => void }) {
+  return <div className="mt-6 border-t border-line pt-5">
+    <button type="button" onClick={onToggle} aria-pressed={active} className={cx("group -m-2 flex items-baseline gap-2 rounded-control p-2 text-left transition-colors", active ? "bg-surface-2" : "hover:bg-surface-2/60")}>
+      <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{formatCount(count)}</span>
+      <span className="text-sm text-ink-2 group-hover:text-ink">further {count === 1 ? "match" : "matches"} found a difference without saying which arm it favored</span>
+    </button>
+    <p className="mt-3 max-w-[70ch] text-sm leading-relaxed text-ink-2">{UNSTATED_DIRECTION_GROUP.description} It is left out of the bar because it answers neither benefit nor harm.{scoped ? "" : " Counted over the displayed studies only."}</p>
+  </div>;
 }
 function InconclusiveNote({ count, reasons, active, onToggle }: { count: number; reasons: Partial<Record<InconclusiveReason, number>>; active: boolean; onToggle: () => void }) {
   if (count === 0) return null;
@@ -140,9 +212,18 @@ function InconclusiveNote({ count, reasons, active, onToggle }: { count: number;
     </div>)}</dl>
   </div>;
 }
-function PaperList({ papers, allDisplayed, filter, onClear }: { papers: Paper[]; allDisplayed: number; filter: Filter; onClear: () => void }) {
+function PaperList({ papers, allDisplayed, displayedCounts, filter, onFilter, sort, onSort }: { papers: Paper[]; allDisplayed: number; displayedCounts: Record<Verdict, number>; filter: Filter; onFilter: (filter: Filter) => void; sort: SortKey; onSort: (sort: SortKey) => void }) {
+  const inconclusive = papers.filter((paper) => paper.verdict === "inconclusive").length;
   return <section>
-    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={onClear} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
+    <div className="flex flex-wrap items-baseline justify-between gap-4"><h2 className="text-sm font-medium text-ink-2">{filter === "all" ? `${papers.length} displayed studies` : `${papers.length} of ${allDisplayed} displayed studies · ${filterLabel(filter)}`}</h2>{filter !== "all" && <button type="button" onClick={() => onFilter("all")} className="text-sm text-accent underline-offset-4 hover:underline">Show all displayed studies</button>}</div>
+    {allDisplayed > 1 && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+      <label className="flex items-center gap-2">Type<select value={isVerdict(filter) ? filter : "all"} onChange={(event) => onFilter(event.target.value as Filter)} className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong">
+        <option value="all">All types · {allDisplayed}</option>
+        {VERDICT_ORDER.map((verdict) => <option key={verdict} value={verdict} disabled={displayedCounts[verdict] === 0}>{VERDICT_META[verdict].label} · {displayedCounts[verdict]}</option>)}
+      </select></label>
+      <label className="flex items-center gap-2">Sort by<select value={sort} onChange={(event) => onSort(event.target.value as SortKey)} className="rounded-control border border-line bg-surface px-2 py-1 text-xs text-ink transition-colors hover:border-line-strong">{SORT_OPTIONS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}</select></label>
+      {inconclusive > 0 && inconclusive < papers.length && <span>Inconclusive studies are listed last in every order, because they are not findings.</span>}
+    </div>}
     {papers.length === 0 ? <p className="mt-4 text-sm leading-relaxed text-ink-2">{filter === "all" ? "No studies were returned for this question. Missing evidence cannot establish a null effect." : "No studies from this bucket are on the displayed page. Headline counts may include other matching records."}</p> : <ol className="mt-2">{papers.map((paper) => <PaperRow key={paper.id} paper={paper} />)}</ol>}
   </section>;
 }
@@ -150,7 +231,7 @@ function PaperRow({ paper }: { paper: Paper }) {
   const meta = VERDICT_META[paper.verdict];
   const url = safeUrl(paper.url);
   const links = [...new Set([...(paper.linkedUrls ?? []), ...(paper.nctIds ?? []).map((id) => `https://clinicaltrials.gov/study/${encodeURIComponent(id)}`), ...(paper.pmids ?? []).map((id) => `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(id)}/`)])].map((link) => safeUrl(link)).filter((link): link is string => Boolean(link) && link !== url);
-  return <li className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line py-5 sm:grid-cols-[1fr_auto]">
+  return <li className="grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line py-5 sm:grid-cols-[1fr_auto] xl:grid-cols-1">
     <div className="min-w-0">
       {url ? <a href={url} target="_blank" rel="noreferrer" className="group inline-flex items-start gap-1.5 font-medium leading-snug text-ink transition-colors hover:text-accent"><span>{paper.title}</span><ArrowUpRight size={14} className="mt-1 shrink-0 text-ink-3 group-hover:text-accent" aria-hidden /></a> : <p className="font-medium leading-snug text-ink">{paper.title}</p>}
       <p className="mt-1 text-sm text-ink-2">{formatAuthors(paper.authors)}{paper.year ? `, ${paper.year}` : ""}{paper.venue ? `, ${paper.venue}` : ""}</p>
@@ -168,10 +249,10 @@ function PaperRow({ paper }: { paper: Paper }) {
       {paper.significantButTrivial && <p className="mt-2 text-xs text-v-unreported">Statistically significant, but below the meaningful-effect threshold.</p>}
       {links.length > 0 && <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">{links.map((link, index) => <a key={link} href={link} target="_blank" rel="noreferrer" className="text-xs text-accent underline underline-offset-2">{link.includes("clinicaltrials.gov/study/") ? decodeURIComponent(link.split("/").pop() ?? "Trial registry") : link.includes("pubmed.ncbi.nlm.nih.gov") ? "PubMed record" : `Linked source ${index + 1}`}</a>)}</div>}
     </div>
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:max-w-[185px] sm:flex-col sm:items-end">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:max-w-[185px] sm:flex-col sm:items-end xl:max-w-none xl:flex-row xl:items-center">
       <span className={cx("rounded-control px-2 py-0.5 text-xs font-medium", meta.text, meta.tint)}>{meta.label}</span>
       <span className="font-mono tabular-nums text-ink-3">{paper.sampleSize !== null ? `n = ${formatCount(paper.sampleSize)}` : "n unknown"}</span>
-      {paper.effectSize && <span className="font-mono tabular-nums text-ink-3 sm:text-right">{paper.effectSize.metric} = {paper.effectSize.value.toFixed(3)}{paper.effectSize.ci && <span className="block">{paper.ciLevel != null ? `${Math.round(paper.ciLevel * 100)}% CI` : "CI (level unspecified)"} [{paper.effectSize.ci[0].toFixed(3)}, {paper.effectSize.ci[1].toFixed(3)}]</span>}</span>}
+      {paper.effectSize && <span className="font-mono tabular-nums text-ink-3 sm:text-right xl:text-left">{paper.effectSize.metric} = {paper.effectSize.value.toFixed(3)}{paper.effectSize.ci && <span className="block">{paper.ciLevel != null ? `${Math.round(paper.ciLevel * 100)}% CI` : "CI (level unspecified)"} [{paper.effectSize.ci[0].toFixed(3)}, {paper.effectSize.ci[1].toFixed(3)}]</span>}</span>}
       {paper.pValue != null && <span className="font-mono text-ink-3">p {paper.pValueOperator || "="} {paper.pValue.toPrecision(3)}</span>}
       {paper.citations > 0 && <span className="font-mono tabular-nums text-ink-3">{formatCount(paper.citations)} citations</span>}
     </div>

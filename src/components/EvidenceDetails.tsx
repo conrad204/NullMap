@@ -1,12 +1,22 @@
-import type { EvidencePool, Paper, QueryCosts, SearchResult } from "../types";
-import { formatCount, percent, signed } from "../lib/format";
+import { useState } from "react";
+import type { EvidencePool, Paper, Pursuit, PursuitState, Recommendation, QueryCosts, SearchResult } from "../types";
+import { cx, formatCount, percent, signed } from "../lib/format";
 import { effectForPool } from "../lib/effects";
+
+const PURSUIT_STATES: Record<PursuitState, { label: string; detail: string; tone: string }> = {
+  unknown: { label: "Nothing answers it yet", detail: "No read study gave a verdict either way, so the odds are still the 50/50 prior. A new study here would be the first answer, not a replication.", tone: "text-ink-2" },
+  open: { label: "Still open", detail: "The credible interval spans even odds: the record leans one way but a well-powered study could move it substantially.", tone: "text-v-unreported" },
+  contested: { label: "Contested", detail: "Studies disagree. A posterior near one half here means conflict, not a half-settled question; look for moderators (population, dose, outcome definition) before adding another undifferentiated trial.", tone: "text-v-failed" },
+  favours_effect: { label: "Leans towards a real effect", detail: "The credible interval lies above even odds. Another confirmatory trial adds less than a study that tests where or for whom the effect holds.", tone: "text-v-effect" },
+  favours_null: { label: "Leans towards no effect", detail: "The credible interval lies below even odds. Repeating the same design is unlikely to be worthwhile unless the prior studies were underpowered for your SESOI.", tone: "text-v-null" },
+};
 
 export default function EvidenceDetails({ result }: { result: SearchResult }) {
   const stats = result.statistics;
   return <>
-    {stats && <section className="border-y border-line py-5">
-      <h2 className="text-sm font-medium text-ink-2">Quantitative evidence</h2>
+    {stats && <section>
+      <h2 className="section-label">Quantitative evidence</h2>
+      {stats.pursuit && <PursuitPanel pursuit={stats.pursuit} sesoi={result.pico?.sesoi} />}
       {stats.pools.length ? <div className="mt-4 space-y-6">{stats.pools.map((pool, index) => <ForestPlot key={`${pool.outcome}-${pool.effectType}-${index}`} pool={pool} papers={result.papers} sesoi={result.pico?.effectType === pool.effectType ? result.pico.sesoi : undefined} />)}</div>
         : <p className="mt-3 text-sm leading-relaxed text-ink-2">No compatible group of at least three studies was available to pool. A missing pooled estimate does not establish no effect.</p>}
       <div className="mt-5">
@@ -20,21 +30,69 @@ export default function EvidenceDetails({ result }: { result: SearchResult }) {
       </details>}
     </section>}
     {result.spin && result.spin.eligible > 0 && <section className="border-l-2 border-line-strong pl-4">
-      <h2 className="text-sm font-medium text-ink-2">Registry/abstract disagreement</h2>
+      <h2 className="section-label">Registry/abstract disagreement</h2>
       <p className="mt-2 text-sm text-ink">{result.spin.disagreements} of {result.spin.eligible} assessed linked records have disagreeing registry and abstract findings.</p>
       <p className="mt-1 text-xs leading-relaxed text-ink-3">Possible abstract spin, not proof: different outcomes, follow-up times, or reporting choices may explain the disagreement. Check the linked sources.</p>
     </section>}
     {Boolean(result.nullTerms?.length || result.alternativeRoutes?.length) && <section>
-      <h2 className="text-sm font-medium text-ink-2">Where to look next</h2>
+      <h2 className="section-label">Where to look next</h2>
       {!!result.nullTerms?.length && <><p className="mt-3 text-sm text-ink-2">Terms over-represented in credible-null abstracts</p><div className="mt-2 flex flex-wrap gap-2">{result.nullTerms.map(({ term, count }) => <span key={term} className="rounded-control bg-surface-2 px-2 py-1 text-xs text-ink">{term} <span className="font-mono text-ink-3">{formatCount(count)}</span></span>)}</div><p className="mt-2 text-xs text-ink-3">An Elasticsearch text association; this does not establish that the term causes a null result.</p></>}
       {!!result.alternativeRoutes?.length && <ul className="mt-4 space-y-4">{result.alternativeRoutes.map((route) => <li key={route.label}><h3 className="text-sm font-medium text-ink">{route.label}</h3><p className="mt-1 text-sm leading-relaxed text-ink-2">{route.reason}</p><p className="mt-1 text-xs text-ink-3">{formatCount(route.evidenceCount)} indexed studies supporting this suggestion</p></li>)}</ul>}
     </section>}
-    {!!result.yearCounts?.length && <details className="text-sm">
-      <summary className="cursor-pointer font-medium text-ink-2">Matching studies by year</summary>
-      <div className="mt-3 grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-5">{[...result.yearCounts].sort((a, b) => a.year - b.year).map(({ year, count }) => <div key={year} className="flex justify-between gap-2 border-b border-line pb-1 text-xs"><span className="text-ink-3">{year}</span><span className="font-mono text-ink">{formatCount(count)}</span></div>)}</div>
-    </details>}
-    {result.costs && <Costs costs={result.costs} />}
   </>;
+}
+
+/** Kept out of the evidence block so the page can put these utilities after the map. */
+export function YearBreakdown({ counts }: { counts: { year: number; count: number }[] }) {
+  return <details className="text-sm">
+    <summary className="cursor-pointer font-medium text-ink-2">Matching studies by year</summary>
+    <YearHistogram counts={counts} />
+  </details>;
+}
+const RECOMMENDATIONS: Record<Recommendation, { label: string; tone: string }> = {
+  pursue: { label: "Worth pursuing as posed", tone: "text-v-effect" },
+  pursue_with_changes: { label: "Worth pursuing with changes", tone: "text-v-unreported" },
+  deprioritize: { label: "Deprioritize", tone: "text-v-null" },
+};
+function PursuitPanel({ pursuit, sesoi }: { pursuit: Pursuit; sesoi?: number }) {
+  const state = PURSUIT_STATES[pursuit.state];
+  const [alpha, beta] = pursuit.posterior;
+  const counted = [
+    [pursuit.counted.effect, "effect"], [pursuit.counted.credible_null, "confirmed null"], [pursuit.counted.reported_null, "claimed null"],
+  ].filter(([count]) => (count as number) > 0).map(([count, label]) => `${formatCount(count as number)} ${label}`).join(" · ");
+  const verdict = RECOMMENDATIONS[pursuit.recommendation];
+  return <div className="mt-4 rounded-control border border-line p-4">
+    <h3 className="text-sm font-medium text-ink">Chance you should pursue this study</h3>
+    <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span className="font-mono text-4xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pPursue)}</span>
+      <span className={cx("text-sm font-medium", verdict.tone)}>{verdict.label}</span>
+      <span className="font-mono text-xs text-ink-3">{percent(pursuit.pOpen)} unsettled{pursuit.power !== null ? ` × ${percent(pursuit.power)} power against the SESOI` : " · power not factored in"}</span>
+    </div>
+    <ul className="mt-3 max-w-[70ch] list-disc space-y-1 pl-4 text-sm leading-relaxed text-ink-2">{pursuit.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+    <p className="mt-2 text-xs leading-relaxed text-ink-3">This is the chance a new study would change the answer, not the chance the intervention works: how far the record is from settled (twice the smaller posterior tail around even odds) times the chance the planned design would detect the SESOI if the effect is real. A contested record scores high but calls for a different design, not a repeat.</p>
+    <h4 className="mt-5 text-sm font-medium text-ink">Chance a real effect exists, as the record stands</h4>
+    <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+      <span className="font-mono text-2xl tabular-nums leading-none tracking-tight text-ink">{percent(pursuit.pEffect)}</span>
+      <span className="font-mono text-xs text-ink-3">95% credible interval {percent(pursuit.ci[0])} – {percent(pursuit.ci[1])} · Beta({alpha.toFixed(2).replace(/\.?0+$/, "")}, {beta.toFixed(2).replace(/\.?0+$/, "")})</span>
+    </div>
+    <PosteriorStrip ci={pursuit.ci} mean={pursuit.pEffect} />
+    <p className={cx("mt-3 text-sm font-medium", state.tone)}>{state.label}</p>
+    <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-ink-2">{state.detail}</p>
+    <p className="mt-2 text-xs leading-relaxed text-ink-3">Updated from a 50/50 prior by {counted || "no verdicts"}{pursuit.uninformative > 0 ? `; ${formatCount(pursuit.uninformative)} inconclusive, stopped or unreported ${pursuit.uninformative === 1 ? "record" : "records"} left it unchanged` : ""}. Quoted numbers weigh 1, reconstructed uncertainty 0.75, text-only claims 0.5.{pursuit.conflict > 0 ? ` ${percent(pursuit.conflict)} of the evidence weight sits on the minority side.` : ""}</p>
+    {pursuit.pMeaningful !== null && pursuit.pFavours !== null && <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 border-t border-line pt-3">
+      <div className="flex items-baseline gap-2"><dd className="order-1 font-mono text-xl tabular-nums leading-none text-ink">{percent(pursuit.pMeaningful)}</dd><dt className="order-2 text-xs text-ink-2">chance the pooled true effect reaches the SESOI{sesoi !== undefined ? ` (±${sesoi})` : ""} in either direction</dt></div>
+      <div className="flex items-baseline gap-2"><dd className="order-1 font-mono text-xl tabular-nums leading-none text-ink">{percent(pursuit.pFavours)}</dd><dt className="order-2 text-xs text-ink-2">chance it is positive as coded</dt></div>
+      <p className="basis-full text-xs leading-relaxed text-ink-3">From the {pursuit.poolStudyIds.length}-study pool's predictive distribution Normal(pooled mean, τ² + SE²); these use the numbers, the headline uses the verdicts.</p>
+    </dl>}
+  </div>;
+}
+function PosteriorStrip({ ci, mean }: { ci: [number, number]; mean: number }) {
+  const x = (value: number) => `${(value * 100).toFixed(1)}%`;
+  return <div className="relative mt-3 h-2 w-full rounded-mark bg-surface-2" role="img" aria-label={`Posterior mean ${percent(mean)}, 95% credible interval ${percent(ci[0])} to ${percent(ci[1])}.`}>
+    <div className="absolute inset-y-0 rounded-mark bg-accent/30" style={{ left: x(ci[0]), width: x(ci[1] - ci[0]) }} />
+    <div className="absolute inset-y-0 w-0.5 bg-accent" style={{ left: x(mean) }} />
+    <div className="absolute inset-y-0 w-px bg-ink-3" style={{ left: "50%" }} title="even odds" />
+  </div>;
 }
 function ForestPlot({ pool, papers, sesoi }: { pool: EvidencePool; papers: Paper[]; sesoi?: number }) {
   const studies = papers.filter((paper) => pool.studyIds.includes(paper.id)).flatMap((paper) => {
@@ -101,8 +159,53 @@ function Funnel({ studies, pooled }: { studies: { estimate: number; se: number }
     <text x={x(pooled)} y="145" textAnchor="middle" fill="currentColor" fontSize="11">pooled {signed(pooled, 2)}</text>
   </svg>;
 }
+const YEAR_TICK_STEPS = [1, 2, 5, 10, 20, 50, 100];
+function YearHistogram({ counts }: { counts: { year: number; count: number }[] }) {
+  const [active, setActive] = useState<number | null>(null);
+  const byYear = new Map(counts.map(({ year, count }) => [year, count]));
+  const first = Math.min(...byYear.keys());
+  const last = Math.max(...byYear.keys());
+  // Years the index has nothing for are drawn as empty slots, so the time axis stays continuous.
+  const years = Array.from({ length: last - first + 1 }, (_, index) => first + index);
+  const max = Math.max(...byYear.values(), 1);
+  // A peak is named only when one year holds it alone.
+  const peaks = counts.filter((row) => row.count === max);
+  const peak = peaks.length === 1 ? peaks[0] : null;
+  const total = counts.reduce((sum, row) => sum + row.count, 0);
+  const left = 46, right = 540, top = 14, base = 120;
+  const slot = (right - left) / years.length;
+  const width = Math.min(Math.max(slot - 2, 1), 28);
+  const x = (year: number) => left + (year - first) * slot;
+  const step = YEAR_TICK_STEPS.find((size) => size * slot >= 44) ?? 100;
+  const ticks = years.filter((year) => year === first || year === last || (year % step === 0 && x(year) - x(first) >= 40 && x(last) - x(year) >= 40));
+  const studies = (count: number) => `${formatCount(count)} ${count === 1 ? "study" : "studies"}`;
+  return <div className="mt-3">
+    <p className="font-mono text-xs text-ink" aria-hidden>{active === null ? <>{studies(total)} · {first === last ? first : `${first}–${last}`}{peak && years.length > 1 && <span className="font-sans text-ink-3"> · most in {peak.year} ({formatCount(peak.count)})</span>}</> : <>{active} · {studies(byYear.get(active) ?? 0)}</>}</p>
+    <svg viewBox="0 0 540 140" role="img" aria-label={`Histogram of ${studies(total)} by year, ${first} to ${last}.${peak ? ` Most in ${peak.year}, with ${studies(peak.count)}.` : ""}`} className="mt-2 w-full text-ink-3" onMouseLeave={() => setActive(null)}>
+      <line x1={left} x2={right} y1={top} y2={top} stroke="var(--line)" strokeDasharray="3 3" />
+      <text x={left - 6} y={top + 4} textAnchor="end" fill="currentColor" fontSize="11">{formatCount(max)}</text>
+      <text x={left - 6} y={base + 4} textAnchor="end" fill="currentColor" fontSize="11">0</text>
+      {years.map((year) => {
+        const count = byYear.get(year) ?? 0;
+        const height = count ? Math.max((count / max) * (base - top), 2) : 0;
+        const r = Math.min(4, width / 2, height);
+        const x0 = x(year) + (slot - width) / 2;
+        return <g key={year} onMouseEnter={() => setActive(year)}>
+          {count > 0 && <path d={`M${x0} ${base}V${base - height + r}q0 ${-r} ${r} ${-r}h${width - 2 * r}q${r} 0 ${r} ${r}V${base}z`} fill="var(--accent)" opacity={active === null || active === year ? 1 : 0.4} />}
+          <rect x={x(year)} y={top} width={slot} height={base - top} fill="transparent" />
+        </g>;
+      })}
+      <line x1={left} x2={right} y1={base} y2={base} stroke="var(--line-strong)" />
+      {ticks.map((year) => <text key={year} x={x(year) + slot / 2} y="136" textAnchor={slot >= 30 ? "middle" : year === first ? "start" : year === last ? "end" : "middle"} dx={slot >= 30 ? 0 : year === first ? -slot / 2 : year === last ? slot / 2 : 0} fill="currentColor" fontSize="11">{year}</text>)}
+    </svg>
+    <details className="mt-2 text-xs">
+      <summary className="cursor-pointer text-ink-3">Show as table</summary>
+      <div className="mt-2 grid grid-cols-3 gap-x-5 gap-y-2 sm:grid-cols-5">{[...counts].sort((a, b) => a.year - b.year).map(({ year, count }) => <div key={year} className="flex justify-between gap-2 border-b border-line pb-1"><span className="text-ink-3">{year}</span><span className="font-mono text-ink">{formatCount(count)}</span></div>)}</div>
+    </details>
+  </div>;
+}
 function usd(value: number) { return `$${value.toFixed(value < 0.01 ? 5 : 3)}`; }
-function Costs({ costs }: { costs: QueryCosts }) {
+export function Costs({ costs }: { costs: QueryCosts }) {
   return <details className="rounded-control border border-line p-4 text-sm">
     <summary className="cursor-pointer font-medium text-ink-2">Query cost <span className="ml-2 font-mono text-ink">{usd(costs.estimatedUsd)}</span><span className="ml-2 text-xs font-normal text-ink-3">{costs.calls} model calls · {(costs.latencyMs / 1000).toFixed(1)}s</span></summary>
     <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-xs"><caption className="mb-2 text-left text-ink-3">Estimated model cost comparison</caption><thead><tr className="border-b border-line text-ink-3"><th className="pb-2 pr-3 font-normal">Read 200 abstracts</th><th className="pb-2 pr-3 font-normal">Cold pipeline</th><th className="pb-2 font-normal">Warm pipeline</th></tr></thead><tbody><tr className="font-mono text-ink"><td className="pt-2 pr-3">{usd(costs.naiveEstimatedUsd)}</td><td className="pt-2 pr-3">{usd(costs.coldEstimatedUsd)}</td><td className="pt-2">{usd(costs.warmEstimatedUsd)}</td></tr></tbody></table></div>

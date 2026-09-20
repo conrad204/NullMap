@@ -453,7 +453,7 @@ def test_outcome_groups_ignore_unknown_repeated_and_lone_ids():
         rows = [{"id": x} for x in "ABCDE"]
         return await service.group_outcomes({"idea": "question"}, rows, Usage())
 
-    # A stays in its first group; C is then alone and dropped; an unlabelled group is dropped.
+    # A stays in its first group; C is then alone and dropped; an unlabeled group is dropped.
     assert asyncio.run(exercise()) == {"A": "Systolic BP", "B": "Systolic BP"}
 
 

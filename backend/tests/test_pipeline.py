@@ -1,6 +1,7 @@
 """Scientific integration contracts across retrieval, linking, extraction and reporting."""
 
 import asyncio
+import math
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -9,9 +10,16 @@ import pytest
 
 from app.config import Settings
 from app.llm import Usage, indexed_to_extraction, validate_extraction
-from app.models import Extraction, IndexedExtraction, Pico, SearchFilters, SearchRequest
+from app.models import (
+    ConceptSteer,
+    Extraction,
+    IndexedExtraction,
+    Pico,
+    SearchFilters,
+    SearchRequest,
+)
 from app.pipeline import SearchPipeline
-from app.repository import BUCKETS, filter_clauses
+from app.repository import BUCKETS, EFFECT_DIRECTIONS, filter_clauses
 from app.statistics import INCONCLUSIVE_REASONS, assign_bucket
 
 
@@ -80,6 +88,7 @@ class MemoryRepository:
         self.aggregate_parameters = None
         self.read_batches = []
         self.retrieve_query = None
+        self.retrieve_vector = None
         self.registry_query = None
         self.count_queries = []
         # What the same match set contains without the request's filters.
@@ -104,6 +113,7 @@ class MemoryRepository:
 
     async def retrieve(self, query, vector):
         self.retrieve_query = deepcopy(query)
+        self.retrieve_vector = None if vector is None else list(vector)
         return [deepcopy(self.documents[identifier]) for identifier in self.hit_ids], "bm25"
 
     async def registry_sweep(self, query):
@@ -145,15 +155,20 @@ class MemoryRepository:
             if not row.get("is_review") and row.get("record_kind") != "linked_publication"
         ]
         reasons = dict.fromkeys(INCONCLUSIVE_REASONS, 0)
+        directions = dict.fromkeys(EFFECT_DIRECTIONS.values(), 0)
         for row in rows:
             verdict = assign_bucket(row, sesoi, effect_type)
             counts[verdict["bucket"]] += 1
             if verdict["inconclusive_reason"]:
                 reasons[verdict["inconclusive_reason"]] += 1
+            if verdict["bucket"] == "effect":
+                key = row.get("result_direction") or "unclear"
+                directions[EFFECT_DIRECTIONS.get(key, "unclear")] += 1
         return {
             "total": len(rows),
             "bucketCounts": counts,
             "inconclusiveReasons": reasons,
+            "effectDirections": directions,
             "yearCounts": [],
             "nullTerms": [],
             "fileDrawer": {"completed": 0, "unreported": 0, "overdue": 0, "share": None},
@@ -223,11 +238,23 @@ class FakeLLM:
         self.grouping_rows = deepcopy(rows)
         return dict(getattr(self, "groups", {}))
 
+    async def recommend_pico(self, table, usage):
+        self.pico_table = deepcopy(table)
+        if getattr(self, "pico_error", None):
+            raise self.pico_error
+        return SimpleNamespace(
+            changes=[SimpleNamespace(
+                field="population", to="Older adults",
+                model_dump=lambda: {"field": "population", "to": "Older adults", "reason": "Untested"},
+            )],
+            rationale="Adults lean null; older adults were not tested.",
+        )
+
     async def trend(self, table, usage):
         self.trend_table = deepcopy(table)
         if getattr(self, "trend_error", None):
             raise self.trend_error
-        return SimpleNamespace(summary="Most favour the intervention.", patterns=["BP fell"])
+        return SimpleNamespace(summary="Most favor the intervention.", patterns=["BP fell"])
 
 
 def test_empty_no_key_search_returns_coverage_gap_without_fabricated_probability():
@@ -621,6 +648,53 @@ def test_narration_receives_computed_structured_table_without_abstracts():
     assert result["estimate"]["pSuccess"] is not None
 
 
+def test_recommendation_and_pico_follow_the_pursuit_decision_with_rules_fallback():
+    rows = [
+        paper(f"p{i}", effect_type="SMD", estimate=0.02, ci_low=-0.1, ci_high=0.14,
+              outcome_unit="SD", n=200)
+        for i in range(8)
+    ]
+    settings = config(extraction_limit=0)
+    settings.openai_api_key = "test"
+    llm = FakeLLM()
+    result = asyncio.run(
+        SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    pursuit = result["statistics"]["pursuit"]
+    assert pursuit["state"] == "favours_null"
+    assert result["estimate"]["recommendation"] == pursuit["recommendation"] == "deprioritize"
+    assert result["estimate"]["pPursue"] == pursuit["pPursue"]
+    assert "UNTRUSTED_ABSTRACT_CONTENT" not in str(llm.pico_table)
+    assert llm.pico_table["pico"]["population"] == "Adults"
+    recommended = result["recommendedPico"]
+    assert recommended["source"] == "model"
+    assert recommended["pico"]["population"] == "Older adults"
+    assert recommended["pico"]["intervention"] == "Vitamin D"
+    assert recommended["changes"][0]["field"] == "population"
+
+    llm.pico_error = RuntimeError("boom")
+    result = asyncio.run(
+        SearchPipeline(MemoryRepository(rows), llm, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    recommended = result["recommendedPico"]
+    assert recommended["source"] == "rules"
+    assert recommended["pico"]["population"] == "Adults"
+    assert "no effect" in recommended["rationale"]
+    assert any("PICO recommendation" in w for w in result["warnings"])
+
+    no_key = asyncio.run(
+        SearchPipeline(MemoryRepository(), FakeLLM(), config()).search(
+            SearchRequest(idea="Does vitamin D reduce depression?")
+        )
+    )
+    assert no_key["recommendedPico"]["changes"] == []
+    assert no_key["estimate"]["recommendation"] == "pursue_with_changes"
+
+
 def test_insufficient_numeric_evidence_uses_computed_summary_not_model_interpretation():
     settings = config(extraction_limit=0)
     settings.openai_api_key = "test"
@@ -937,7 +1011,7 @@ def test_full_text_disabled_never_fetches_and_uses_the_abstract():
     asyncio.run(exercise())
 
 
-def test_inconclusive_is_summarised_with_the_reasons_it_could_not_be_classified():
+def test_inconclusive_is_summarized_with_the_reasons_it_could_not_be_classified():
     from app.pipeline import inconclusive_sentence
 
     assert inconclusive_sentence(0, {"no_result": 0}) == ""
@@ -970,7 +1044,7 @@ def test_effect_trend_counts_directions_in_code_and_pools_model_grouped_outcomes
         trend = result["effectTrend"]
         assert (trend["favoursIntervention"], trend["favoursComparator"], trend["unclear"]) == (
             2, 1, 0)
-        assert trend["studied"] == 3 and trend["summary"] == "Most favour the intervention."
+        assert trend["studied"] == 3 and trend["summary"] == "Most favor the intervention."
         # The model is told about the nulls and sees quotes, never raw abstracts.
         assert llm.trend_table["context"]["reportedNulls"] == 1
         assert all("abstract" not in row and row["quote"] for row in llm.trend_table["rows"])
@@ -1001,6 +1075,32 @@ def test_effect_trend_keeps_counts_when_the_model_fails_and_is_absent_without_ef
         none = await SearchPipeline(MemoryRepository([paper("N")]), FakeLLM(), settings).search(
             SearchRequest(idea="Does vitamin D reduce depression?"))
         assert none["effectTrend"] is None
+
+    asyncio.run(exercise())
+
+
+def test_effect_directions_cover_the_full_match_set_and_survive_a_recount():
+    async def exercise():
+        rows = [_effect("A", "Depression", 0.5, "favours_intervention"),
+                _effect("B", "Depression", -0.5, "favours_comparator"),
+                _effect("C", "Depression", 0.6, None),
+                paper("D", result_label="null", has_control=True)]
+        settings = config(extraction_limit=0)
+        result = await SearchPipeline(MemoryRepository(rows), FakeLLM(), settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        directions = result["effectDirections"]
+        assert directions == {"favoursIntervention": 1, "favoursComparator": 1, "unclear": 1}
+        assert sum(directions.values()) == result["bucketCounts"]["effect"]
+        # The trend describes the studies read; the directions describe every match.
+        assert result["effectTrend"]["totalEffects"] == 3
+        screened = FakeLLM()
+        screened.relevant = {"A", "D"}
+        settings.openai_api_key = "test"
+        recounted = await SearchPipeline(MemoryRepository(rows), screened, settings).search(
+            SearchRequest(idea="Does vitamin D reduce depression?"))
+        assert recounted["effectDirections"] == {
+            "favoursIntervention": 1, "favoursComparator": 0, "unclear": 0}
+        assert sum(recounted["effectDirections"].values()) == recounted["bucketCounts"]["effect"]
 
     asyncio.run(exercise())
 
@@ -1089,3 +1189,104 @@ def test_overview_is_skipped_when_a_trend_was_written_and_degrades_to_a_warning(
         assert any("overview of matched studies was unavailable" in w for w in failed["warnings"])
 
     asyncio.run(exercise())
+
+
+class FakeEmbedder:
+    """Embeds by lookup, so every direction a steering test relies on is exact."""
+
+    def __init__(self, vectors):
+        self.vectors, self.calls = vectors, []
+
+    def embed_query(self, text):
+        self.calls.append(text)
+        return list(self.vectors[text])
+
+
+QUESTION = "Does vitamin D reduce depression?"
+DIALYSIS, DIABETES = [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]
+STEER_VECTORS = {
+    QUESTION: [1.0, 0.0, 0.0],
+    # The same direction as the question, so subtracting it cancels the search out.
+    "vitamin D": [1.0, 0.0, 0.0],
+    "dialysis": DIALYSIS,
+    "diabetes": DIABETES,
+}
+
+
+def cosine(left, right):
+    dot = sum(a * b for a, b in zip(left, right))
+    return dot / (math.dist(left, [0] * len(left)) * math.dist(right, [0] * len(right)))
+
+
+def steering_pipeline(repo=None):
+    repo = repo if repo is not None else MemoryRepository([paper()])
+    embedder = FakeEmbedder(STEER_VECTORS)
+    embedding_config = Settings(_env_file=None, openai_api_key="", embeddings_enabled=True)
+    return repo, SearchPipeline(repo, FakeLLM(), embedding_config, embedder=embedder)
+
+
+def test_concept_tags_reorder_the_questions_matches_without_changing_the_match_set():
+    plain_repo, plain = steering_pipeline()
+    untagged = asyncio.run(plain.search(SearchRequest(idea=QUESTION, concepts=ConceptSteer())))
+    tagged_repo, tagged = steering_pipeline()
+    result = asyncio.run(
+        tagged.search(
+            SearchRequest(
+                idea=QUESTION, concepts=ConceptSteer(positive=["dialysis"], negative=["diabetes"])
+            )
+        )
+    )
+    # Same keyword query means the same papers matched; only their order can differ.
+    assert tagged_repo.retrieve_query == plain_repo.retrieve_query
+    assert tagged_repo.registry_query == plain_repo.registry_query
+    assert tagged_repo.aggregate_query == plain_repo.aggregate_query
+    assert tagged_repo.retrieve_vector != plain_repo.retrieve_vector
+    assert cosine(tagged_repo.retrieve_vector, DIALYSIS) > cosine(
+        plain_repo.retrieve_vector, DIALYSIS
+    )
+    assert cosine(tagged_repo.retrieve_vector, DIABETES) < cosine(
+        plain_repo.retrieve_vector, DIABETES
+    )
+    # The question is still what is being searched, not one voice among the tags.
+    assert cosine(tagged_repo.retrieve_vector, STEER_VECTORS[QUESTION]) > 0.5
+    assert result["retrieval"]["concepts"] == {
+        "positive": ["dialysis"],
+        "negative": ["diabetes"],
+    }
+    # An empty tag set is not a tagged search, and must not look like one.
+    assert untagged["retrieval"]["concepts"] is None
+
+
+def test_positive_tags_pull_towards_and_negative_tags_push_away_on_their_own():
+    _, pipeline = steering_pipeline()
+    warnings = []
+    question = STEER_VECTORS[QUESTION]
+    towards = asyncio.run(pipeline.aim(question, ConceptSteer(positive=["dialysis"]), warnings))
+    away = asyncio.run(pipeline.aim(question, ConceptSteer(negative=["diabetes"]), warnings))
+    assert cosine(towards, DIALYSIS) > cosine(question, DIALYSIS)
+    assert cosine(away, DIABETES) < 0
+    # Neither one-sided set loses the question: it keeps its own weight in the sum.
+    assert cosine(towards, question) > 0.5 and cosine(away, question) > 0.5
+    assert warnings == []
+
+
+def test_tags_that_cancel_the_question_out_warn_and_leave_the_ranking_unsteered():
+    _, pipeline = steering_pipeline()
+    warnings = []
+    question = STEER_VECTORS[QUESTION]
+    unsteered = asyncio.run(pipeline.aim(question, ConceptSteer(negative=["vitamin D"]), warnings))
+    assert unsteered == question
+    assert any("canceled the question out" in warning for warning in warnings)
+
+
+def test_concept_tags_without_embeddings_are_reported_rather_than_silently_dropped():
+    repo = MemoryRepository([paper()])
+    result = asyncio.run(
+        SearchPipeline(repo, FakeLLM(), config()).search(
+            SearchRequest(idea=QUESTION, concepts=ConceptSteer(positive=["dialysis"]))
+        )
+    )
+    assert repo.retrieve_vector is None
+    assert any("embeddings are unavailable" in warning for warning in result["warnings"])
+    # The tags are still echoed: the reader is told what was asked for and ignored.
+    assert result["retrieval"]["concepts"] == {"positive": ["dialysis"], "negative": []}
